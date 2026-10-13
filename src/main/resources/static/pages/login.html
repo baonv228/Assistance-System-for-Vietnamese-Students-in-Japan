@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dang nhap - VSA Japan</title>
+    <link rel="stylesheet" href="/assets/css/main.css">
+</head>
+<body>
+<div data-component="navbar"></div>
+<main class="shell">
+    <section class="auth-layout">
+        <form id="login-form" class="form-panel">
+            <h1>Dang nhap</h1>
+            <label>
+                Username
+                <input name="username" type="text" value="demo" required>
+            </label>
+            <label>
+                Mat khau
+                <input name="password" type="password" value="123456" required>
+            </label>
+            <button class="button primary" type="submit">Dang nhap</button>
+            <p id="login-result" class="form-message"></p>
+        </form>
+    </section>
+</main>
+<script type="module" src="/assets/js/pages/login.js"></script>
+</body>
+</html>
