@@ -1,0 +1,44 @@
+# ASVSJ – "Senpai ơi"
+
+Assistance System for Vietnamese Students in Japan. Graduation capstone of team SEP490-G130.
+A web app that combines an integration map (places reviewed by the Vietnamese community) with an
+experience-sharing community (blog, Q&A), a four-stage guide and a small Japanese-phrase feature.
+Expected scale 100–200 users; the team has no budget, so prefer free services and free tiers.
+
+## Sources of truth
+- **Behaviour and screens:** the clickable prototype, repo https://github.com/baonv228/Prototype_System_Test
+  (branch `tienhung`). When a business rule is unclear, check the prototype first.
+- **Database:** `docs/database/asvsj_schema.sql` (MySQL 8, 54 tables) and `docs/database/database-design.md`.
+- **Report documents** (table descriptions EN/VI, use case specs, screen specs) are kept in the prototype
+  repo under `docs/`, not here. If you change a table, update the schema here and the table dictionary there.
+- **Code structure and team rules:** `README.md`.
+
+## Stack
+- Spring Boot 3.3.5, Java 17, Maven. Package `com.sep490.vsa`.
+- Feature-based packages: `common/` for shared code only, `feature/<name>/` holds that feature's
+  Controller, Service, Repository, Entity and DTOs. No database access in controllers.
+- Frontend: static HTML/CSS/JS in `src/main/resources/static/`, calling the REST API.
+- Database: **MySQL 8.0.16+** (utf8mb4). The starter still uses H2 in memory; switch to MySQL.
+
+## Key business rules (summary)
+- Roles: User, Moderator (max 3), Academic Manager, Admin. Guests can only view. Users must be 18+ and
+  accept the Terms, Privacy Policy and Community Rules (store the accepted version).
+- Sign-in: **email + password** and **Google** (Facebook later). Hash passwords with BCrypt
+  (`BCryptPasswordEncoder`), never store or log plain passwords. Email verification and password reset use
+  one-time tokens stored as SHA-256 hashes. 5 wrong passwords → lock 30 minutes.
+- Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation.
+  Reports: 1–5 → "Cần xử lý"; more than 5 → auto-hidden and "Khẩn". More than 5 false reports → reporting
+  locked 7 days. Removed content is kept 30 days for appeals, then purged.
+- New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
+- Places: Google places store only `place_id`; user pins need Moderator approval; same name within 200 m
+  → warning. Moderator removes places softly (with reason, restorable) and merges duplicates (final, no undo).
+  5 "đã đóng cửa" reports → Moderator queue; only the Moderator sets the closed label.
+- One review per user per place, and per year of an event. Review text ≤ 2,000 chars, ≤ 5 photos
+  (≤ 20 MB each), video ≤ 30 s.
+- Featured posts are automatic: top 3 of the week/month by likes + 2 × comments + rank bonus, min score 10,
+  one post per author. No manual featuring.
+
+## Working notes
+- The starter code is a skeleton: plain-text password check, fake token, and a `scholarship` feature that
+  is not part of the agreed scope. Confirm with the team before building on it.
+- Keep Vietnamese UI text as in the prototype. Code, identifiers and commit messages in English.
