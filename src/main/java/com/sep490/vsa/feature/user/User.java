@@ -1,11 +1,21 @@
 package com.sep490.vsa.feature.user;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.Duration;
+import java.time.Instant;
+
+/**
+ * Maps the columns of table {@code users} needed so far. Columns that are not mapped
+ * (area_id, stage, points…) keep their database defaults; map them when a feature needs them.
+ */
 @Entity
 @Table(name = "users")
 public class User {
@@ -13,45 +23,128 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private String fullName;
-    private String username;
+
+    @Column(nullable = false)
     private String email;
-    private String password;
-    private String role;
+
+    /** BCrypt hash. Null for accounts that only sign in with Google or Facebook. */
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
+    @Column(name = "failed_login_count", nullable = false)
+    private int failedLoginCount;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
+    @Column(name = "display_name", nullable = false)
+    private String displayName;
+
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role = Role.USER;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserStatus status = UserStatus.ACTIVE;
+
+    @Column(name = "is_adult_confirmed", nullable = false)
+    private boolean adultConfirmed;
+
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
 
     protected User() {
     }
 
-    public User(Long id, String fullName, String username, String email, String password, String role) {
-        this.id = id;
-        this.fullName = fullName;
-        this.username = username;
-        this.email = email;
-        this.password = password;
-        this.role = role;
+    public static User register(String email, String displayName, String passwordHash, String avatarUrl, Instant verifiedAt) {
+        User user = new User();
+        user.email = email;
+        user.displayName = displayName;
+        user.passwordHash = passwordHash;
+        user.avatarUrl = avatarUrl;
+        user.emailVerifiedAt = verifiedAt;
+        user.adultConfirmed = true;
+        return user;
+    }
+
+    public boolean isLockedAt(Instant now) {
+        return lockedUntil != null && lockedUntil.isAfter(now);
+    }
+
+    /** Counts a wrong password; after {@code maxAttempts} the account is locked for {@code lockFor}. */
+    public void recordFailedLogin(Instant now, int maxAttempts, Duration lockFor) {
+        failedLoginCount++;
+        if (failedLoginCount >= maxAttempts) {
+            lockedUntil = now.plus(lockFor);
+            failedLoginCount = 0;
+        }
+    }
+
+    public void recordSuccessfulLogin(Instant now) {
+        failedLoginCount = 0;
+        lockedUntil = null;
+        lastLoginAt = now;
     }
 
     public Long getId() {
         return id;
     }
 
-    public String getFullName() {
-        return fullName;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
     public String getEmail() {
         return email;
     }
 
-    public String getPassword() {
-        return password;
+    public String getPasswordHash() {
+        return passwordHash;
     }
 
-    public String getRole() {
+    public Instant getEmailVerifiedAt() {
+        return emailVerifiedAt;
+    }
+
+    public int getFailedLoginCount() {
+        return failedLoginCount;
+    }
+
+    public Instant getLockedUntil() {
+        return lockedUntil;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public Role getRole() {
         return role;
+    }
+
+    public UserStatus getStatus() {
+        return status;
+    }
+
+    public boolean isAdultConfirmed() {
+        return adultConfirmed;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
     }
 }

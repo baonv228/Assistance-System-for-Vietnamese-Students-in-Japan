@@ -41,7 +41,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Featured posts are automatic: top 3 of the week/month by likes + 2 × comments + rank bonus, min score 10,
   one post per author. No manual featuring.
 
+## Auth (feature/auth, common/security)
+- Session-based Spring Security (cookie JSESSIONID). Read the signed-in user with
+  `@AuthenticationPrincipal AppUserPrincipal me`. `GET /api/**` is public; other `/api/**` calls need login.
+- CSRF is on: frontend code must call the API through `assets/js/api/client.js`, which sends the
+  `X-XSRF-TOKEN` header.
+- Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
+  Without `spring.mail.host` the code is printed in the server console. Google/Facebook login turns on only
+  when their client ids are set in `application-local.properties` (see the `.example` file).
+
 ## Working notes
-- The starter code is a skeleton: plain-text password check, fake token, and a `scholarship` feature that
-  is not part of the agreed scope. Confirm with the team before building on it.
+- The `guide` and `scholarship` starter features still map to tables that do not exist in the schema
+  (`guide`, `scholarship`); their APIs fail until rewritten. Scholarships are not part of the agreed scope.
 - Keep Vietnamese UI text as in the prototype. Code, identifiers and commit messages in English.

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Điều khoản và chính sách – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="/assets/css/auth.css">
+</head>
+<body class="auth-page">
+<main class="legal">
+    <a class="link" href="/">← Senpai ơi</a>
+    <h1 id="title">Điều khoản và chính sách</h1>
+    <nav class="tabs" aria-label="Văn bản">
+        <a href="?doc=tos" data-doc="tos">Điều khoản sử dụng</a>
+        <a href="?doc=privacy" data-doc="privacy">Chính sách bảo mật</a>
+        <a href="?doc=community" data-doc="community">Quy tắc cộng đồng</a>
+    </nav>
+    <p class="muted" id="version"></p>
+    <article id="content">Đang tải…</article>
+</main>
+<script type="module">
+    import { apiClient } from "/assets/js/api/client.js";
+
+    const titles = { tos: "Điều khoản sử dụng", privacy: "Chính sách bảo mật", community: "Quy tắc cộng đồng" };
+    const doc = new URLSearchParams(location.search).get("doc");
+    const type = titles[doc] ? doc : "tos";
+    document.querySelector(`[data-doc="${type}"]`).setAttribute("aria-current", "page");
+    document.querySelector("#title").textContent = titles[type];
+    document.title = `${titles[type]} – Senpai ơi`;
+    try {
+        const result = await apiClient.legal(type);
+        document.querySelector("#version").textContent = `Phiên bản ${result.version}`;
+        document.querySelector("#content").textContent = result.content;
+    } catch (error) {
+        document.querySelector("#content").textContent = error.message;
+    }
+</script>
+</body>
+</html>

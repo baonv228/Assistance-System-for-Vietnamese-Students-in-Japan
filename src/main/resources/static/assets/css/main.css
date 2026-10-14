@@ -247,3 +247,20 @@ input {
         grid-template-columns: 1fr;
     }
 }
+
+.nav-account {
+    align-items: center;
+    display: inline-flex;
+    gap: 12px;
+}
+
+.nav-logout {
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    padding: 6px 10px;
+}
