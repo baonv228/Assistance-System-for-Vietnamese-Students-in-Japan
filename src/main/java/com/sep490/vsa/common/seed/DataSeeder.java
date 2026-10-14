@@ -7,10 +7,14 @@ import com.sep490.vsa.feature.scholarship.ScholarshipRepository;
 import com.sep490.vsa.feature.user.User;
 import com.sep490.vsa.feature.user.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
+// Demo data for the starter H2 entities. Their tables do not exist in the MySQL schema
+// (seed data now lives in the Flyway migrations), so this only runs with the "starter-demo" profile.
+@Profile("starter-demo")
 @Component
 public class DataSeeder implements CommandLineRunner {
 

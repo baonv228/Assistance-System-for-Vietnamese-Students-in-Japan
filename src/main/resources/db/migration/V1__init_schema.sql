@@ -1,34 +1,7 @@
--- ASVSJ ("Senpai ơi") – database schema v1, built from the current prototype
--- MySQL 8.0.16 or later (CHECK constraints are enforced from 8.0.16).
--- Run: mysql -u root -p < asvsj_schema.sql
--- Details and Vietnamese descriptions: database-design.md
---
--- Notes for MySQL:
---  * Foreign keys are written as table-level FOREIGN KEY clauses. MySQL 8.0 silently
---    ignores REFERENCES written inline on a column.
---  * All times are stored in UTC as DATETIME; the Java app converts to Japan time.
---  * utf8mb4 is required for Japanese text and emoji.
-
-CREATE DATABASE IF NOT EXISTS asvsj CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-USE asvsj;
-SET NAMES utf8mb4;
-
--- Drop everything first so the script can rebuild the database from scratch
-SET FOREIGN_KEY_CHECKS = 0;
-DROP VIEW IF EXISTS v_place_rating;
-DROP TABLE IF EXISTS
-  api_usage, activity_logs, system_settings, notifications,
-  user_guide_progress, guide_items, guide_stages,
-  appeals, reports, report_cases, moderation_scans, banned_keywords, reason_options,
-  practice_sentences, user_phrase_marks, phrase_topic_links, phrases, learning_topics,
-  featured_snapshots, comment_likes, comments, saved_blogs, blog_likes, blog_media,
-  blog_place_links, blog_topic_links, blogs, blog_topics,
-  review_likes, review_media, reviews, events,
-  duplicate_dismissals, place_merges, saved_places, place_closed_reports, place_history,
-  places, category_google_types, place_categories,
-  point_transactions, ranks, user_tags, tag_requests, tag_proof_types, tag_types, media,
-  user_daily_usage, user_consents, legal_documents, user_tokens, user_auth_providers, users, areas;
-SET FOREIGN_KEY_CHECKS = 1;
+-- V1: initial ASVSJ schema (54 tables, 1 view, seed data from the prototype).
+-- Applied automatically by Flyway on startup. Never edit this file after it is pushed:
+-- add a new file V2__<description>.sql for every later change.
+-- Design notes: docs/database/database-design.md
 
 -- =========================================================
 -- 1. Accounts

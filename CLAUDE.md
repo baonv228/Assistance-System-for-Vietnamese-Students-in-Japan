@@ -8,7 +8,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Sources of truth
 - **Behaviour and screens:** the clickable prototype, repo https://github.com/baonv228/Prototype_System_Test
   (branch `tienhung`). When a business rule is unclear, check the prototype first.
-- **Database:** `docs/database/asvsj_schema.sql` (MySQL 8, 54 tables) and `docs/database/database-design.md`.
+- **Database:** Flyway migrations in `src/main/resources/db/migration/` (`V1__init_schema.sql` = MySQL 8,
+  54 tables) and design notes in `docs/database/database-design.md`. Never edit a pushed migration; add the
+  next `V<n>__<description>.sql` instead.
 - **Report documents** (table descriptions EN/VI, use case specs, screen specs) are kept in the prototype
   repo under `docs/`, not here. If you change a table, update the schema here and the table dictionary there.
 - **Code structure and team rules:** `README.md`.
@@ -18,7 +20,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Feature-based packages: `common/` for shared code only, `feature/<name>/` holds that feature's
   Controller, Service, Repository, Entity and DTOs. No database access in controllers.
 - Frontend: static HTML/CSS/JS in `src/main/resources/static/`, calling the REST API.
-- Database: **MySQL 8.0.16+** (utf8mb4). The starter still uses H2 in memory; switch to MySQL.
+- Database: **MySQL 8.0.16+** (utf8mb4), schema managed by Flyway, `ddl-auto=none` (Hibernate never
+  changes tables). Local credentials go in `src/main/resources/application-local.properties` (git-ignored).
 
 ## Key business rules (summary)
 - Roles: User, Moderator (max 3), Academic Manager, Admin. Guests can only view. Users must be 18+ and

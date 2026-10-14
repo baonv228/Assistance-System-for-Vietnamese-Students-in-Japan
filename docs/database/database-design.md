@@ -1,6 +1,6 @@
 # ASVSJ – Thiết kế cơ sở dữ liệu (v1, theo prototype hiện tại)
 
-- **Hệ quản trị:** MySQL 8.0 (từ 8.0.16 trở lên để ràng buộc CHECK có hiệu lực), bảng mã `utf8mb4`. File tạo bảng: [asvsj_schema.sql](asvsj_schema.sql).
+- **Hệ quản trị:** MySQL 8.0 (từ 8.0.16 trở lên để ràng buộc CHECK có hiệu lực), bảng mã `utf8mb4`. File tạo bảng: Flyway migration [V1__init_schema.sql](../../src/main/resources/db/migration/V1__init_schema.sql). Mọi thay đổi sau này là một file `V2__...sql`, `V3__...sql` mới.
 - **Quy ước:**
   - Tên bảng và cột dùng `snake_case` tiếng Anh. Khóa chính `id BIGINT` tự tăng.
   - Thời gian dùng `DATETIME`, lưu theo giờ UTC, ứng dụng Java tự đổi sang giờ Nhật.

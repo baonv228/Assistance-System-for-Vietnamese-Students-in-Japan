@@ -1,0 +1,7 @@
+# Copy this file to application-local.properties (same folder) and fill in your own MySQL account.
+# application-local.properties is git-ignored: never commit real passwords.
+spring.datasource.username=root
+spring.datasource.password=YOUR_MYSQL_ROOT_PASSWORD
+
+# Print SQL while developing (optional)
+# spring.jpa.show-sql=true

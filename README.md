@@ -1,5 +1,28 @@
 # Hướng dẫn cấu trúc code dự án
 
+## 0. Cài đặt và chạy trên máy
+
+Cần có: **JDK 17**, **MySQL 8.0.16 trở lên** (MySQL Installer kèm MySQL Workbench), IntelliJ hoặc Maven.
+
+1. Cài MySQL Server 8 và nhớ mật khẩu tài khoản `root`.
+2. Trong `src/main/resources/`, chép `application-local.properties.example` thành `application-local.properties`
+   rồi điền mật khẩu MySQL của máy mình. File này đã nằm trong `.gitignore`, **không commit**.
+3. Chạy ứng dụng (`VietnameseStudentAssistanceApplication` trong IntelliJ, hoặc `mvn spring-boot:run`).
+   - Lần đầu chạy, database `asvsj` được tạo tự động và **Flyway** tạo đủ các bảng.
+   - Mở MySQL Workbench, kết nối `localhost:3306`, sẽ thấy schema `asvsj`.
+
+### Thay đổi database (quan trọng)
+- Mọi bảng được tạo bởi các file **Flyway migration** trong `src/main/resources/db/migration/`.
+  Hibernate **không** tự tạo hay sửa bảng (`ddl-auto=none`).
+- Muốn đổi database, tạo file mới với số tiếp theo, ví dụ `V2__add_avatar_to_users.sql`.
+  **Không sửa file migration đã push**: Flyway sẽ báo lỗi checksum trên máy những người đã chạy file đó.
+- Pull code của người khác về rồi chạy app, Flyway tự chạy các file còn thiếu. Không cần nhắn lệnh SQL cho nhau.
+- Nếu hai người cùng tạo `V2__...`, người merge sau đổi số file của mình thành `V3__...`.
+- Database trên máy chỉ để code thử. Bản deploy dùng một MySQL chung trên cloud, cấu hình qua biến môi
+  trường `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
+
+Thiết kế từng bảng: `docs/database/database-design.md`.
+
 ## 1. Cấu trúc Backend
 
 Mã nguồn Java nằm trong `src/main/java/com/sep490/vsa/`.
