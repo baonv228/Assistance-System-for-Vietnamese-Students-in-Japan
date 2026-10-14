@@ -1,3 +1,7 @@
 target/
 .idea/
 *.log
+
+# Local secrets (copy from application-local.properties.example)
+src/main/resources/application-local.properties
+.env

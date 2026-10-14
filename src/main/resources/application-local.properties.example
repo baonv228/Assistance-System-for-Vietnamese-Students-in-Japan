@@ -1,0 +1,36 @@
+# Copy this file to application-local.properties (same folder) and fill in your own values.
+# application-local.properties is git-ignored: never commit real passwords or secrets.
+spring.datasource.username=root
+spring.datasource.password=YOUR_MYSQL_ROOT_PASSWORD
+
+# Print SQL while developing (optional)
+# spring.jpa.show-sql=true
+
+# ---------------------------------------------------------------------------------------------
+# Email (optional). Without these lines the sign-up code is printed in the console instead of
+# being emailed, which is enough for local development.
+# Gmail: turn on 2-Step Verification, then create an "App password" (16 characters).
+# ---------------------------------------------------------------------------------------------
+# spring.mail.host=smtp.gmail.com
+# spring.mail.port=587
+# spring.mail.username=your.address@gmail.com
+# spring.mail.password=YOUR_16_CHAR_APP_PASSWORD
+# spring.mail.properties.mail.smtp.auth=true
+# spring.mail.properties.mail.smtp.starttls.enable=true
+# app.mail.from=Senpai oi <your.address@gmail.com>
+
+# ---------------------------------------------------------------------------------------------
+# Google login (optional). Google Cloud Console → APIs & Services → Credentials → OAuth client ID
+# (Web application). Authorized redirect URI: http://localhost:8080/login/oauth2/code/google
+# ---------------------------------------------------------------------------------------------
+# spring.security.oauth2.client.registration.google.client-id=YOUR_GOOGLE_CLIENT_ID
+# spring.security.oauth2.client.registration.google.client-secret=YOUR_GOOGLE_CLIENT_SECRET
+# spring.security.oauth2.client.registration.google.scope=openid,profile,email
+
+# ---------------------------------------------------------------------------------------------
+# Facebook login (optional). developers.facebook.com → Create app → Facebook Login.
+# Valid OAuth Redirect URI: http://localhost:8080/login/oauth2/code/facebook
+# ---------------------------------------------------------------------------------------------
+# spring.security.oauth2.client.registration.facebook.client-id=YOUR_FACEBOOK_APP_ID
+# spring.security.oauth2.client.registration.facebook.client-secret=YOUR_FACEBOOK_APP_SECRET
+# spring.security.oauth2.client.registration.facebook.scope=email,public_profile

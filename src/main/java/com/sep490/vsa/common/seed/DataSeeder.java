@@ -4,28 +4,27 @@ import com.sep490.vsa.feature.guide.Guide;
 import com.sep490.vsa.feature.guide.GuideRepository;
 import com.sep490.vsa.feature.scholarship.Scholarship;
 import com.sep490.vsa.feature.scholarship.ScholarshipRepository;
-import com.sep490.vsa.feature.user.User;
-import com.sep490.vsa.feature.user.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
+// Demo data for the starter H2 entities. Their tables do not exist in the MySQL schema
+// (seed data now lives in the Flyway migrations), so this only runs with the "starter-demo" profile.
+@Profile("starter-demo")
 @Component
 public class DataSeeder implements CommandLineRunner {
 
     private final GuideRepository guideRepository;
     private final ScholarshipRepository scholarshipRepository;
-    private final UserRepository userRepository;
 
     public DataSeeder(
             GuideRepository guideRepository,
-            ScholarshipRepository scholarshipRepository,
-            UserRepository userRepository
+            ScholarshipRepository scholarshipRepository
     ) {
         this.guideRepository = guideRepository;
         this.scholarshipRepository = scholarshipRepository;
-        this.userRepository = userRepository;
     }
 
     @Override
@@ -47,9 +46,6 @@ public class DataSeeder implements CommandLineRunner {
                     "Mien giam hoc phi theo quy dinh cua tung truong.",
                     "UNIVERSITY", LocalDate.now().plusMonths(1), true));
         }
-
-        if (userRepository.count() == 0) {
-            userRepository.save(new User(null, "Demo Student", "demo", "demo@student.vn", "123456", "STUDENT"));
-        }
+        // Accounts are created through sign-up; there is no demo user with a plain-text password any more.
     }
 }

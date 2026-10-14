@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hoàn tất đăng ký – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/auth.css">
+</head>
+<body class="auth-page">
+<div class="auth-shell">
+    <aside class="auth-brand">
+        <a class="brand-mark" href="/">
+            <svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#F08DAE"><circle cx="20" cy="9" r="7"/><circle cx="30.5" cy="16.6" r="7"/><circle cx="26.5" cy="29" r="7"/><circle cx="13.5" cy="29" r="7"/><circle cx="9.5" cy="16.6" r="7"/></g><circle cx="20" cy="20" r="4.5" fill="#FCE9EF"/></svg>
+            Senpai ơi
+        </a>
+        <div>
+            <h2>Sắp xong rồi.</h2>
+            <p>Chỉ cần xác nhận vài thông tin trước khi bắt đầu.</p>
+        </div>
+        <small>SEP490-G130 · Đồ án tốt nghiệp</small>
+    </aside>
+
+    <main class="auth-main">
+        <div class="auth-card">
+            <h1>Hoàn tất đăng ký</h1>
+            <p class="subtitle" id="subtitle">Bạn đang đăng ký bằng tài khoản mạng xã hội.</p>
+
+            <div id="alert" class="alert" aria-live="polite"></div>
+
+            <form id="complete-form" novalidate hidden>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input class="input" id="email" type="email" readonly>
+                </div>
+                <div class="field">
+                    <label for="displayName">Tên hiển thị</label>
+                    <input class="input" id="displayName" name="displayName" autocomplete="nickname" maxlength="60" required>
+                    <span class="hint">Tên này hiện trên review và bài viết của bạn.</span>
+                </div>
+                <label class="check">
+                    <input type="checkbox" name="adultConfirmed">
+                    <span>Tôi xác nhận mình đã đủ 18 tuổi.</span>
+                </label>
+                <label class="check">
+                    <input type="checkbox" name="acceptTerms">
+                    <span>Tôi đồng ý với <a class="link" href="/pages/terms.html?doc=tos" target="_blank">Điều khoản sử dụng</a>,
+                        <a class="link" href="/pages/terms.html?doc=privacy" target="_blank">Chính sách bảo mật</a> và
+                        <a class="link" href="/pages/terms.html?doc=community" target="_blank">Quy tắc cộng đồng</a>.</span>
+                </label>
+                <button id="complete" class="btn btn-primary" type="submit">Bắt đầu dùng Senpai ơi</button>
+            </form>
+
+            <p class="switch"><a class="link" href="/pages/login.html">Quay lại đăng nhập</a></p>
+        </div>
+    </main>
+</div>
+<script type="module" src="/assets/js/pages/complete-signup.js"></script>
+</body>
+</html>

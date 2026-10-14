@@ -1,5 +1,43 @@
 # Hướng dẫn cấu trúc code dự án
 
+## 0. Cài đặt và chạy trên máy
+
+Cần có: **JDK 17**, **MySQL 8.0.16 trở lên** (MySQL Installer kèm MySQL Workbench), IntelliJ hoặc Maven.
+
+1. Cài MySQL Server 8 và nhớ mật khẩu tài khoản `root`.
+2. Trong `src/main/resources/`, chép `application-local.properties.example` thành `application-local.properties`
+   rồi điền mật khẩu MySQL của máy mình. File này đã nằm trong `.gitignore`, **không commit**.
+3. Chạy ứng dụng (`VietnameseStudentAssistanceApplication` trong IntelliJ, hoặc `mvn spring-boot:run`).
+   - Lần đầu chạy, database `asvsj` được tạo tự động và **Flyway** tạo đủ các bảng.
+   - Mở MySQL Workbench, kết nối `localhost:3306`, sẽ thấy schema `asvsj`.
+
+### Tài khoản mẫu (chỉ trên máy dev)
+Khi chạy với profile `local` (mặc định), lần đầu khởi động app tự tạo các tài khoản sau, mật khẩu đều là `123456`:
+
+| Email | Vai trò | Sau khi đăng nhập |
+|---|---|---|
+| `user@gmail.com` | Người dùng (Trần Minh, mới đến Nippori) | Trang chủ `/` |
+| `moderator@gmail.com` | Moderator | `/pages/moderator/index.html` |
+| `academic@gmail.com` | Người quản lý học thuật | `/pages/academic/index.html` |
+| `admin@gmail.com` | Admin | `/pages/admin/index.html` |
+| `mentor@gmail.com`, `kouhai@gmail.com` | Người dùng viết review, bài viết mẫu | Trang chủ `/` |
+
+Cùng lúc đó app nạp dữ liệu mẫu từ prototype (địa điểm, review, sự kiện, blog, cẩm nang, mẫu câu) trong
+`src/main/resources/dev/sample-data.sql`, chỉ khi bảng `places` còn trống.
+**Không bao giờ bật profile `local` trên server deploy**: khi deploy, đặt `SPRING_PROFILES_ACTIVE=prod`.
+
+### Thay đổi database (quan trọng)
+- Mọi bảng được tạo bởi các file **Flyway migration** trong `src/main/resources/db/migration/`.
+  Hibernate **không** tự tạo hay sửa bảng (`ddl-auto=none`).
+- Muốn đổi database, tạo file mới với số tiếp theo, ví dụ `V2__add_avatar_to_users.sql`.
+  **Không sửa file migration đã push**: Flyway sẽ báo lỗi checksum trên máy những người đã chạy file đó.
+- Pull code của người khác về rồi chạy app, Flyway tự chạy các file còn thiếu. Không cần nhắn lệnh SQL cho nhau.
+- Nếu hai người cùng tạo `V2__...`, người merge sau đổi số file của mình thành `V3__...`.
+- Database trên máy chỉ để code thử. Bản deploy dùng một MySQL chung trên cloud, cấu hình qua biến môi
+  trường `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
+
+Thiết kế từng bảng: `docs/database/database-design.md`.
+
 ## 1. Cấu trúc Backend
 
 Mã nguồn Java nằm trong `src/main/java/com/sep490/vsa/`.

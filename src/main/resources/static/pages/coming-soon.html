@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đang phát triển – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+</head>
+<body class="app">
+<main class="page narrow">
+    <div class="card">
+        <span class="badge lan" id="feature">Đang phát triển</span>
+        <h2 id="title">Chức năng này đang được xây dựng</h2>
+        <p class="note">Nhóm SEP490-G130 đang hoàn thiện phần này. Bạn quay lại sau nhé.</p>
+        <div class="row"><a class="btn pri" href="/">Về trang chủ</a></div>
+    </div>
+</main>
+<script type="module">
+    import { mountSiteHeader } from "/assets/js/components/site-header.js";
+
+    // Placeholder for features other team members are still building
+    const FEATURES = {
+        map: ["map", "Bản đồ"], learn: ["learn", "Học tiếng Nhật"], fest: ["fest", "Sự kiện"], blog: ["blog", "Blog"],
+        guide: ["guide", "Cẩm nang"], tag: ["me", "Xin tag định danh"], "public-profile": ["me", "Hồ sơ công khai"],
+        notebook: ["me", "Sổ tay tiếng Nhật"], saved: ["me", "Đã lưu"]
+    };
+    const [tab, name] = FEATURES[new URLSearchParams(location.search).get("f")] || ["", "Chức năng"];
+    await mountSiteHeader(tab);
+    document.querySelector("#title").textContent = `${name} đang được xây dựng`;
+    document.title = `${name} – Senpai ơi`;
+</script>
+</body>
+</html>
