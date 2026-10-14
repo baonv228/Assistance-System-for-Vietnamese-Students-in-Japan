@@ -11,6 +11,21 @@ Cần có: **JDK 17**, **MySQL 8.0.16 trở lên** (MySQL Installer kèm MySQL W
    - Lần đầu chạy, database `asvsj` được tạo tự động và **Flyway** tạo đủ các bảng.
    - Mở MySQL Workbench, kết nối `localhost:3306`, sẽ thấy schema `asvsj`.
 
+### Tài khoản mẫu (chỉ trên máy dev)
+Khi chạy với profile `local` (mặc định), lần đầu khởi động app tự tạo các tài khoản sau, mật khẩu đều là `123456`:
+
+| Email | Vai trò | Sau khi đăng nhập |
+|---|---|---|
+| `user@gmail.com` | Người dùng (Trần Minh, mới đến Nippori) | Trang chủ `/` |
+| `moderator@gmail.com` | Moderator | `/pages/moderator/index.html` |
+| `academic@gmail.com` | Người quản lý học thuật | `/pages/academic/index.html` |
+| `admin@gmail.com` | Admin | `/pages/admin/index.html` |
+| `mentor@gmail.com`, `kouhai@gmail.com` | Người dùng viết review, bài viết mẫu | Trang chủ `/` |
+
+Cùng lúc đó app nạp dữ liệu mẫu từ prototype (địa điểm, review, sự kiện, blog, cẩm nang, mẫu câu) trong
+`src/main/resources/dev/sample-data.sql`, chỉ khi bảng `places` còn trống.
+**Không bao giờ bật profile `local` trên server deploy**: khi deploy, đặt `SPRING_PROFILES_ACTIVE=prod`.
+
 ### Thay đổi database (quan trọng)
 - Mọi bảng được tạo bởi các file **Flyway migration** trong `src/main/resources/db/migration/`.
   Hibernate **không** tự tạo hay sửa bảng (`ddl-auto=none`).

@@ -17,7 +17,11 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /**
  * Session-based security for the same-origin HTML/JS frontend.
@@ -30,6 +34,8 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
  */
 @Configuration
 public class SecurityConfig {
+
+    private static final RequestMatcher API = new AntPathRequestMatcher("/api/**");
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -52,12 +58,38 @@ public class SecurityConfig {
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
                 .securityContext(context -> context.securityContextRepository(contextRepository))
                 .authorizeHttpRequests(auth -> auth
+                        // API
                         .requestMatchers("/api/auth/**", "/api/legal/**").permitAll()
+                        .requestMatchers("/api/me/**").authenticated()
+                        .requestMatchers("/api/moderator/**").hasRole("MODERATOR")
+                        .requestMatchers("/api/academic/**").hasRole("ACADEMIC_MANAGER")
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
+                        // Pages of each role
+                        .requestMatchers("/pages/moderator/**").hasRole("MODERATOR")
+                        .requestMatchers("/pages/academic/**").hasRole("ACADEMIC_MANAGER")
+                        .requestMatchers("/pages/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/pages/profile.html").authenticated()
                         .anyRequest().permitAll())
-                .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
-                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), new AntPathRequestMatcher("/api/**")))
+                .exceptionHandling(e -> e
+                        // Not signed in: API gets 401, pages go to the login page
+                        .defaultAuthenticationEntryPointFor(
+                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), API)
+                        .defaultAuthenticationEntryPointFor(
+                                new LoginUrlAuthenticationEntryPoint("/pages/login.html"), AnyRequestMatcher.INSTANCE)
+                        // Signed in with the wrong role: API gets 403, pages go to the user's own home page
+                        .accessDeniedHandler((request, response, denied) -> {
+                            if (API.matches(request)) {
+                                response.sendError(HttpStatus.FORBIDDEN.value());
+                            } else if (SecurityContextHolder.getContext().getAuthentication() != null
+                                    && SecurityContextHolder.getContext().getAuthentication().getPrincipal()
+                                    instanceof AppUserPrincipal me) {
+                                response.sendRedirect(me.homePath());
+                            } else {
+                                response.sendRedirect("/");
+                            }
+                        }))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(logout -> logout

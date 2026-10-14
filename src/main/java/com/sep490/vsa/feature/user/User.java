@@ -57,13 +57,51 @@ public class User {
     @Column(name = "is_adult_confirmed", nullable = false)
     private boolean adultConfirmed;
 
+    /** Self-declared living area (ward – station), optional. */
+    @Column(name = "area_id")
+    private Long areaId;
+
+    /** Self-declared stage: PRE, ARR, LEAVE, HOME. Optional. */
+    @Column(name = "stage")
+    private String stage;
+
+    /** Total points, maintained from point_transactions. Read-only here. */
+    @Column(name = "points", insertable = false, updatable = false)
+    private int points;
+
+    @Column(name = "report_muted_until", insertable = false, updatable = false)
+    private Instant reportMutedUntil;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     protected User() {
+    }
+
+    public void updateProfile(Long areaId, String stage) {
+        this.areaId = areaId;
+        this.stage = stage;
+    }
+
+    /**
+     * Account deletion: personal data is removed and the email freed so it can register again.
+     * What happens to the user's posts and reviews is still open (team decision pending).
+     */
+    public void anonymize(Instant now) {
+        this.email = "deleted-" + id + "@deleted.invalid";
+        this.displayName = "Tài khoản đã xóa";
+        this.passwordHash = null;
+        this.avatarUrl = null;
+        this.areaId = null;
+        this.stage = null;
+        this.status = UserStatus.DELETED;
+        this.deletedAt = now;
     }
 
     public static User register(String email, String displayName, String passwordHash, String avatarUrl, Instant verifiedAt) {
@@ -146,5 +184,25 @@ public class User {
 
     public Instant getLastLoginAt() {
         return lastLoginAt;
+    }
+
+    public Long getAreaId() {
+        return areaId;
+    }
+
+    public String getStage() {
+        return stage;
+    }
+
+    public int getPoints() {
+        return points;
+    }
+
+    public Instant getReportMutedUntil() {
+        return reportMutedUntil;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
     }
 }

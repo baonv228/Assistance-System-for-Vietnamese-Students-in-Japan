@@ -50,6 +50,18 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Without `spring.mail.host` the code is printed in the server console. Google/Facebook login turns on only
   when their client ids are set in `application-local.properties` (see the `.example` file).
 
+## Roles, homepage, profile
+- Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/pages/moderator/`, ACADEMIC_MANAGER
+  `/pages/academic/`, ADMIN `/pages/admin/` (sample dashboards). SecurityConfig enforces it: guests go to
+  login, a wrong role is redirected to its own home; `/api/moderator|academic|admin/**` need the role,
+  `/api/me/**` needs login.
+- `feature/home` reads other features' tables (places, reviews, events, blogs, guide, phrases) with plain SQL
+  and never writes them, so it does not clash with the entities teammates will create.
+- App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
+  bottom tab bar on phones). Links to features not built yet go to `/pages/coming-soon.html?f=<feature>`.
+- Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
+  `dev/sample-data.sql`. Never use profile `local` on the server.
+
 ## Working notes
 - The `guide` and `scholarship` starter features still map to tables that do not exist in the schema
   (`guide`, `scholarship`); their APIs fail until rewritten. Scholarships are not part of the agreed scope.

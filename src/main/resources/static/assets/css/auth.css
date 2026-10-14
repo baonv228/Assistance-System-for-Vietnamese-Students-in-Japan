@@ -1,24 +1,4 @@
-/* Sign-in / sign-up pages. Palette "Anh đào và chàm" from the prototype (sakura + indigo on washi paper). */
-:root {
-    --bg: #FBF4F3;
-    --surface: #FFFFFF;
-    --surface-2: #F8EEF0;
-    --ink: #2F3E6E;
-    --muted: #676E8A;
-    --line: #EBDCE0;
-    --brand: #C2456E;
-    --brand-strong: #A8365C;
-    --brand-soft: #FCE9EF;
-    --brand-text: #8E2B4E;
-    --ok: #2E7D5B;
-    --ok-soft: #E1F2E9;
-    --crit: #B3261E;
-    --crit-soft: #FBE1DF;
-    --focus: 0 0 0 3px rgba(194, 69, 110, .25);
-    --radius: 14px;
-    --font-display: 'Bricolage Grotesque', 'Be Vietnam Pro', system-ui, sans-serif;
-    --font-body: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
-}
+/* Sign-in / sign-up pages. Colours come from tokens.css (load it first). */
 
 * { box-sizing: border-box; }
 

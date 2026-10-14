@@ -25,7 +25,7 @@ public class SessionSignIn {
 
     public void signIn(User user, HttpServletRequest request, HttpServletResponse response) {
         AppUserPrincipal principal = new AppUserPrincipal(
-                user.getId(), user.getEmail(), user.getDisplayName(), user.getRole().name());
+                user.getId(), user.getEmail(), user.getDisplayName(), user.getRole().name(), user.getRole().homePath());
         var authentication = new UsernamePasswordAuthenticationToken(
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
 

@@ -11,8 +11,9 @@ const resendButton = document.querySelector("#resend");
 
 const state = { email: "", ticket: "", resendTimer: null };
 
-if (await currentUser()) {
-    window.location.replace("/");
+const signedIn = await currentUser();
+if (signedIn) {
+    window.location.replace(signedIn.homePath);
 }
 
 setupPasswordToggles();

@@ -1,0 +1,59 @@
+/* Design tokens: palette "Anh đào và chàm" from the prototype. Change colours here, not in other files.
+   brand = sakura pink (buttons, accents) · ink = ai-zome indigo (text, navigation)
+   lantern = festival lantern (events, "Hữu ích") · background = warm washi paper */
+:root {
+    --bg: #FBF4F3;
+    --surface: #FFFFFF;
+    --surface-2: #F8EEF0;
+    --ink: #2F3E6E;
+    --muted: #676E8A;
+    --line: #EBDCE0;
+    --brand: #C2456E;
+    --brand-strong: #A8365C;
+    --on-brand: #FFFFFF;
+    --brand-soft: #FCE9EF;
+    --brand-text: #8E2B4E;
+    --ai-soft: #E6E9F4;
+    --lantern: #E8A33C;
+    --lantern-soft: #FDF0D8;
+    --lantern-text: #7A4E00;
+    --ok: #2E7D5B;
+    --ok-soft: #E1F2E9;
+    --warn: #8A5800;
+    --warn-soft: #FCEFD2;
+    --crit: #B3261E;
+    --crit-soft: #FBE1DF;
+    --focus: 0 0 0 3px rgba(194, 69, 110, .25);
+    --radius: 14px;
+    --font-display: 'Bricolage Grotesque', 'Be Vietnam Pro', system-ui, sans-serif;
+    --font-body: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-ja: 'Be Vietnam Pro', 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
+}
+
+/* Material Symbols Rounded icons: <span class="ic">home</span> */
+.ic {
+    font-family: 'Material Symbols Rounded';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    direction: ltr;
+    font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    vertical-align: -4px;
+    flex: none;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}

@@ -67,10 +67,12 @@ public final class AuthDtos {
     public record ProvidersResponse(boolean google, boolean facebook) {
     }
 
-    public record CurrentUserResponse(Long id, String email, String displayName, String role, String avatarUrl) {
+    /** {@code homePath} is where the frontend sends this user after login (depends on the role). */
+    public record CurrentUserResponse(Long id, String email, String displayName, String role, String roleLabel,
+                                      String homePath, String avatarUrl) {
         public static CurrentUserResponse of(User user) {
             return new CurrentUserResponse(user.getId(), user.getEmail(), user.getDisplayName(),
-                    user.getRole().name(), user.getAvatarUrl());
+                    user.getRole().name(), user.getRole().label(), user.getRole().homePath(), user.getAvatarUrl());
         }
     }
 }

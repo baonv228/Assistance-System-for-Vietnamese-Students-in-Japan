@@ -69,7 +69,15 @@ export const apiClient = {
     completeSocial: (body) => post("/auth/social/complete", body),
 
     // Legal documents: "tos", "privacy", "community"
-    legal: (type) => request(`/legal/${type}`)
+    legal: (type) => request(`/legal/${type}`),
+
+    // Homepage and "Tôi"
+    guestHome: () => request("/home"),
+    memberHome: () => request("/me/home"),
+    profile: () => request("/me/profile"),
+    updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
+    deleteAccount: () => request("/me", { method: "DELETE" }),
+    areas: () => request("/areas")
 };
 
 /** Returns the signed-in user, or null for a guest. */

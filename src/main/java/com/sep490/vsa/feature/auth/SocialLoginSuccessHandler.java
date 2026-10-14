@@ -24,7 +24,6 @@ import java.util.Optional;
 @Component
 public class SocialLoginSuccessHandler implements AuthenticationSuccessHandler {
 
-    static final String HOME = "/";
     static final String LOGIN = "/pages/login.html";
     static final String COMPLETE_SIGNUP = "/pages/complete-signup.html";
 
@@ -60,7 +59,7 @@ public class SocialLoginSuccessHandler implements AuthenticationSuccessHandler {
                 return;
             }
             sessionSignIn.signIn(existing.get(), request, response);
-            response.sendRedirect(HOME);
+            response.sendRedirect(existing.get().getRole().homePath());
             return;
         }
         request.getSession(true).setAttribute(PendingSocialSignup.SESSION_KEY, profile);
