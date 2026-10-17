@@ -1,0 +1,113 @@
+/* Post Detail (pages/blog-detail.html). Load after tokens.css, site.css and blog.css (author, place, topic,
+   avatar and state styles come from blog.css). */
+
+.post-page { gap: 14px; }
+.back { display: inline-flex; align-items: center; gap: 4px; justify-self: start; }
+
+.post-full { gap: 12px; padding: 22px; }
+.post-full h1 { font-size: clamp(22px, 3.2vw, 30px); font-weight: 800; text-wrap: balance; }
+.post-full .meta, .post-full .tags, .byline { gap: 6px; }
+.badge.rank { background: var(--ai-soft); }
+.warnbox { background: var(--warn-soft); color: var(--warn); }
+.post-body { font-size: 16px; line-height: 1.7; overflow-wrap: anywhere; }
+.post-body p + p { margin-top: 12px; }
+.post-body a, .comment-body a { color: var(--brand-text); }
+
+.media-grid { display: grid; gap: 6px; border-radius: 12px; overflow: hidden; }
+.media-grid.count-2, .media-grid.count-4 { grid-template-columns: 1fr 1fr; }
+.media-grid.count-3 { grid-template-columns: 2fr 1fr; }
+.media-grid img, .media-grid video { width: 100%; height: 100%; max-height: 420px; object-fit: cover; display: block; background: var(--surface-2); }
+
+.actions-bar { gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--surface-2); color: var(--ink); }
+.btn.ghost.dan { color: var(--crit); }
+.btn.okbtn { color: var(--ok); }
+.btn[aria-pressed="true"] .ic { color: var(--brand); }
+.stat.sm { font-size: 13px; padding: 0 6px; }
+
+/* ---------------- comments ---------------- */
+.comments { gap: 14px; padding: 22px; }
+.comments h2 { font-size: 20px; }
+.login-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--brand-soft);
+}
+.comment-form { display: grid; gap: 6px; }
+.comment-form textarea, .dlg textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 64px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+.comment-form textarea:focus, .dlg textarea:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
+.counter { font-variant-numeric: tabular-nums; }
+.field-error { color: var(--crit); font-size: 13.5px; }
+
+.comment-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.comment { display: grid; gap: 6px; padding: 12px 0 4px; border-top: 1px solid var(--line); }
+.comment-list .comment-list { margin-top: 4px; padding-left: 18px; border-left: 2px solid var(--line); }
+.comment-list .comment-list .comment { border-top: 0; padding-top: 8px; }
+/* Deep threads stop indenting after three levels so phones keep enough width */
+.comment.depth-3 .comment-list { padding-left: 0; border-left: 0; }
+.comment.best { background: var(--ok-soft); border-radius: 12px; padding: 12px; border-top: 0; margin-bottom: 4px; }
+.best-badge { justify-self: start; }
+.comment.removed > .note { font-style: italic; }
+.comment-body { font-size: 15px; overflow-wrap: anywhere; }
+.comment-body p + p { margin-top: 8px; }
+.comment-actions { gap: 2px; }
+.comment-actions .btn { min-height: 32px; padding: 0 10px; font-size: 13.5px; }
+.reply-slot:empty { display: none; }
+.comment.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: var(--lantern-soft); } to { background: transparent; } }
+.empty-comments { padding: 8px 0; }
+
+/* ---------------- dialogs and toast ---------------- */
+.dlg {
+    width: min(440px, calc(100vw - 32px));
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 24px 60px rgba(47, 62, 110, .25);
+}
+.dlg::backdrop { background: rgba(47, 62, 110, .35); }
+.dlg form { display: grid; gap: 12px; padding: 20px; }
+.reasons { margin: 0; padding: 0; border: 0; display: grid; gap: 2px; }
+.reasons .check input { accent-color: var(--brand); width: 18px; height: 18px; margin: 0; }
+.row.end { justify-content: flex-end; }
+
+.toast {
+    position: fixed;
+    z-index: 50;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 32px);
+    padding: 12px 18px;
+    border-radius: 12px;
+    background: var(--ink);
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 12px 32px rgba(47, 62, 110, .3);
+}
+.toast.error { background: var(--crit); }
+
+@media (max-width: 860px) {
+    .post-full, .comments { padding: 16px; }
+    .toast { bottom: 84px; }
+    .comment-list .comment-list { padding-left: 12px; }
+}

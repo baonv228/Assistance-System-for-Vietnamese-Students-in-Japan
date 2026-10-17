@@ -62,6 +62,27 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
+## Blog feed (feature/blog)
+- `GET /api/blogs` (search, topic/type filter, sort, paging) and `GET /api/blogs/overview` (featured posts,
+  active topics, side statistics). Plain SQL like `feature/home`; search folds accents and case via
+  `utf8mb4_0900_ai_ci`. A signed-in author also sees their own `PROCESSING` posts.
+- `FeaturedSnapshotService` fills `featured_snapshots` (WEEK = last 7 days, MONTH = last 30) at startup and
+  every hour. Page: `pages/blog.html` + `assets/js/pages/blog.js`; links to Write Post, Map and Public Profile
+  go through `ROUTES` at the top of blog.js (coming-soon pages for now).
+- Post Detail (UC-10): `GET /api/blogs/{id}` (public) returns the post, media, comment tree and `viewer` flags.
+  Actions (signed-in role USER only, never on one's own content for like/report): `POST|DELETE
+  /api/blogs/{id}/like|save`, `POST /api/blogs/{id}/comments` (`parentId` for replies), `PUT
+  /api/blogs/{id}/best-comment` (asker, Q&A, +5 points moved if changed), `POST /api/blogs/{id}/report`,
+  `DELETE /api/blogs/{id}` (own post: hard delete, its points withdrawn), `POST|DELETE /api/comments/{id}/like`,
+  `POST /api/comments/{id}/report`, `DELETE /api/comments/{id}` (own; a comment with replies becomes an empty
+  REMOVED placeholder). Page: `pages/blog-detail.html?id=`.
+- Shared helpers used by blog and reusable elsewhere: `feature/report/ContentReportService` (one report per
+  user per item, more than `report_hide_threshold` → URGENT and the caller hides the item, reporting lock),
+  `feature/moderation/ContentFilter` (banned keywords ignoring accents/spaces; links only for tagged users,
+  no short links), `feature/user/PointService`, `feature/notification/NotificationService`,
+  `common/settings/SystemSettings`, `common/text/VietnameseText`. Media URLs = `app.media.public-base-url`
+  (default `/media/`) + `media.storage_key` until file storage is decided.
+
 ## Working notes
 - The `guide` and `scholarship` starter features still map to tables that do not exist in the schema
   (`guide`, `scholarship`); their APIs fail until rewritten. Scholarships are not part of the agreed scope.

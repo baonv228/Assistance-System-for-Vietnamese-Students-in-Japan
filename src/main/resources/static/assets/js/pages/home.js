@@ -43,7 +43,7 @@ function renderGuest(data) {
             <div class="feat">
                 ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", soon("map"))}
                 ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", soon("learn"))}
-                ${feature("forum", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", soon("blog"))}
+                ${feature("forum", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/pages/blog.html")}
                 ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", soon("fest"))}
             </div>
             ${phraseCard(phrase)}
@@ -99,7 +99,7 @@ async function renderMember() {
                         <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span></span></a>`).join("")
                         || '<p class="note">Chưa có review mới.</p>'}
                 </div>
-                ${home.featured ? `<a class="card blogcard" href="${soon("blog")}" style="grid-column:1/-1">
+                ${home.featured ? `<a class="card blogcard" href="/pages/blog-detail.html?id=${home.featured.id}" style="grid-column:1/-1">
                     <span class="row"><span class="badge lan">${ic("star")}Bài nổi bật ${home.featured.period === "WEEK" ? "tuần này" : "tháng này"}</span>
                         <span class="note">${home.featured.readMinutes} phút đọc</span></span>
                     <h3>${esc(home.featured.title)}</h3>

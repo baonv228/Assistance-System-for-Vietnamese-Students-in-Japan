@@ -11,7 +11,7 @@ const TABS = [
     ["map", "Bản đồ", "map", soon("map")],
     ["learn", "Học", "school", soon("learn")],
     ["fest", "Sự kiện", "celebration", soon("fest")],
-    ["blog", "Blog", "forum", soon("blog")],
+    ["blog", "Blog", "forum", "/pages/blog.html"],
     ["guide", "Cẩm nang", "menu_book", soon("guide")],
     ["me", "Tôi", "person", "/pages/profile.html"]
 ];

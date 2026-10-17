@@ -77,8 +77,40 @@ export const apiClient = {
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
-    areas: () => request("/areas")
+    areas: () => request("/areas"),
+
+    // Blog Feed (UC-09). params: { q, topicIds: [..], type, sort, page, size }
+    blogs: (params = {}) => request(`/blogs?${toQuery(params)}`),
+    blogOverview: () => request("/blogs/overview"),
+
+    // Post Detail (UC-10). Calls that change comments return the refreshed post.
+    blog: (id) => request(`/blogs/${id}`),
+    likeBlog: (id, on) => request(`/blogs/${id}/like`, { method: on ? "POST" : "DELETE" }),
+    saveBlog: (id, on) => request(`/blogs/${id}/save`, { method: on ? "POST" : "DELETE" }),
+    deleteBlog: (id) => request(`/blogs/${id}`, { method: "DELETE" }),
+    reportBlog: (id, body) => post(`/blogs/${id}/report`, body),
+    commentBlog: (id, body) => post(`/blogs/${id}/comments`, body),
+    chooseBestComment: (id, commentId) =>
+        request(`/blogs/${id}/best-comment`, { method: "PUT", body: JSON.stringify({ commentId }) }),
+    likeComment: (id, on) => request(`/comments/${id}/like`, { method: on ? "POST" : "DELETE" }),
+    reportComment: (id, body) => post(`/comments/${id}/report`, body),
+    deleteComment: (id) => request(`/comments/${id}`, { method: "DELETE" })
 };
+
+/** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */
+function toQuery(params) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+            if (value.length) {
+                query.set(key, value.join(","));
+            }
+        } else if (value !== undefined && value !== null && value !== "") {
+            query.set(key, value);
+        }
+    });
+    return query.toString();
+}
 
 /** Returns the signed-in user, or null for a guest. */
 export async function currentUser() {

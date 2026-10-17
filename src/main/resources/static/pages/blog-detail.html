@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bài viết – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/blog.css">
+    <link rel="stylesheet" href="/assets/css/blog-detail.css">
+</head>
+<body class="app">
+<main class="page narrow post-page" id="post" aria-live="polite">
+    <a class="link back" href="/pages/blog.html"><span class="ic" aria-hidden="true">arrow_back</span>Blog</a>
+    <div id="content"><p class="note">Đang tải…</p></div>
+</main>
+
+<!-- Report a post or a comment (UC-16) -->
+<dialog class="dlg" id="report-dlg" aria-labelledby="report-title">
+    <form method="dialog" id="report-form">
+        <h3 id="report-title">Báo cáo nội dung</h3>
+        <p class="note">Moderator sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.</p>
+        <fieldset class="reasons" id="report-reasons"><legend class="sr-only">Lý do</legend></fieldset>
+        <p class="field-error" id="report-error" role="alert" hidden></p>
+        <div class="field">
+            <label for="report-note">Ghi chú thêm (không bắt buộc)</label>
+            <textarea id="report-note" maxlength="500" rows="3" placeholder="Ví dụ: tài khoản này nhắn tin mời việc giả"></textarea>
+        </div>
+        <div class="row end">
+            <button class="btn" type="button" data-close>Hủy</button>
+            <button class="btn pri" type="submit" id="report-submit">Gửi báo cáo</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Confirm before deleting (MSG16) -->
+<dialog class="dlg" id="confirm-dlg" aria-labelledby="confirm-title">
+    <form method="dialog">
+        <h3 id="confirm-title">Xác nhận</h3>
+        <p id="confirm-text"></p>
+        <div class="row end">
+            <button class="btn" type="button" data-close>Hủy</button>
+            <button class="btn dan solid" type="button" id="confirm-ok">Xóa</button>
+        </div>
+    </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script type="module" src="/assets/js/pages/blog-detail.js"></script>
+</body>
+</html>
