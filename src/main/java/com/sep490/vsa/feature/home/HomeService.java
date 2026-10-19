@@ -126,7 +126,7 @@ public class HomeService {
                 userId, areaId);
     }
 
-    /** Top post of the last 7 days, or of the last 30 days if the week has none. */
+    /** Top post (not a question) of the last 7 days, or of the last 30 days if the week has none. */
     private Featured featured() {
         for (var period : List.of(new Object[]{"WEEK", 7}, new Object[]{"MONTH", 30})) {
             Timestamp since = Timestamp.from(clock.instant().minus(Duration.ofDays((int) period[1])));
@@ -136,7 +136,7 @@ public class HomeService {
                              + COALESCE((SELECT MAX(r.featured_bonus) FROM ranks r WHERE r.min_points <= u.points), 0)
                              AS score
                     FROM blogs b JOIN users u ON u.id = b.author_id
-                    WHERE b.status = 'PUBLISHED' AND b.created_at >= ?
+                    WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.created_at >= ?
                     HAVING score >= ? ORDER BY score DESC, b.created_at DESC LIMIT 1""",
                     (rs, i) -> {
                         String content = rs.getString(3);

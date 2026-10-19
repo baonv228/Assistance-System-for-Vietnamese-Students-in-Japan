@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.user;
 
 import com.sep490.vsa.common.exception.ApiException;
+import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.feature.user.ProfileDtos.AreaResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.DailyUsage;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
@@ -26,22 +27,20 @@ import java.util.List;
 public class ProfileService {
 
     static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
-    /** Mirrors system_settings new_account_days / posts_per_day / pins_per_day / videos_per_day. */
-    static final int NEW_ACCOUNT_DAYS = 7;
-    static final int POSTS_PER_DAY = 3;
-    static final int PINS_PER_DAY = 2;
-    static final int VIDEOS_PER_DAY = 1;
 
     private final UserRepository users;
     private final UserAuthProviderRepository providers;
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final SystemSettings settings;
 
-    public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock) {
+    public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock,
+                          SystemSettings settings) {
         this.users = users;
         this.providers = providers;
         this.jdbc = jdbc;
         this.clock = clock;
+        this.settings = settings;
     }
 
     @Transactional(readOnly = true)
@@ -64,13 +63,17 @@ public class ProfileService {
         String areaName = user.getAreaId() == null ? null : jdbc.query(
                 "SELECT display_name FROM areas WHERE id = ?", (rs, i) -> rs.getString(1), user.getAreaId())
                 .stream().findFirst().orElse(null);
+        int postsPerDay = settings.getInt(SystemSettings.POSTS_PER_DAY, 3);
+        int pinsPerDay = settings.getInt(SystemSettings.PINS_PER_DAY, 2);
+        int videosPerDay = settings.getInt(SystemSettings.VIDEOS_PER_DAY, 1);
+        int newAccountDays = settings.getInt(SystemSettings.NEW_ACCOUNT_DAYS, 7);
         DailyUsage today = jdbc.query(
                 "SELECT posts, pins, videos FROM user_daily_usage WHERE user_id = ? AND usage_date = ?",
-                (rs, i) -> new DailyUsage(rs.getInt(1), POSTS_PER_DAY, rs.getInt(2), PINS_PER_DAY,
-                        rs.getInt(3), VIDEOS_PER_DAY),
+                (rs, i) -> new DailyUsage(rs.getInt(1), postsPerDay, rs.getInt(2), pinsPerDay,
+                        rs.getInt(3), videosPerDay),
                 userId, Date.valueOf(LocalDate.now(clock.withZone(JAPAN))))
                 .stream().findFirst()
-                .orElse(new DailyUsage(0, POSTS_PER_DAY, 0, PINS_PER_DAY, 0, VIDEOS_PER_DAY));
+                .orElse(new DailyUsage(0, postsPerDay, 0, pinsPerDay, 0, videosPerDay));
         List<String> linked = jdbc.query("SELECT provider FROM user_auth_providers WHERE user_id = ?",
                 (rs, i) -> rs.getString(1), userId);
         Instant muted = user.getReportMutedUntil() != null && user.getReportMutedUntil().isAfter(now)
@@ -79,7 +82,7 @@ public class ProfileService {
         return new ProfileResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.getAvatarUrl(),
                 user.getRole().name(), user.getRole().label(), user.getPoints(), ranks, tags, pendingTag,
                 user.getAreaId(), areaName, user.getStage(), user.getCreatedAt(), ageDays,
-                ageDays < NEW_ACCOUNT_DAYS, NEW_ACCOUNT_DAYS, today, muted,
+                ageDays < newAccountDays, newAccountDays, today, muted,
                 user.getPasswordHash() != null, linked);
     }
 

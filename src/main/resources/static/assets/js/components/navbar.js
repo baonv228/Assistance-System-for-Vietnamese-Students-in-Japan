@@ -29,7 +29,7 @@ async function showAccount(host) {
     logout.textContent = "Đăng xuất";
     logout.addEventListener("click", async () => {
         await apiClient.logout();
-        window.location.replace("/pages/login.html");
+        window.location.replace("/login");
     });
     slot.append(name, logout);
 }

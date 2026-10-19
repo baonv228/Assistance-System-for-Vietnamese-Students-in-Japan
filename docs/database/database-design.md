@@ -18,7 +18,7 @@
 | 2. Tag định danh | `tag_types`, `tag_proof_types`, `tag_requests`, `user_tags` |
 | 3. Điểm và cấp bậc | `ranks`, `point_transactions` |
 | 4. Media | `media` |
-| 5. Địa điểm và bản đồ | `place_categories`, `category_google_types`, `places`, `place_history`, `place_closed_reports`, `saved_places`, `place_merges`, `duplicate_dismissals` |
+| 5. Địa điểm và bản đồ | `place_categories`, `category_google_types`, `category_osm_tags`, `places`, `place_history`, `place_closed_reports`, `saved_places`, `place_merges`, `duplicate_dismissals` |
 | 6. Review | `reviews`, `review_media`, `review_likes` |
 | 7. Sự kiện | `events` |
 | 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots` |
@@ -222,7 +222,15 @@ Chỉ lưu bản băm SHA-256 của mã; mã gốc chỉ nằm trong link gửi 
 | icon | VARCHAR(50) | NN | Tên icon |
 | sort_order | INT | NN | |
 
+### `category_osm_tags` – Ánh xạ thẻ OpenStreetMap sang danh mục (V4)
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| osm_tag | VARCHAR(80) | PK | `key=value`: `shop=convenience`, `railway=station`… Thẻ không có trong bảng → danh mục `other` |
+| category_id | VARCHAR(20) | FK → place_categories, NN | |
+
 ### `category_google_types` – Ánh xạ loại của Google sang danh mục
+Từ V4 tìm địa điểm dùng OpenStreetMap (`category_osm_tags`); bảng này không còn được đọc, giữ lại cho lịch sử.
+
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
 | google_type | VARCHAR(50) | PK | `convenience_store`, `restaurant`… |
@@ -233,6 +241,7 @@ Chỉ lưu bản băm SHA-256 của mã; mã gốc chỉ nằm trong link gửi 
 |---|---|---|---|
 | id | BIGINT | PK | |
 | google_place_id | VARCHAR(255) | UQ, NULL được | Chỉ lưu `place_id` (không lưu dữ liệu Google lâu dài) |
+| osm_id | VARCHAR(30) | UQ, NULL được | Phần tử OpenStreetMap: `N`/`W`/`R` + số, ví dụ `N772389775` (V4). Dữ liệu OSM được lưu (ODbL, ghi nguồn © OpenStreetMap) |
 | name_vi | VARCHAR(160) | NN | Tên hiển thị tiếng Việt |
 | name_ja | VARCHAR(160) | | Tên tiếng Nhật |
 | name_en | VARCHAR(160) | | Tên tiếng Anh |
@@ -240,7 +249,7 @@ Chỉ lưu bản băm SHA-256 của mã; mã gốc chỉ nằm trong link gửi 
 | area_id | BIGINT | FK → areas | |
 | address | VARCHAR(255) | | |
 | lat, lng | DECIMAL(9,6) | | Tọa độ (ghim thủ công bắt buộc có) |
-| source | VARCHAR(20) | NN | `GOOGLE`, `TEAM`, `USER`, `MODERATOR` |
+| source | VARCHAR(20) | NN | `GOOGLE`, `OSM`, `TEAM`, `USER`, `MODERATOR` |
 | status | VARCHAR(20) | NN | `PENDING`, `ACTIVE`, `REJECTED`, `REMOVED`, `MERGED` |
 | is_closed | BOOLEAN | NN, mặc định false | Moderator xác nhận đã đóng cửa |
 | closed_at | DATETIME | | |

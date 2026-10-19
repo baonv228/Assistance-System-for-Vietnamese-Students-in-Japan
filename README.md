@@ -17,9 +17,9 @@ Khi chạy với profile `local` (mặc định), lần đầu khởi động ap
 | Email | Vai trò | Sau khi đăng nhập |
 |---|---|---|
 | `user@gmail.com` | Người dùng (Trần Minh, mới đến Nippori) | Trang chủ `/` |
-| `moderator@gmail.com` | Moderator | `/pages/moderator/index.html` |
-| `academic@gmail.com` | Người quản lý học thuật | `/pages/academic/index.html` |
-| `admin@gmail.com` | Admin | `/pages/admin/index.html` |
+| `moderator@gmail.com` | Moderator | `/moderator` |
+| `academic@gmail.com` | Người quản lý học thuật | `/academic` |
+| `admin@gmail.com` | Admin | `/admin` |
 | `mentor@gmail.com`, `kouhai@gmail.com` | Người dùng viết review, bài viết mẫu | Trang chủ `/` |
 
 Cùng lúc đó app nạp dữ liệu mẫu từ prototype (địa điểm, review, sự kiện, blog, cẩm nang, mẫu câu) trong
