@@ -78,6 +78,11 @@ public class BlogDetailRepository {
         return count("SELECT COUNT(*) FROM comments WHERE parent_id = ?", commentId) > 0;
     }
 
+    /** Ids of the post's photos and videos (their files are removed when the post is deleted). */
+    public List<Long> mediaIds(long blogId) {
+        return jdbc.query("SELECT media_id FROM blog_media WHERE blog_id = ?", (rs, i) -> rs.getLong(1), blogId);
+    }
+
     /** Ids of every comment of the post (used to close their report cases when the post is deleted). */
     public List<Long> commentIds(long blogId) {
         return jdbc.query("SELECT id FROM comments WHERE blog_id = ?", (rs, i) -> rs.getLong(1), blogId);

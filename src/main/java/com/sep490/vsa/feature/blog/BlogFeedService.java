@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** UC-09 View Blog List: the post list with search, filters and paging, plus the featured and statistics blocks. */
+/** UC-09 View Blog List: posts with search, filters and paging, plus the featured and statistics blocks. */
 @Service
 @Transactional(readOnly = true)
 public class BlogFeedService {
@@ -45,8 +45,7 @@ public class BlogFeedService {
         int totalPages = (int) Math.max(1, (total + query.size() - 1) / query.size());
         // A page past the end (e.g. after a filter change) falls back to the last page
         if (query.page() >= totalPages) {
-            query = new BlogFeedQuery(query.keyword(), query.topicIds(), query.type(), query.sort(), totalPages - 1,
-                    query.size(), query.viewerId());
+            query = query.withPage(totalPages - 1);
         }
         List<BlogCard> items = total == 0 ? List.of() : cards(repository.find(query), EXCERPT_LENGTH);
         return new BlogPage(items, query.page(), query.size(), total, totalPages, query.filtered());
@@ -59,7 +58,7 @@ public class BlogFeedService {
         writers = writers.stream().map(w -> new Writer(withTags(w.author(), tags), w.postCount())).toList();
 
         return new Overview(featured(), repository.activeTopics(), repository.popularTopics(SIDE_LIMIT), writers,
-                TOP_WRITER_DAYS, repository.openQuestions(SIDE_LIMIT), repository.openQuestionCount());
+                TOP_WRITER_DAYS);
     }
 
     /** Latest weekly snapshot; the monthly one when the week has no qualifying post. One post per author. */

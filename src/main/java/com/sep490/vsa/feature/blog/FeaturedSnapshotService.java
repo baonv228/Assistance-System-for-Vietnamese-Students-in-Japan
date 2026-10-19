@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Computes "Bài nổi bật" automatically (no manual featuring): top 3 published posts of the last 7 days (WEEK)
+ * Computes "Bài nổi bật" automatically (no manual featuring): top 3 published posts (not questions) of the last 7 days (WEEK)
  * and of the last 30 days (MONTH) by likes + 2 × comments + the author's rank bonus, minimum score 10,
  * one post per author. Runs at startup and then every hour; each run replaces the previous snapshot.
  */

@@ -21,7 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** UC-10 View Blog Details: the post, its author, media and comment tree, and what the viewer may do. */
+/**
+ * UC-10 View Blog Details: the post, its author, media and comment tree, and what the viewer may do.
+ * Posts and questions share this code; each page asks for its own kind (POST for Blog, QA for Hỏi-Đáp), so a
+ * question never opens as a blog post and the reverse.
+ */
 @Service
 @Transactional(readOnly = true)
 public class BlogDetailService {
@@ -43,9 +47,14 @@ public class BlogDetailService {
         this.mediaBaseUrl = mediaBaseUrl;
     }
 
-    public BlogDetail detail(long blogId, AppUserPrincipal me) {
+    /**
+     * @param kind POST or QA; null accepts either (used after comment actions, which are shared by both pages)
+     */
+    public BlogDetail detail(long blogId, AppUserPrincipal me, String kind) {
         Long viewerId = me == null ? null : me.id();
-        BlogRow blog = repository.findBlog(blogId).filter(b -> canSee(b, viewerId))
+        BlogRow blog = repository.findBlog(blogId)
+                .filter(b -> kind == null || kind.equals(b.type()))
+                .filter(b -> canSee(b, viewerId))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, NOT_FOUND));
         boolean author = blog.authorId().equals(viewerId);
 

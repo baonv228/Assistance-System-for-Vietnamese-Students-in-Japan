@@ -18,13 +18,17 @@ public final class BlogDtos {
     public record TopicRef(Long id, String name) {
     }
 
-    public record PlaceRef(Long id, String name) {
+    /**
+     * A linked place. The position (null for places saved from Google Maps without one) puts it on the small map of
+     * the post page (Leaflet + OpenStreetMap tiles).
+     */
+    public record PlaceRef(Long id, String name, String category, String address, Double lat, Double lng) {
     }
 
     /**
      * One card in the list.
      *
-     * @param type   POST (Bài viết) or QA (Hỏi đáp)
+     * @param type   POST (the feed shows posts only; QA questions are listed by feature/qa)
      * @param status PUBLISHED, or PROCESSING when the author views their own post while its media is scanned
      */
     public record BlogCard(Long id, String type, String status, boolean pinned, boolean answered, String title,
@@ -33,7 +37,7 @@ public final class BlogDtos {
     }
 
     /**
-     * @param filtered true when a keyword, topic or type filter is applied; the page uses it to choose
+     * @param filtered true when a keyword or topic filter is applied; the page uses it to choose
      *                 between "no posts yet" (MSG32) and "no posts match" (MSG33)
      */
     public record BlogPage(List<BlogCard> items, int page, int size, long totalItems, int totalPages,
@@ -50,12 +54,8 @@ public final class BlogDtos {
     public record Writer(Author author, long postCount) {
     }
 
-    public record OpenQuestion(Long id, String title, Instant createdAt) {
-    }
-
     /** Everything on the screen that does not depend on the filters. */
     public record Overview(Featured featured, List<TopicRef> topics, List<TopicCount> popularTopics,
-                           List<Writer> topWriters, int topWritersDays, List<OpenQuestion> openQuestions,
-                           long openQuestionCount) {
+                           List<Writer> topWriters, int topWritersDays) {
     }
 }

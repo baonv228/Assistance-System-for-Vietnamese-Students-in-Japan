@@ -19,10 +19,9 @@ class BlogFeedQueryTest {
 
     @Test
     void defaultsWhenNothingIsGiven() {
-        BlogFeedQuery q = BlogFeedQuery.of(null, null, null, null, null, null, null);
+        BlogFeedQuery q = BlogFeedQuery.of(null, null, null, null, null, null);
         assertThat(q.keyword()).isNull();
         assertThat(q.topicIds()).isEmpty();
-        assertThat(q.type()).isEqualTo(BlogFeedQuery.Type.ALL);
         assertThat(q.sort()).isEqualTo(BlogFeedQuery.Sort.NEWEST);
         assertThat(q.page()).isZero();
         assertThat(q.size()).isEqualTo(BlogFeedQuery.DEFAULT_SIZE);
@@ -31,30 +30,30 @@ class BlogFeedQueryTest {
 
     @Test
     void blankKeywordIsNoSearch() {
-        assertThat(BlogFeedQuery.of("   ", null, null, null, null, null, null).keyword()).isNull();
+        assertThat(BlogFeedQuery.of("   ", null, null, null, null, null).keyword()).isNull();
     }
 
     @Test
     void keywordOver100CharactersIsRejected() {
         String ok = "a".repeat(100);
-        assertThat(BlogFeedQuery.of(ok, null, null, null, null, null, null).keyword()).hasSize(100);
-        assertThatThrownBy(() -> BlogFeedQuery.of(ok + "b", null, null, null, null, null, null))
+        assertThat(BlogFeedQuery.of(ok, null, null, null, null, null).keyword()).hasSize(100);
+        assertThatThrownBy(() -> BlogFeedQuery.of(ok + "b", null, null, null, null, null))
                 .isInstanceOf(ApiException.class);
     }
 
     @Test
-    void parsesTypeAndSortIgnoringCase() {
-        BlogFeedQuery q = BlogFeedQuery.of(null, null, "qa", "likes", null, null, null);
-        assertThat(q.type()).isEqualTo(BlogFeedQuery.Type.QA);
+    void parsesSortIgnoringCaseAndSortingIsNotAFilter() {
+        BlogFeedQuery q = BlogFeedQuery.of(null, null, "likes", null, null, null);
         assertThat(q.sort()).isEqualTo(BlogFeedQuery.Sort.LIKES);
-        assertThat(q.filtered()).isTrue();
-        assertThatThrownBy(() -> BlogFeedQuery.of(null, null, "VIDEO", null, null, null, null))
+        assertThat(q.filtered()).isFalse();
+        assertThat(BlogFeedQuery.of(null, List.of(2L), null, null, null, null).filtered()).isTrue();
+        assertThatThrownBy(() -> BlogFeedQuery.of(null, null, "VIDEO", null, null, null))
                 .isInstanceOf(ApiException.class);
     }
 
     @Test
     void clampsPagingAndCleansTopicIds() {
-        BlogFeedQuery q = BlogFeedQuery.of(null, List.of(3L, 3L, -1L, 5L), null, null, -2, 500, 7L);
+        BlogFeedQuery q = BlogFeedQuery.of(null, List.of(3L, 3L, -1L, 5L), null, -2, 500, 7L);
         assertThat(q.page()).isZero();
         assertThat(q.size()).isEqualTo(BlogFeedQuery.MAX_SIZE);
         assertThat(q.topicIds()).containsExactly(3L, 5L);

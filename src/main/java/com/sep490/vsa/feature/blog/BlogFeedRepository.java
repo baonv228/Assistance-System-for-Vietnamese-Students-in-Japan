@@ -1,7 +1,6 @@
 package com.sep490.vsa.feature.blog;
 
 import com.sep490.vsa.feature.blog.BlogDtos.Author;
-import com.sep490.vsa.feature.blog.BlogDtos.OpenQuestion;
 import com.sep490.vsa.feature.blog.BlogDtos.PlaceRef;
 import com.sep490.vsa.feature.blog.BlogDtos.Tag;
 import com.sep490.vsa.feature.blog.BlogDtos.TopicCount;
@@ -24,13 +23,18 @@ import java.util.Map;
 /**
  * Read-only SQL for the Blog Feed. Plain SQL (not JPA) because the filters are dynamic and the screen
  * also reads users, tags, topics and places; it never writes the blog tables.
+ * <p>
+ * The feed, its statistics and "Bài nổi bật" cover posts only ({@code blog_type = 'POST'}); questions live in the
+ * same table but are listed by feature/qa. {@link #topicsOf}, {@link #placesOf} and {@link #tagsOf} work for
+ * both and are reused by feature/qa.
  */
 @Repository
 public class BlogFeedRepository {
 
-    /** What a viewer may see: published posts, plus their own posts whose media is still being scanned. */
+    /** Posts a viewer may see: published ones, plus their own posts whose media is still being scanned. */
     private static final String VISIBLE = """
-            (b.status = 'PUBLISHED' OR (b.status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))""";
+            b.blog_type = 'POST'
+            AND (b.status = 'PUBLISHED' OR (b.status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))""";
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -68,13 +72,13 @@ public class BlogFeedRepository {
                 params, BlogFeedRepository::row);
     }
 
-    /** Published posts with these ids, in the given order (used for the featured block). */
+    /** Published posts (not questions) with these ids, in the given order (used for the featured block). */
     public List<Row> findPublished(List<Long> ids) {
         if (ids.isEmpty()) {
             return List.of();
         }
         Map<Long, Row> byId = new HashMap<>();
-        jdbc.query(SELECT_ROW + " WHERE b.id IN (:ids) AND b.status = 'PUBLISHED'", Map.of("ids", ids),
+        jdbc.query(SELECT_ROW + " WHERE b.id IN (:ids) AND b.status = 'PUBLISHED' AND b.blog_type = 'POST'", Map.of("ids", ids),
                 (ResultSet rs) -> {
                     while (rs.next()) {
                         Row r = row(rs, 0);
@@ -101,11 +105,7 @@ public class BlogFeedRepository {
     private static String where(BlogFeedQuery query, MapSqlParameterSource params) {
         params.addValue("viewerId", query.viewerId());
         List<String> parts = new ArrayList<>();
-        parts.add(VISIBLE);
-        if (query.type() != BlogFeedQuery.Type.ALL) {
-            parts.add("b.blog_type = :type");
-            params.addValue("type", query.type().name());
-        }
+        parts.add("(" + VISIBLE + ")");
         if (!query.topicIds().isEmpty()) {
             parts.add("""
                     EXISTS (SELECT 1 FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
@@ -162,10 +162,11 @@ public class BlogFeedRepository {
             return result;
         }
         jdbc.query("""
-                SELECT bpl.blog_id, shown.id, shown.name_vi
+                SELECT bpl.blog_id, shown.id, shown.name_vi, c.name_vi, shown.address, shown.lat, shown.lng
                 FROM blog_place_links bpl
                 JOIN places p ON p.id = bpl.place_id
                 JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
+                JOIN place_categories c ON c.id = shown.category_id
                 WHERE bpl.blog_id IN (:ids) AND shown.status = 'ACTIVE'
                 ORDER BY bpl.blog_id, shown.name_vi""",
                 Map.of("ids", blogIds), (ResultSet rs) -> {
@@ -173,12 +174,17 @@ public class BlogFeedRepository {
                         List<PlaceRef> list = result.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>());
                         long placeId = rs.getLong(2);
                         if (list.stream().noneMatch(p -> p.id() == placeId)) {
-                            list.add(new PlaceRef(placeId, rs.getString(3)));
+                            list.add(new PlaceRef(placeId, rs.getString(3), rs.getString(4), rs.getString(5),
+                                    decimal(rs.getBigDecimal(6)), decimal(rs.getBigDecimal(7))));
                         }
                     }
                     return null;
                 });
         return result;
+    }
+
+    private static Double decimal(java.math.BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 
     /** Approved, not revoked identity tags of each user. */
@@ -211,7 +217,7 @@ public class BlogFeedRepository {
         return jdbc.query("""
                 SELECT t.id, t.name, COUNT(*) AS posts FROM blog_topic_links btl
                 JOIN blog_topics t ON t.id = btl.topic_id JOIN blogs b ON b.id = btl.blog_id
-                WHERE t.is_active AND b.status = 'PUBLISHED'
+                WHERE t.is_active AND b.status = 'PUBLISHED' AND b.blog_type = 'POST'
                 GROUP BY t.id, t.name, t.is_other, t.sort_order
                 ORDER BY posts DESC, t.is_other, t.sort_order LIMIT :limit""",
                 Map.of("limit", limit), (rs, i) -> new TopicCount(rs.getLong(1), rs.getString(2), rs.getLong(3)));
@@ -221,28 +227,12 @@ public class BlogFeedRepository {
     public List<Map.Entry<Author, Long>> topWriters(Instant since, int limit) {
         return jdbc.query("""
                 SELECT u.id, u.display_name, u.avatar_url, COUNT(*) AS posts FROM blogs b JOIN users u ON u.id = b.author_id
-                WHERE b.status = 'PUBLISHED' AND b.created_at >= :since AND u.status = 'ACTIVE'
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.created_at >= :since AND u.status = 'ACTIVE'
                 GROUP BY u.id, u.display_name, u.avatar_url
                 ORDER BY posts DESC, MAX(b.created_at) DESC LIMIT :limit""",
                 Map.of("since", Timestamp.from(since), "limit", limit),
                 (rs, i) -> Map.entry(new Author(rs.getLong(1), rs.getString(2), rs.getString(3), List.of()),
                         rs.getLong(4)));
-    }
-
-    private static final String OPEN_QUESTION = """
-            FROM blogs b WHERE b.blog_type = 'QA' AND b.status = 'PUBLISHED' AND b.best_comment_id IS NULL
-            AND NOT EXISTS (SELECT 1 FROM comments c WHERE c.blog_id = b.id AND c.status = 'PUBLISHED')""";
-
-    /** Published questions nobody has answered yet, newest first. */
-    public List<OpenQuestion> openQuestions(int limit) {
-        return jdbc.query("SELECT b.id, b.title, b.created_at " + OPEN_QUESTION + " ORDER BY b.created_at DESC LIMIT :limit",
-                Map.of("limit", limit),
-                (rs, i) -> new OpenQuestion(rs.getLong(1), rs.getString(2), instant(rs.getTimestamp(3))));
-    }
-
-    public long openQuestionCount() {
-        Long n = jdbc.queryForObject("SELECT COUNT(*) " + OPEN_QUESTION, Map.of(), Long.class);
-        return n == null ? 0 : n;
     }
 
     // ---------------------------------------------------------------- featured snapshots
@@ -257,7 +247,7 @@ public class BlogFeedRepository {
                 Map.of("period", period), (rs, i) -> rs.getLong(1));
     }
 
-    /** Candidate for a featured snapshot: score = likes + 2 × comments + the author's rank bonus. */
+    /** Candidate for a featured snapshot (posts only): score = likes + 2 × comments + the author's rank bonus. */
     public record Candidate(Long blogId, Long authorId, int score) {
     }
 
@@ -267,7 +257,7 @@ public class BlogFeedRepository {
                        b.like_count + 2 * b.comment_count
                          + COALESCE((SELECT MAX(r.featured_bonus) FROM ranks r WHERE r.min_points <= u.points), 0) AS score
                 FROM blogs b JOIN users u ON u.id = b.author_id
-                WHERE b.status = 'PUBLISHED' AND b.created_at >= :since AND u.status = 'ACTIVE'
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.created_at >= :since AND u.status = 'ACTIVE'
                 HAVING score >= :minScore
                 ORDER BY score DESC, b.created_at DESC, b.id DESC""",
                 Map.of("since", Timestamp.from(since), "minScore", minScore),

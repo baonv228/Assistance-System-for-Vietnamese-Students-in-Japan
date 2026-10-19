@@ -12,7 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** Blog Feed (UC-09). Both endpoints are public GETs; a signed-in author also sees their own posts in PROCESSING. */
+/**
+ * Blog Feed (UC-09), posts only (questions are listed by feature/qa at /api/questions). Both endpoints are public
+ * GETs; a signed-in author also sees their own posts in PROCESSING.
+ */
 @RestController
 @RequestMapping("/api/blogs")
 public class BlogFeedController {
@@ -24,18 +27,17 @@ public class BlogFeedController {
     }
 
     /**
-     * GET /api/blogs?q=&topicIds=1,2&type=ALL|POST|QA&sort=NEWEST|LIKES|COMMENTS&page=0&size=10
+     * GET /api/blogs?q=&topicIds=1,2&sort=NEWEST|LIKES|COMMENTS&page=0&size=10
      * ({@code page} starts at 0).
      */
     @GetMapping
     public ApiResponse<BlogPage> list(@RequestParam(required = false) String q,
                                       @RequestParam(required = false) List<Long> topicIds,
-                                      @RequestParam(required = false) String type,
                                       @RequestParam(required = false) String sort,
                                       @RequestParam(required = false) Integer page,
                                       @RequestParam(required = false) Integer size,
                                       @AuthenticationPrincipal AppUserPrincipal me) {
-        BlogFeedQuery query = BlogFeedQuery.of(q, topicIds, type, sort, page, size, me == null ? null : me.id());
+        BlogFeedQuery query = BlogFeedQuery.of(q, topicIds, sort, page, size, me == null ? null : me.id());
         return ApiResponse.ok("OK", service.list(query));
     }
 
