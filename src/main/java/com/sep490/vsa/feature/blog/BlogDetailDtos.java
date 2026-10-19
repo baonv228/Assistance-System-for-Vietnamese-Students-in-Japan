@@ -64,7 +64,4 @@ public final class BlogDetailDtos {
 
     public record ReportRequest(@NotNull(message = "Hãy chọn lý do báo cáo.") Long reasonId, String note) {
     }
-
-    public record BestCommentRequest(@NotNull(message = "Hãy chọn câu trả lời.") Long commentId) {
-    }
 }
