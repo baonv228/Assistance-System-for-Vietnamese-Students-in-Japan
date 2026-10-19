@@ -24,6 +24,7 @@ public final class ProfileDtos {
     public record DailyUsage(int posts, int maxPosts, int pins, int maxPins, int videos, int maxVideos) {
     }
 
+    /** @param savedCount places, posts and questions listed on "Đã lưu" (/saved) */
     public record ProfileResponse(
             Long id,
             String email,
@@ -45,7 +46,8 @@ public final class ProfileDtos {
             DailyUsage today,
             Instant reportMutedUntil,
             boolean hasPassword,
-            List<String> linkedProviders) {
+            List<String> linkedProviders,
+            int savedCount) {
     }
 
     public record UpdateProfileRequest(
