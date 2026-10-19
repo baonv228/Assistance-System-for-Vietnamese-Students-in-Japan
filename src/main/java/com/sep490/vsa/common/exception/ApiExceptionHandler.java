@@ -9,6 +9,9 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -18,7 +21,19 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleApi(ApiException ex) {
-        return ResponseEntity.status(ex.getStatus()).body(ApiResponse.fail(ex.getMessage(), Map.of()));
+        return ResponseEntity.status(ex.getStatus()).body(ApiResponse.fail(ex.getMessage(), ex.getFields()));
+    }
+
+    /** An uploaded file is bigger than spring.servlet.multipart.max-file-size / max-request-size. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleTooLarge(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.fail("Tệp tải lên quá lớn. Mỗi ảnh tối đa 20 MB, video tối đa 50 MB.", Map.of()));
+    }
+
+    @ExceptionHandler({MissingServletRequestPartException.class, MultipartException.class})
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleMultipart(Exception ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.fail("Dữ liệu gửi lên không đúng định dạng", Map.of()));
     }
 
     @ExceptionHandler(EntityNotFoundException.class)

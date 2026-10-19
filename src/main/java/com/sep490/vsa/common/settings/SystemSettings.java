@@ -15,6 +15,11 @@ public class SystemSettings {
     public static final String REPORT_HIDE_THRESHOLD = "report_hide_threshold";
     public static final String FALSE_REPORT_MAX = "false_report_max";
     public static final String MUTE_DAYS = "mute_days";
+    /** New-account limits (BR-07): an account younger than new_account_days gets the daily limits below. */
+    public static final String NEW_ACCOUNT_DAYS = "new_account_days";
+    public static final String POSTS_PER_DAY = "posts_per_day";
+    public static final String PINS_PER_DAY = "pins_per_day";
+    public static final String VIDEOS_PER_DAY = "videos_per_day";
 
     private final JdbcTemplate jdbc;
 

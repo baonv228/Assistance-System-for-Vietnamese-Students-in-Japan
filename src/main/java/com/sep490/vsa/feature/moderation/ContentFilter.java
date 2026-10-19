@@ -35,12 +35,22 @@ public class ContentFilter {
         this.jdbc = jdbc;
     }
 
-    /** Runs every check on {@code text} written by {@code authorId}. */
+    /** Runs every check on {@code text} written by {@code authorId}: keywords first, then links. */
     public void check(String text, long authorId) {
+        checkKeywords(text);
+        checkLinks(text, authorId);
+    }
+
+    /** Banned keywords only (MSG36). Throws 400 naming the keyword; the page keeps what was typed. */
+    public void checkKeywords(String text) {
         bannedKeyword(text).ifPresent(keyword -> {
             throw ApiException.badRequest(
                     "Chưa đăng được: nội dung chứa từ khóa không được phép “" + keyword + "”. Hãy sửa rồi gửi lại.");
         });
+    }
+
+    /** Link rule only (BR-22): no shortened links for anyone, and links only from accounts with an identity tag. */
+    public void checkLinks(String text, long authorId) {
         List<String> links = links(text);
         if (links.isEmpty()) {
             return;
@@ -86,7 +96,8 @@ public class ContentFilter {
         return SHORTENERS.contains(domain);
     }
 
-    private boolean hasIdentityTag(long userId) {
+    /** True when the user holds at least one approved, not revoked identity tag (may post links). */
+    public boolean hasIdentityTag(long userId) {
         Long n = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM user_tags ut JOIN tag_types t ON t.id = ut.tag_type_id
                 WHERE ut.user_id = ? AND ut.revoked_at IS NULL AND t.is_active""", Long.class, userId);

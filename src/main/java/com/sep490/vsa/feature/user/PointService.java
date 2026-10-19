@@ -19,6 +19,11 @@ import java.time.Clock;
 public class PointService {
 
     public static final int BEST_ANSWER = 5;
+    /**
+     * A published blog post or question (reason BLOG_CREATED). The SRS point list has no value for posts yet;
+     * +10 like a review until the team confirms it.
+     */
+    public static final int BLOG_POST = 10;
 
     private final JdbcTemplate jdbc;
     private final Clock clock;

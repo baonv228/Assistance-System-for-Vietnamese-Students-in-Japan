@@ -15,6 +15,8 @@ public class NotificationService {
 
     public static final String NEW_COMMENT = "NEW_COMMENT";
     public static final String BEST_ANSWER = "BEST_ANSWER";
+    /** A post (or review) whose photos/video failed the automatic scan and was not published. */
+    public static final String CONTENT_REJECTED = "CONTENT_REJECTED";
 
     private static final int MAX_CONTENT = 500;
 
