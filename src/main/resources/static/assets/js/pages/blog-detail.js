@@ -2,7 +2,7 @@
 // viewer may take. Guests can read; every action that writes data sends them to sign in first.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
+import { avatar, esc, fullDate, googleDirectionsUrl, ic, osmUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
 // pages/qa-detail.html (QA, Hỏi-Đáp). Each kind has its own endpoints; comment actions are shared.
@@ -12,7 +12,6 @@ const ROUTES = {
     list: QUESTION ? "/qa" : "/blog",
     listName: QUESTION ? "Hỏi-Đáp" : "Blog",
     topic: (id) => `${QUESTION ? "/qa" : "/blog"}?topics=${id}`,
-    place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
     edit: (id) => `${QUESTION ? "/qa" : "/blog"}/${id}/edit`,
     login: "/login"
@@ -122,7 +121,7 @@ function render(data) {
             </div>
             ${data.topics.length || data.places.length ? `<div class="row tags">
                 ${data.topics.map((t) => `<a class="badge topic" href="${ROUTES.topic(t.id)}">${esc(t.name)}</a>`).join("")}
-                ${data.places.map((p) => `<a class="place" href="${ROUTES.place(p.id)}">${ic("location_on")}${esc(p.name)}</a>`).join("")}
+                ${data.places.map(placeChip).join("")}
             </div>` : ""}
             ${mediaHtml(data.media)}
             <div class="post-body">${richText(data.content)}</div>
@@ -154,9 +153,10 @@ function mediaHtml(media) {
 }
 
 // ---------------------------------------------------------------- places map
-// The linked places on a small OpenStreetMap map (Leaflet + OSM tiles, free, no key). Leaflet is loaded only for a
-// post that has places with a position. The map lives in its own element, moved into each new render, so liking or
-// commenting does not rebuild it.
+// The linked places, each with a link to openstreetmap.org and directions in Google Maps (the app on phones), plus a
+// small OpenStreetMap map (Leaflet + OSM tiles, free, no key) hidden until "Hiện bản đồ". Leaflet is loaded only when
+// the map is first shown. The map lives in its own element, moved into each new render, so liking or commenting does
+// not rebuild it.
 
 const LEAFLET = {
     css: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
@@ -167,16 +167,34 @@ const LEAFLET = {
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 let leafletLoading = null;
-const placeMap = { el: null, map: null, key: "", ticket: 0 };
+const placeMap = { el: null, map: null, key: "", ticket: 0, open: false };
 
 const mappable = (places) => places.filter((p) => p.lat != null && p.lng != null);
 
 function placeMapHtml(places) {
-    if (!mappable(places).length) return "";
+    if (!places.length) return "";
+    const canMap = mappable(places).length > 0;
     return `<section class="place-map-box" aria-labelledby="place-map-title">
-            <h2 id="place-map-title">${ic("map")}Địa điểm liên quan trên bản đồ</h2>
-            <div id="place-map-slot"></div>
+            <div class="row place-map-head">
+                <h2 id="place-map-title">${ic("map")}Địa điểm liên quan</h2>
+                ${canMap ? `<button class="btn sm" type="button" data-act="toggle-map" aria-expanded="${placeMap.open}"
+                    aria-controls="place-map-slot">${ic(placeMap.open ? "visibility_off" : "visibility")}${placeMap.open ? "Ẩn bản đồ" : "Hiện bản đồ"}</button>` : ""}
+            </div>
+            <ul class="place-list">${places.map((p) => `<li>
+                <a class="place-name" href="${esc(osmUrl(p))}" target="_blank" rel="noopener" title="Xem trên OpenStreetMap">
+                    ${ic("location_on")}<span><b>${esc(p.name)}</b>${p.category ? `<small>${esc(p.category)}</small>` : ""}</span></a>
+                <a class="btn sm" href="${esc(googleDirectionsUrl(p))}" target="_blank" rel="noopener"
+                    title="Chỉ đường bằng Google Maps">${ic("directions")}Chỉ đường</a>
+            </li>`).join("")}</ul>
+            ${canMap && placeMap.open ? `<div id="place-map-slot"></div>` : ""}
         </section>`;
+}
+
+function placePopup(p) {
+    const line = [p.category, p.address].filter(Boolean).join(" · ");
+    return `<b>${esc(p.name)}</b>${line ? `<br><small>${esc(line)}</small>` : ""}
+        <br><a href="${esc(osmUrl(p))}" target="_blank" rel="noopener">Xem trên OpenStreetMap</a>
+        <br><a href="${esc(googleDirectionsUrl(p))}" target="_blank" rel="noopener">Chỉ đường bằng Google Maps</a>`;
 }
 
 function loadLeaflet() {
@@ -231,13 +249,9 @@ async function mountPlaceMap(places) {
     L.tileLayer(OSM_TILES, { maxZoom: 19, attribution: OSM_CREDIT }).addTo(map);
     const pin = L.divIcon({ className: "map-pin", html: ic("location_on"), iconSize: [34, 34], iconAnchor: [17, 32],
         popupAnchor: [0, -28] });
-    const markers = spots.map((p) => {
-        const line = [p.category, p.address].filter(Boolean).join(" · ");
-        return L.marker([p.lat, p.lng], { icon: pin, title: p.name, alt: p.name })
-            .bindPopup(`<b>${esc(p.name)}</b>${line ? `<br><small>${esc(line)}</small>` : ""}
-                <br><a href="${ROUTES.place(p.id)}">Xem trên Bản đồ Senpai ơi</a>`)
-            .addTo(map);
-    });
+    const markers = spots.map((p) => L.marker([p.lat, p.lng], { icon: pin, title: p.name, alt: p.name })
+        .bindPopup(placePopup(p))
+        .addTo(map));
     if (spots.length === 1) {
         map.setView([spots[0].lat, spots[0].lng], 16);
     } else {
@@ -466,6 +480,12 @@ content.addEventListener("click", async (event) => {
     if (!button || button.disabled) return;
     const commentId = Number(button.closest("[data-id]")?.dataset.id);
     switch (button.dataset.act) {
+        case "toggle-map": {
+            placeMap.open = !placeMap.open;
+            render(post);
+            content.querySelector('[data-act="toggle-map"]')?.focus();
+            break;
+        }
         case "like-post": {
             const on = button.getAttribute("aria-pressed") !== "true";
             const state = await busy(button, () => guarded(() => API.like(blogId, on)));

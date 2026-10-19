@@ -199,9 +199,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `DEV-…`, works offline) when `app.places.dev-fake=true`, `OsmPlaces` when `app.places.osm.enabled` (default true),
   else none (ASVSJ places only). Tests set `app.places.osm.enabled=false` or mock `ExternalPlaces`: no test calls the
   internet. On Windows the client also trusts the Windows certificate store (antivirus HTTPS scanning).
-- Post / question detail: linked places with a position appear on a small map (Leaflet 1.9.4 from unpkg with SRI,
-  OSM tiles `tile.openstreetmap.org`, credit shown), loaded only when needed; `PlaceRef` carries category, address,
-  lat, lng. The map element is kept across re-renders (likes, comments).
+- Place chips (Blog, Hỏi-Đáp lists and detail) open the place on openstreetmap.org in a new tab (`ui.js osmUrl`: the
+  OSM object from `osmId`, else a marker at lat/lng, else a name search). Post / question detail lists the linked
+  places, each with "Chỉ đường" = a Google Maps directions URL (`googleDirectionsUrl`, no key, no Maps Platform call;
+  opens the Google Maps app on phones), and a small map (Leaflet 1.9.4 from unpkg with SRI, OSM tiles
+  `tile.openstreetmap.org`, credit shown) hidden until "Hiện bản đồ" (Leaflet loads then); `PlaceRef` carries
+  category, address, lat, lng, osmId. The map element is kept across re-renders (likes, comments).
 - Dev sample places: Ga Nippori is the real OSM station N772389775, the other made-up places are TEAM places;
   `DevDataSeeder` moves rows of older checkouts (made-up "ChIJ-dev-…" Google ids) the same way.
 

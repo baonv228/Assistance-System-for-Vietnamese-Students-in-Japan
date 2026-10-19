@@ -20,9 +20,11 @@ public final class BlogDtos {
 
     /**
      * A linked place. The position (null for places saved from Google Maps without one) puts it on the small map of
-     * the post page (Leaflet + OpenStreetMap tiles).
+     * the post page (Leaflet + OpenStreetMap tiles). {@code osmId} ("N772389775", null for team, pin and Google places)
+     * lets the page link the place on openstreetmap.org.
      */
-    public record PlaceRef(Long id, String name, String category, String address, Double lat, Double lng) {
+    public record PlaceRef(Long id, String name, String category, String address, Double lat, Double lng,
+                           String osmId) {
     }
 
     /**

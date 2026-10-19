@@ -162,7 +162,7 @@ public class BlogFeedRepository {
             return result;
         }
         jdbc.query("""
-                SELECT bpl.blog_id, shown.id, shown.name_vi, c.name_vi, shown.address, shown.lat, shown.lng
+                SELECT bpl.blog_id, shown.id, shown.name_vi, c.name_vi, shown.address, shown.lat, shown.lng, shown.osm_id
                 FROM blog_place_links bpl
                 JOIN places p ON p.id = bpl.place_id
                 JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
@@ -175,7 +175,7 @@ public class BlogFeedRepository {
                         long placeId = rs.getLong(2);
                         if (list.stream().noneMatch(p -> p.id() == placeId)) {
                             list.add(new PlaceRef(placeId, rs.getString(3), rs.getString(4), rs.getString(5),
-                                    decimal(rs.getBigDecimal(6)), decimal(rs.getBigDecimal(7))));
+                                    decimal(rs.getBigDecimal(6)), decimal(rs.getBigDecimal(7)), rs.getString(8)));
                         }
                     }
                     return null;

@@ -14,6 +14,36 @@ export const LOGO_SVG = `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#C
 
 export const STAGES = { PRE: "Sắp sang Nhật", ARR: "Mới đến", LEAVE: "Sắp về nước", HOME: "Đã về nước" };
 
+const OSM_TYPES = { N: "node", W: "way", R: "relation" };
+
+/**
+ * A linked place on openstreetmap.org: the OSM object itself when ASVSJ has its osmId ("N772389775"), else a marker at
+ * its position, else a search by name (Google places saved without a position).
+ */
+export function osmUrl(place) {
+    const m = /^([NWR])(\d+)$/.exec(place.osmId || "");
+    if (m) return `https://www.openstreetmap.org/${OSM_TYPES[m[1]]}/${m[2]}`;
+    if (place.lat != null && place.lng != null) {
+        return `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}#map=18/${place.lat}/${place.lng}`;
+    }
+    return `https://www.openstreetmap.org/search?${new URLSearchParams({ query: place.name })}`;
+}
+
+/**
+ * Directions to a place in Google Maps (a plain Maps URL: no key, no Maps Platform call). On phones it opens the Google
+ * Maps app when installed, else the website. Uses the position, else the name and address.
+ */
+export function googleDirectionsUrl(place) {
+    const destination = place.lat != null && place.lng != null
+        ? `${place.lat},${place.lng}`
+        : [place.name, place.address].filter(Boolean).join(", ");
+    return `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", destination })}`;
+}
+
+/** Place chip linking to openstreetmap.org (new tab). */
+export const placeChip = (place) => `<a class="place" href="${esc(osmUrl(place))}" target="_blank" rel="noopener"
+    title="Xem ${esc(place.name)} trên OpenStreetMap">${ic("location_on")}${esc(place.name)}</a>`;
+
 /** Tag chips coloured with the tag's own colour. */
 export const tagChips = (tags = []) =>
     tags.map((t) => `<span class="badge tag" style="color:${esc(t.color)}">${esc(t.name)}</span>`).join(" ");

@@ -3,15 +3,14 @@
 // Filters live in the URL so refresh and the Back button keep them.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
+import { avatar, esc, fullDate, ic, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
-// Where links go. Map and Public Profile are still placeholders; change them when they exist.
+// Where links go. Public Profile is still a placeholder; change it when it exists. Places open on openstreetmap.org.
 const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     detail: (id) => `/blog/${id}`,
     write: "/blog/new",
     qa: "/qa",
-    place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
     login: "/login"
 };
@@ -232,7 +231,7 @@ function postCard(post, { featured = false, rank = 0 } = {}) {
     const topicsHtml = post.topics.map((t) =>
         `<button class="badge topic" type="button" data-topic="${t.id}" title="Lọc theo chủ đề này">${esc(t.name)}</button>`).join("");
     const placesHtml = post.places.map((p) =>
-        `<a class="place" href="${ROUTES.place(p.id)}">${ic("location_on")}${esc(p.name)}</a>`).join("");
+        placeChip(p)).join("");
     return `
         <article class="card post${featured ? " featured-post" : ""}${post.status === "PROCESSING" ? " processing" : ""}">
             <div class="row meta">${badges}<span class="grow"></span>
