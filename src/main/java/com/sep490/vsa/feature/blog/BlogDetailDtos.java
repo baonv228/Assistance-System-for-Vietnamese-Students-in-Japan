@@ -62,6 +62,10 @@ public final class BlogDetailDtos {
     public record CommentRequest(String content, Long parentId) {
     }
 
+    /** Update Comment / Update Answer: the new text of one's own comment. */
+    public record CommentUpdateRequest(String content) {
+    }
+
     public record ReportRequest(@NotNull(message = "Hãy chọn lý do báo cáo.") Long reasonId, String note) {
     }
 }
