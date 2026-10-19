@@ -5,3 +5,6 @@ target/
 # Local secrets (copy from application-local.properties.example)
 src/main/resources/application-local.properties
 .env
+
+# Uploaded photos and videos (app.media.local-dir)
+uploads/
