@@ -204,6 +204,13 @@ public class BlogDetailRepository {
                 WHERE id = ?""", blogId, blogId);
     }
 
+    /** New text of a published comment, marked "đã sửa". Likes, replies and the best-answer mark stay. */
+    public boolean updateComment(long commentId, String content, Instant now) {
+        return jdbc.update("""
+                UPDATE comments SET content = ?, is_edited = TRUE, updated_at = ?
+                WHERE id = ? AND status = 'PUBLISHED'""", content, Timestamp.from(now), commentId) > 0;
+    }
+
     public void deleteComment(long commentId) {
         jdbc.update("DELETE FROM comments WHERE id = ?", commentId);
     }

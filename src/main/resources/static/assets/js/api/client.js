@@ -96,6 +96,7 @@ export const apiClient = {
     likeComment: (id, on) => request(`/comments/${id}/like`, { method: on ? "POST" : "DELETE" }),
     reportComment: (id, body) => post(`/comments/${id}/report`, body),
     deleteComment: (id) => request(`/comments/${id}`, { method: "DELETE" }),
+    updateComment: (id, content) => request(`/comments/${id}`, { method: "PUT", body: JSON.stringify({ content }) }),
 
     // Write Post (UC-11). createBlog takes FormData: part "post" (JSON {title, content, topicIds, placeIds,
     // externalPlaceIds}) + "images" (≤ 5) + "video" (≤ 1).

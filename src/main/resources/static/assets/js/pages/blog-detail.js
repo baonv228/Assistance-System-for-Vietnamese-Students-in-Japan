@@ -52,6 +52,7 @@ const blogId = Number.parseInt(location.pathname.split("/").pop(), 10);
 let user = null;            // signed-in user or null
 let post = null;            // last BlogDetail from the API
 let replyTo = null;         // comment id whose reply box is open
+let editing = null;         // { id, draft }: the one comment being edited in place (Update Comment / Answer)
 let reportTarget = null;    // { kind: "blog" | "comment", id }
 
 // ---------------------------------------------------------------- loading
@@ -340,6 +341,9 @@ function commentHtml(c, depth) {
             : `<a class="btn sm ghost" href="${ROUTES.login}">${ic("reply")}Trả lời</a>`);
     }
     if (c.mine) {
+        if (canAct && post.status === "PUBLISHED") {
+            actions.push(`<button class="btn sm ghost" type="button" data-act="edit-comment">${ic("edit")}Sửa</button>`);
+        }
         actions.push(`<button class="btn sm ghost dan" type="button" data-act="delete-comment">${ic("delete")}Xóa</button>`);
     } else {
         actions.push(actionButton({ act: "report-comment", icon: "flag", label: "Báo cáo", disabled: user && !canAct }));
@@ -353,12 +357,86 @@ function commentHtml(c, depth) {
         <div class="row byline">${authorHtml(c.author)}<span class="note">·</span>
             <time class="note" datetime="${esc(c.createdAt)}" title="${esc(fullDate(c.createdAt))}">${timeAgo(c.createdAt)}</time>
             ${c.edited ? `<span class="note">· đã sửa</span>` : ""}</div>
-        <div class="comment-body">${richText(c.content)}</div>
-        <div class="row comment-actions">${actions.join("")}</div>
+        ${editing?.id === c.id ? editForm(c) : `<div class="comment-body">${richText(c.content)}</div>
+        <div class="row comment-actions">${actions.join("")}</div>`}
         <div class="reply-slot">${replyTo === c.id ? commentForm(c.id) : ""}</div>
         ${replies}
     </li>`;
 }
+
+/** One's own comment, reply or answer opened for editing: the text in place, "Lưu" and "Hủy". */
+function editForm(c) {
+    const text = editing.draft ?? c.content;
+    return `<form class="comment-form comment-edit" data-edit="${c.id}">
+        <textarea name="content" rows="3" maxlength="${COMMENT_MAX}" aria-label="Sửa bình luận" required>${esc(text)}</textarea>
+        <p class="field-error" role="alert" hidden></p>
+        <div class="row">
+            <span class="note counter" aria-live="polite">${text.length}/${COMMENT_MAX}</span><span class="grow"></span>
+            <button class="btn sm" type="button" data-act="cancel-edit">Hủy</button>
+            <button class="btn pri sm" type="submit">${ic("check")}Lưu</button>
+        </div>
+    </form>`;
+}
+
+function openEdit(commentId) {
+    editing = { id: commentId, draft: null };
+    render(post);
+    const box = content.querySelector(`[data-edit="${commentId}"] textarea`);
+    if (box) {
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+    }
+}
+
+function closeEdit() {
+    const id = editing?.id;
+    editing = null;
+    render(post);
+    content.querySelector(`#c-${id} [data-act="edit-comment"]`)?.focus();
+}
+
+async function saveEdit(form) {
+    const commentId = Number(form.dataset.edit);
+    const text = form.content.value.trim();
+    const error = form.querySelector(".field-error");
+    if (!text) {
+        error.textContent = "Hãy viết nội dung bình luận.";
+        error.hidden = false;
+        form.content.focus();
+        return;
+    }
+    if (text === findComment(post.comments, commentId)?.content) {
+        closeEdit();                                      // nothing changed: nothing to save
+        return;
+    }
+    try {
+        const data = await busy(form.querySelector('[type="submit"]'), () => apiClient.updateComment(commentId, text));
+        editing = null;
+        render(data);
+        toast(QUESTION && !findComment(data.comments, commentId)?.parentId ? "Đã lưu câu trả lời." : "Đã lưu bình luận.");
+        content.querySelector(`#c-${commentId}`)?.classList.add("flash");
+    } catch (err) {
+        if (err.status === 401) {
+            location.href = ROUTES.login;
+            return;
+        }
+        // The edit stays open with the text so the user can fix it (keyword, link, length)
+        error.textContent = err.message || MSG.MSG14;
+        error.hidden = false;
+        if (err.status === 404) {
+            editing = null;
+            await load();
+        }
+    }
+}
+
+const findComment = (nodes, id) => {
+    for (const n of nodes) {
+        const found = n.id === id ? n : findComment(n.replies, id);
+        if (found) return found;
+    }
+    return null;
+};
 
 // ---------------------------------------------------------------- actions
 
@@ -446,6 +524,12 @@ content.addEventListener("click", async (event) => {
         case "report-comment":
             openReport({ kind: "comment", id: commentId });
             break;
+        case "edit-comment":
+            openEdit(commentId);
+            break;
+        case "cancel-edit":
+            closeEdit();
+            break;
         case "delete-comment":
             if (await confirmDialog(MSG.MSG16_COMMENT)) {
                 const data = await guarded(() => apiClient.deleteComment(commentId));
@@ -475,6 +559,19 @@ content.addEventListener("input", (event) => {
         const form = event.target.closest("form");
         form.querySelector(".counter").textContent = `${event.target.value.length}/${COMMENT_MAX}`;
         form.querySelector(".field-error").hidden = true;
+        if (form.dataset.edit) editing.draft = event.target.value;   // kept if another action redraws the page
+    }
+});
+
+// In the edit box Enter saves (Shift+Enter starts a new line) and Escape cancels
+content.addEventListener("keydown", (event) => {
+    if (!event.target.matches(".comment-edit textarea") || event.isComposing) return;
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        event.target.form.requestSubmit();
+    } else if (event.key === "Escape") {
+        event.preventDefault();
+        closeEdit();
     }
 });
 
@@ -482,6 +579,10 @@ content.addEventListener("submit", async (event) => {
     const form = event.target.closest(".comment-form");
     if (!form) return;
     event.preventDefault();
+    if (form.dataset.edit) {
+        await saveEdit(form);
+        return;
+    }
     const text = form.content.value.trim();
     const error = form.querySelector(".field-error");
     if (!text) {

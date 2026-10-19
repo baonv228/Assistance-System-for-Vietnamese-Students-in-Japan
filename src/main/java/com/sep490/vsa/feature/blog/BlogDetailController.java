@@ -4,6 +4,7 @@ import com.sep490.vsa.common.dto.ApiResponse;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.BlogDetail;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.CommentRequest;
+import com.sep490.vsa.feature.blog.BlogDetailDtos.CommentUpdateRequest;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.LikeState;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.ReportRequest;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.SaveState;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -102,6 +104,13 @@ public class BlogDetailController {
                                                  @AuthenticationPrincipal AppUserPrincipal me) {
         long blogId = actionService.reportComment(me, id, request);
         return ApiResponse.ok("Cảm ơn bạn. Báo cáo đã được gửi.", detailService.detail(blogId, me, null));
+    }
+
+    @PutMapping("/api/comments/{id:\\d+}")
+    public ApiResponse<BlogDetail> updateComment(@PathVariable long id, @RequestBody CommentUpdateRequest request,
+                                                 @AuthenticationPrincipal AppUserPrincipal me) {
+        long blogId = actionService.updateComment(me, id, request);
+        return ApiResponse.ok("Đã lưu bình luận.", detailService.detail(blogId, me, null));
     }
 
     @DeleteMapping("/api/comments/{id:\\d+}")
