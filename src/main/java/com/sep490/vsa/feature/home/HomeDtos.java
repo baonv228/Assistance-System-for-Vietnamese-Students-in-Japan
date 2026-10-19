@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.home;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -42,6 +43,11 @@ public final class HomeDtos {
 
     public record MemberHome(String displayName, String stage, String areaName, int points, String rankName,
                              Phrase phrase, GuideProgress guide, List<EventItem> events, List<ReviewItem> reviews,
-                             Featured featured) {
+                             Featured featured, List<FeedPost> forYou) {
+    }
+
+    /** A post chosen for the user; {@code reason} is the badge text ("Gần khu vực của bạn"…) or null. */
+    public record FeedPost(Long id, String title, String excerpt, String authorName, String topicName, int likeCount,
+                           int commentCount, Instant createdAt, String reason) {
     }
 }

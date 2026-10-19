@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.blog;
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.CommentRequest;
+import com.sep490.vsa.feature.blog.BlogDetailDtos.CommentUpdateRequest;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.LikeState;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.ReportRequest;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.SaveState;
@@ -24,7 +25,7 @@ import java.util.List;
 
 /**
  * Actions on Post Detail: like, save, comment, report (UC-16), choose the best answer, delete one's own
- * post (UC-13) or comment (UC-15). Only signed-in Users (Members) act; Guests are sent to sign in by the page
+ * post (UC-13) or comment (UC-15), edit one's own comment or answer (Update Comment / Update Answer). Only signed-in Users (Members) act; Guests are sent to sign in by the page
  * and get 401 from the API. Nobody likes or reports their own content.
  * <p>
  * Shared by Blog (kind POST, /api/blogs/...) and Hỏi-Đáp (kind QA, /api/questions/... in feature/qa): every
@@ -151,13 +152,7 @@ public class BlogActionService {
     public long comment(AppUserPrincipal me, String kind, long blogId, CommentRequest request) {
         long userId = member(me);
         BlogRow blog = publishedBlog(blogId, kind);
-        String content = request == null || request.content() == null ? "" : request.content().strip();
-        if (content.isEmpty()) {
-            throw ApiException.badRequest("Hãy viết nội dung bình luận.");
-        }
-        if (content.length() > COMMENT_MAX) {
-            throw ApiException.badRequest("Bình luận tối đa 2.000 ký tự.");
-        }
+        String content = commentText(request == null ? null : request.content());
         CommentRow parent = null;
         if (request.parentId() != null) {
             parent = repository.findComment(request.parentId())
@@ -181,6 +176,25 @@ public class BlogActionService {
                     who + " đã trả lời bình luận của bạn trong “" + blog.title() + "”.", refType(blog), blogId);
         }
         return id;
+    }
+
+    /**
+     * The writer changes the text of their own comment, reply or answer. The new text goes through the same
+     * length, keyword and link checks as a new comment; the comment shows "đã sửa". Likes, replies and the
+     * best-answer mark stay, and nobody is notified. A placeholder left by a deleted comment cannot be edited.
+     *
+     * @return the post the comment belongs to, so the page can reload it
+     */
+    public long updateComment(AppUserPrincipal me, long commentId, CommentUpdateRequest request) {
+        long userId = member(me);
+        CommentRow comment = publishedComment(commentId);
+        if (comment.authorId() != userId) {
+            throw new ApiException(HttpStatus.FORBIDDEN, NO_PERMISSION);
+        }
+        String content = commentText(request == null ? null : request.content());
+        filter.check(content, userId);
+        repository.updateComment(commentId, content, clock.instant());
+        return comment.blogId();
     }
 
     public LikeState likeComment(AppUserPrincipal me, long commentId, boolean on) {
@@ -258,6 +272,18 @@ public class BlogActionService {
             throw new ApiException(HttpStatus.FORBIDDEN, NO_PERMISSION);
         }
         return me.id();
+    }
+
+    /** The stripped text of a new or edited comment: not empty, at most 2,000 characters. */
+    private static String commentText(String raw) {
+        String content = raw == null ? "" : raw.strip();
+        if (content.isEmpty()) {
+            throw ApiException.badRequest("Hãy viết nội dung bình luận.");
+        }
+        if (content.length() > COMMENT_MAX) {
+            throw ApiException.badRequest("Bình luận tối đa 2.000 ký tự.");
+        }
+        return content;
     }
 
     /** Actions need a published post of the expected kind (null = either); anything else is "not found" (MSG19). */

@@ -233,6 +233,12 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .mini .when b { display: block; font-size: 18px; }
 .stars { color: var(--lantern); letter-spacing: 1px; }
 .blogcard h3 { font-size: 20px; }
+.feeditem { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); min-width: 0; }
+.feeditem:first-of-type { border-top: 0; }
+.feedtitle { color: inherit; font-weight: 700; font-size: 16px; text-decoration: none; overflow-wrap: anywhere; }
+.feedtitle:hover { color: var(--brand-text); text-decoration: underline; }
+.feeditem .note { overflow-wrap: anywhere; }
+.feeditem .note .ic { font-size: 15px; vertical-align: -3px; margin: 0 2px 0 4px; }
 
 /* ---------------- "Tôi" ---------------- */
 .ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }

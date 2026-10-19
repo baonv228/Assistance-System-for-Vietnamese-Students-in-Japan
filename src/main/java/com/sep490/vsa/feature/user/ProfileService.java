@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.user;
 
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.settings.SystemSettings;
+import com.sep490.vsa.feature.saved.SavedRepository;
 import com.sep490.vsa.feature.user.ProfileDtos.AreaResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.DailyUsage;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
@@ -33,14 +34,16 @@ public class ProfileService {
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final SystemSettings settings;
+    private final SavedRepository saved;
 
     public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock,
-                          SystemSettings settings) {
+                          SystemSettings settings, SavedRepository saved) {
         this.users = users;
         this.providers = providers;
         this.jdbc = jdbc;
         this.clock = clock;
         this.settings = settings;
+        this.saved = saved;
     }
 
     @Transactional(readOnly = true)
@@ -83,7 +86,7 @@ public class ProfileService {
                 user.getRole().name(), user.getRole().label(), user.getPoints(), ranks, tags, pendingTag,
                 user.getAreaId(), areaName, user.getStage(), user.getCreatedAt(), ageDays,
                 ageDays < newAccountDays, newAccountDays, today, muted,
-                user.getPasswordHash() != null, linked);
+                user.getPasswordHash() != null, linked, saved.count(userId));
     }
 
     @Transactional

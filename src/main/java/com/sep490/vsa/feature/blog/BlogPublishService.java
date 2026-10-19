@@ -117,7 +117,17 @@ public class BlogPublishService {
         }
         boolean allPassed = files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()));
         if (allPassed && repository.setStatus(blogId, "PROCESSING", "PUBLISHED")) {
-            points.add(blog.authorId(), PointService.BLOG_POST, "BLOG_CREATED", "BLOG", blogId);
+            awardOnce(blog.authorId(), blogId);
+        }
+    }
+
+    /**
+     * The post's points ({@link PointService#BLOG_POST}), paid the first time it is published and never again:
+     * an edited post that is scanned and published a second time, or a rejected post fixed later, earns nothing more.
+     */
+    void awardOnce(long authorId, long blogId) {
+        if (!repository.postAwarded(blogId)) {
+            points.add(authorId, PointService.BLOG_POST, "BLOG_CREATED", "BLOG", blogId);
         }
     }
 }

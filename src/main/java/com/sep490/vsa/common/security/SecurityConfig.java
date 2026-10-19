@@ -70,7 +70,7 @@ public class SecurityConfig {
                         .requestMatchers("/moderator", "/pages/moderator/**").hasRole("MODERATOR")
                         .requestMatchers("/academic", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
                         .requestMatchers("/admin", "/pages/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/profile", "/pages/profile.html").authenticated()
+                        .requestMatchers("/profile", "/pages/profile.html", "/saved", "/pages/saved.html").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e
                         // Not signed in: API gets 401, pages go to the login page
