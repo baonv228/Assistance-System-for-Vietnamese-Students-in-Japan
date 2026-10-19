@@ -22,8 +22,45 @@ public final class BlogWriteDtos {
                                 List<String> externalPlaceIds) {
     }
 
-    /** @param status PUBLISHED (no media) or PROCESSING (photos/video are being scanned, only the author sees it) */
+    /**
+     * The text part of an edited post or question ("Sửa bài"): the same fields as a new one plus the photos and
+     * video already attached that the author keeps, in the order they should show. New files travel as multipart
+     * parts like on create.
+     *
+     * @param keepMediaIds ids from {@link EditData#media()}; attached media not listed here is removed
+     */
+    public record UpdateRequest(String title, String content, List<Long> topicIds, List<Long> placeIds,
+                                List<String> externalPlaceIds, List<Long> keepMediaIds) {
+
+        CreateRequest fields() {
+            return new CreateRequest(title, content, topicIds, placeIds, externalPlaceIds);
+        }
+    }
+
+    /**
+     * Answer of create and update.
+     *
+     * @param status PUBLISHED, or PROCESSING (photos/video are being scanned, only the author sees it)
+     */
     public record Created(Long id, String type, String status) {
+    }
+
+    /**
+     * A photo or the video already attached to a post, shown on the edit form with a remove button.
+     *
+     * @param type       IMAGE or VIDEO
+     * @param scanStatus PASSED, or PROCESSING while it is still being scanned
+     */
+    public record EditMedia(Long id, String type, String url, String scanStatus, int sortOrder) {
+    }
+
+    /**
+     * The edit form ("Sửa bài" / "Sửa câu hỏi"): what the post holds now plus the same options as a new post.
+     *
+     * @param status PUBLISHED, PROCESSING or REJECTED
+     */
+    public record EditData(Long id, String type, String status, String title, String content, List<Long> topicIds,
+                           List<BlogDtos.PlaceRef> places, List<EditMedia> media, ComposeOptions options) {
     }
 
     /**

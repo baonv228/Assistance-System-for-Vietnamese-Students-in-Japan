@@ -11,7 +11,10 @@ import com.sep490.vsa.feature.blog.BlogDetailDtos.SaveState;
 import com.sep490.vsa.feature.blog.BlogDetailService;
 import com.sep490.vsa.feature.blog.BlogWriteDtos.ComposeOptions;
 import com.sep490.vsa.feature.blog.BlogWriteDtos.CreateRequest;
+import com.sep490.vsa.feature.blog.BlogWriteController;
 import com.sep490.vsa.feature.blog.BlogWriteDtos.Created;
+import com.sep490.vsa.feature.blog.BlogWriteDtos.EditData;
+import com.sep490.vsa.feature.blog.BlogWriteDtos.UpdateRequest;
 import com.sep490.vsa.feature.blog.BlogWriteService;
 import com.sep490.vsa.feature.qa.QaDtos.BestAnswerRequest;
 import com.sep490.vsa.feature.qa.QaDtos.Overview;
@@ -114,6 +117,30 @@ public class QaController {
         return "PROCESSING".equals(created.status())
                 ? "Đã gửi. Ảnh và video đang được quét, trong lúc này chỉ bạn thấy câu hỏi."
                 : "Câu hỏi của bạn đã được đăng.";                                             // MSG34
+    }
+
+    // ---------------------------------------------------------------- edit ("Sửa câu hỏi")
+
+    @GetMapping("/{id:\\d+}/edit")
+    public ApiResponse<EditData> editData(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
+        return ApiResponse.ok("OK", writeService.editData(me, KIND, id));
+    }
+
+    /** Multipart: JSON part "question" (create fields + keepMediaIds), new "images" and "video". */
+    @PutMapping(value = "/{id:\\d+}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Created> update(@PathVariable long id, @RequestPart("question") UpdateRequest request,
+                                       @RequestPart(value = "images", required = false) List<MultipartFile> images,
+                                       @RequestPart(value = "video", required = false) MultipartFile video,
+                                       @AuthenticationPrincipal AppUserPrincipal me) {
+        Created saved = writeService.update(me, KIND, id, request, images, video);
+        return ApiResponse.ok(BlogWriteController.updatedMessage(saved, "câu hỏi"), saved);
+    }
+
+    @PutMapping(value = "/{id:\\d+}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApiResponse<Created> updateJson(@PathVariable long id, @RequestBody UpdateRequest request,
+                                           @AuthenticationPrincipal AppUserPrincipal me) {
+        Created saved = writeService.update(me, KIND, id, request, List.of(), null);
+        return ApiResponse.ok(BlogWriteController.updatedMessage(saved, "câu hỏi"), saved);
     }
 
     // ---------------------------------------------------------------- one question

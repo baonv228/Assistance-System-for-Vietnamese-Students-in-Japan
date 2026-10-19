@@ -14,7 +14,7 @@ const ROUTES = {
     topic: (id) => `${QUESTION ? "/qa" : "/blog"}?topics=${id}`,
     place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
-    edit: (id) => soon(QUESTION ? "qa-edit" : "blog-edit", { id }),
+    edit: (id) => `${QUESTION ? "/qa" : "/blog"}/${id}/edit`,
     login: "/login"
 };
 const API = QUESTION ? {
@@ -612,13 +612,22 @@ user = await mountSiteHeader(QUESTION ? "qa" : "blog");
 await load();
 announceCreated();
 
-/** Arriving from Write Post (?created=1): say whether the post is public or still being scanned (MSG34). */
+/**
+ * Arriving from Write Post (?created=1): say whether the post is public or still being scanned (MSG34).
+ * Arriving from the edit form (?edited=1): "Đã lưu thay đổi.", plus the scan note when new media is being scanned.
+ */
 function announceCreated() {
     const params = new URLSearchParams(location.search);
-    if (!params.has("created") || !post) return;
+    const edited = params.has("edited");
+    if (!(params.has("created") || edited) || !post) return;
     params.delete("created");
+    params.delete("edited");
     history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
-    if (post.status === "PROCESSING") {
+    if (edited) {
+        toast(post.status === "PROCESSING"
+            ? `Đã lưu thay đổi. Ảnh và video đang được quét, trong lúc này chỉ bạn thấy ${QUESTION ? "câu hỏi" : "bài"}.`
+            : "Đã lưu thay đổi.");
+    } else if (post.status === "PROCESSING") {
         toast("Đã gửi. Ảnh và video đang được quét, trong lúc này chỉ bạn thấy bài.");
     } else if (post.status === "PUBLISHED") {
         toast(QUESTION ? "Câu hỏi của bạn đã được đăng." : "Bài viết của bạn đã được đăng.");
