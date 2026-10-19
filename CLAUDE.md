@@ -53,8 +53,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   when their client ids are set in `application-local.properties` (see the `.example` file).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/blog`,
-  `/blog/new`, `/blog/{id}`, `/qa`, `/qa/ask`, `/qa/{id}`, `/coming-soon`, `/moderator`… forward to the files in
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`,
+  `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
+  `/moderator`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -65,6 +66,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
+- Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to 5 published
+  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area, then a topic
+  that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest).
+  Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+- "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
+  shows the place it was merged into), PUBLISHED posts and questions, newest saved first; page `/saved`
+  (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
+  `savedCount` for "Đã lưu (N)" on Tôi. Places are saved from the Map once it is built (`saved_places`).
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
@@ -84,7 +93,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   /api/blogs/{id}/like|save`, `POST /api/blogs/{id}/comments` (`parentId` for replies), `POST /api/blogs/{id}/report`,
   `DELETE /api/blogs/{id}` (own post: hard delete, its points withdrawn), `POST|DELETE /api/comments/{id}/like`,
   `POST /api/comments/{id}/report`, `DELETE /api/comments/{id}` (own; a comment with replies becomes an empty
-  REMOVED placeholder). Page: `/blog/{id}` (file `pages/blog-detail.html`).
+  REMOVED placeholder), `PUT /api/comments/{id}` `{content}` (own published comment, reply or answer; same length,
+  keyword and link checks as a new one; sets `is_edited`, keeps likes and the best-answer mark, no notification;
+  edited in place on the page with "Lưu"/"Hủy", Enter saves, Escape cancels). Page: `/blog/{id}` (file
+  `pages/blog-detail.html`).
 - The services take a `kind` ("POST" / "QA"): `/api/blogs/**` passes POST, `/api/questions/**` passes QA, and an id of
   the other kind answers 404 (MSG19). Only the shared `/api/comments/{id}/...` calls pass null (any kind).
   Notifications about a question use `ref_type = 'QUESTION'` (`BlogActionService.refType`); reports keep `BLOG`
@@ -111,6 +123,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   any REJECTED → REJECTED, rejected files deleted, author notified (`CONTENT_REJECTED`). `user_daily_usage` counts
   every new post, in Japan dates. Values still "cần chốt" (title 150, QA description optional, photo rules = review
   rules) are constants in `BlogWriteRules`.
+- Edit ("Sửa bài" / "Sửa câu hỏi", `BlogWriteService.update`): `GET /api/blogs/{id}/edit` (and `/api/questions/{id}/edit`)
+  returns the post, its media and the compose options (author only; PUBLISHED, PROCESSING or REJECTED, else 404);
+  `PUT /api/blogs/{id}` (and `/api/questions/{id}`) takes the create fields + `keepMediaIds` (attached media to keep,
+  in order) and new files, with the same ordered checks. Edits never count as a new post; only a video added to a
+  post that had none counts toward the daily video limit. New files → PROCESSING and a new scan; otherwise a
+  published post stays PUBLISHED and a REJECTED/PROCESSING one whose remaining files all passed is published. Sets
+  `is_edited` ("· đã sửa"). Points: `BlogPublishService.awardOnce` pays `BLOG_POST` the first time a post is
+  published, never twice. Pages `/blog/{id}/edit` and `/qa/{id}/edit` reuse `blog-write.js` (edit mode from the path).
 - `feature/media`: `MediaService` re-encodes photos to JPG ≤ 1600 px (EXIF/GPS dropped; the page also shrinks them
   before upload, HEIC only where the browser opens it), checks MP4/MOV length ≤ 30 s from the file itself
   (`Mp4Duration`, no ffprobe; fragmented MP4 refused). Files are stored by `LocalMediaStorage` in
