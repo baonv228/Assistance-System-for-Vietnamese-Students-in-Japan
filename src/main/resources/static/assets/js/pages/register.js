@@ -164,7 +164,7 @@ passwordForm.addEventListener("submit", async (event) => {
         } catch {
             // storage blocked: the user just types the email again
         }
-        window.location.replace("/pages/login.html?registered=1");
+        window.location.replace("/login?registered=1");
     } catch (error) {
         markInvalid(passwordForm, error.fields);
         showAlert(alertBox, error.message);

@@ -30,3 +30,25 @@ export function formatDay(isoDate) {
     const [, m, d] = isoDate.split("-");
     return { day: Number(d), month: `Th${Number(m)}` };
 }
+
+/** "Vừa xong", "5 phút trước", "3 ngày trước", then dd/mm/yyyy after 30 days. */
+export function timeAgo(iso) {
+    const then = new Date(iso);
+    const seconds = Math.max(0, (Date.now() - then.getTime()) / 1000);
+    if (seconds < 60) return "Vừa xong";
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} giờ trước`;
+    if (seconds < 30 * 86400) return `${Math.floor(seconds / 86400)} ngày trước`;
+    return then.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+export const fullDate = (iso) => new Date(iso).toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" });
+
+/** Round avatar: the user's picture, or the first letter of their given name (the last word). */
+export function avatar(user) {
+    if (user.avatarUrl) {
+        return `<img class="avatar" src="${esc(user.avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+    }
+    const initial = (user.displayName || "?").trim().split(/\s+/).pop().charAt(0).toUpperCase();
+    return `<span class="avatar" aria-hidden="true">${esc(initial)}</span>`;
+}

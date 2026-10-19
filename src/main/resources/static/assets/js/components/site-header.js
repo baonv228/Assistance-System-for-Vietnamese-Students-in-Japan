@@ -4,16 +4,17 @@ import { apiClient, currentUser } from "../api/client.js";
 import { esc, ic, LOGO_SVG } from "../lib/ui.js";
 
 /** Features other members are building link to a placeholder page for now. */
-const soon = (feature) => `/pages/coming-soon.html?f=${feature}`;
+const soon = (feature) => `/coming-soon?f=${feature}`;
 
 const TABS = [
     ["home", "Trang chủ", "home", "/"],
     ["map", "Bản đồ", "map", soon("map")],
     ["learn", "Học", "school", soon("learn")],
     ["fest", "Sự kiện", "celebration", soon("fest")],
-    ["blog", "Blog", "forum", soon("blog")],
+    ["blog", "Blog", "forum", "/blog"],
+    ["qa", "Hỏi-Đáp", "contact_support", "/qa"],
     ["guide", "Cẩm nang", "menu_book", soon("guide")],
-    ["me", "Tôi", "person", "/pages/profile.html"]
+    ["me", "Tôi", "person", "/profile"]
 ];
 
 const link = ([key, label, icon, href], active) =>
@@ -44,13 +45,13 @@ export async function mountSiteHeader(active) {
 
 function accountHtml(user, active) {
     if (!user) {
-        return `<a class="btn pri sm" href="/pages/login.html">${ic("login")}Đăng nhập</a>`;
+        return `<a class="btn pri sm" href="/login">${ic("login")}Đăng nhập</a>`;
     }
     const staff = user.role !== "USER"
         ? `<a class="btn sm" href="${esc(user.homePath)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`
         : "";
     return `${staff}
-        <a class="btn sm ${active === "me" ? "on" : ""}" href="/pages/profile.html">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
+        <a class="btn sm ${active === "me" ? "on" : ""}" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
         <button class="btn sm" type="button" data-logout title="Đăng xuất">${ic("logout")}<span class="sr-only">Đăng xuất</span></button>`;
 }
 
@@ -58,6 +59,6 @@ export async function logout() {
     try {
         await apiClient.logout();
     } finally {
-        window.location.replace("/pages/login.html");
+        window.location.replace("/login");
     }
 }

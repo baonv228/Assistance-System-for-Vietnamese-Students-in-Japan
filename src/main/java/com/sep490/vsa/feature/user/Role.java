@@ -3,9 +3,9 @@ package com.sep490.vsa.feature.user;
 /** Values of users.role, with the page each role lands on after login. */
 public enum Role {
     USER("/", "Người dùng"),
-    MODERATOR("/pages/moderator/index.html", "Moderator"),
-    ACADEMIC_MANAGER("/pages/academic/index.html", "Người quản lý học thuật"),
-    ADMIN("/pages/admin/index.html", "Quản trị viên");
+    MODERATOR("/moderator", "Moderator"),
+    ACADEMIC_MANAGER("/academic", "Người quản lý học thuật"),
+    ADMIN("/admin", "Quản trị viên");
 
     private final String homePath;
     private final String label;

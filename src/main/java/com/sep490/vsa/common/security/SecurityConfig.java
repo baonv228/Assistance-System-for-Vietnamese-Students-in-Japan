@@ -66,18 +66,18 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        // Pages of each role
-                        .requestMatchers("/pages/moderator/**").hasRole("MODERATOR")
-                        .requestMatchers("/pages/academic/**").hasRole("ACADEMIC_MANAGER")
-                        .requestMatchers("/pages/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/pages/profile.html").authenticated()
+                        // Pages of each role: the clean address and the file it forwards to (see CleanUrls)
+                        .requestMatchers("/moderator", "/pages/moderator/**").hasRole("MODERATOR")
+                        .requestMatchers("/academic", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
+                        .requestMatchers("/admin", "/pages/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/profile", "/pages/profile.html").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e
                         // Not signed in: API gets 401, pages go to the login page
                         .defaultAuthenticationEntryPointFor(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), API)
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/pages/login.html"), AnyRequestMatcher.INSTANCE)
+                                new LoginUrlAuthenticationEntryPoint("/login"), AnyRequestMatcher.INSTANCE)
                         // Signed in with the wrong role: API gets 403, pages go to the user's own home page
                         .accessDeniedHandler((request, response, denied) -> {
                             if (API.matches(request)) {
@@ -99,10 +99,10 @@ public class SecurityConfig {
 
         if (clientRegistrations.getIfAvailable() != null) {
             http.oauth2Login(oauth -> oauth
-                    .loginPage("/pages/login.html")
+                    .loginPage("/login")
                     .successHandler(socialLoginSuccessHandler)
                     .failureHandler((request, response, exception) ->
-                            response.sendRedirect("/pages/login.html?error=social")));
+                            response.sendRedirect("/login?error=social")));
         }
         return http.build();
     }
