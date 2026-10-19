@@ -5,34 +5,46 @@
 // (fields → links → new-account limit → banned keywords) and its message is shown here.
 // Photos are shrunk to 1600 px and re-encoded as JPG in the browser (this also converts HEIC where the browser
 // can open it and drops EXIF/GPS); the server re-encodes them again anyway.
+// The same pages edit an existing post or question at /blog/{id}/edit and /qa/{id}/edit ("Sửa bài" / "Sửa câu hỏi"):
+// the form is filled from GET …/{id}/edit and sent with PUT; attached photos/video can be removed (keepMediaIds).
 import { apiClient, ApiError } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { esc, ic } from "../lib/ui.js";
 
 const QUESTION = document.body.dataset.kind === "QA";
+const EDIT_ID = Number((location.pathname.match(/^\/(?:blog|qa)\/(\d+)\/edit\/?$/) || [])[1]) || null;
+const EDITING = EDIT_ID !== null;
 
 // Old links to blog-write.html?type=QA open the Hỏi-Đáp page
-if (!QUESTION && (new URLSearchParams(location.search).get("type") || "").toUpperCase() === "QA") {
+if (!QUESTION && !EDITING && (new URLSearchParams(location.search).get("type") || "").toUpperCase() === "QA") {
     location.replace("/qa/ask");
 }
 
 const ROUTES = QUESTION ? {
     list: "/qa",
     listName: "Hỏi-Đáp",
-    detail: (id) => `/qa/${id}?created=1`,
+    detail: (id) => `/qa/${id}?${EDITING ? "edited" : "created"}=1`,
+    back: EDITING ? `/qa/${EDIT_ID}` : "/qa",
     login: "/login",
     newPin: "/coming-soon?f=map"         // Map → "Cắm ghim" (New Pin), not built yet
 } : {
     list: "/blog",
     listName: "Blog",
-    detail: (id) => `/blog/${id}?created=1`,
+    detail: (id) => `/blog/${id}?${EDITING ? "edited" : "created"}=1`,
+    back: EDITING ? `/blog/${EDIT_ID}` : "/blog",
     login: "/login",
     newPin: "/coming-soon?f=map"
 };
 /** Each section has its own endpoints; the rules behind them are the same. */
 const API = QUESTION
-    ? { compose: apiClient.questionCompose, create: apiClient.askQuestion, part: "question" }
-    : { compose: apiClient.blogCompose, create: apiClient.createBlog, part: "post" };
+    ? {
+        compose: apiClient.questionCompose, create: apiClient.askQuestion, part: "question",
+        editData: apiClient.questionEditData, update: apiClient.updateQuestion
+    }
+    : {
+        compose: apiClient.blogCompose, create: apiClient.createBlog, part: "post",
+        editData: apiClient.blogEditData, update: apiClient.updateBlog
+    };
 
 const TEXT = QUESTION ? {
     page: "Đặt câu hỏi",
@@ -57,11 +69,17 @@ const TEXT = QUESTION ? {
     titleMissing: "Hãy nhập tiêu đề.",
     contentMissing: "Hãy nhập nội dung bài viết."
 };
+if (EDITING) {
+    Object.assign(TEXT, QUESTION
+        ? { page: "Sửa câu hỏi", sub: "Sửa lại câu hỏi để mọi người hiểu đúng điều bạn cần.", submit: "Lưu thay đổi" }
+        : { page: "Sửa bài", sub: "Cập nhật bài viết của bạn.", submit: "Lưu thay đổi" });
+}
 
 const MSG = {
     MSG37: "Hãy nhập tiêu đề và nội dung cho bài viết.",
     MSG17: "Không tải được dữ liệu. Vui lòng thử lại.",
     MSG18: "Bạn không có quyền thực hiện thao tác này.",
+    MSG19: "Không tìm thấy nội dung bạn yêu cầu. Bài viết có thể đã bị gỡ hoặc đã bị xóa.",
     MSG14: "Đã có lỗi xảy ra. Vui lòng thử lại sau.",
     IMAGE_RULE: "Tối đa 5 ảnh, định dạng JPG, PNG hoặc HEIC, mỗi ảnh không quá 20 MB.",
     TOPICS: "Hãy chọn ít nhất 1 chủ đề. Không có chủ đề phù hợp thì chọn “Khác”."
@@ -99,16 +117,26 @@ const state = {
     topicIds: [],
     places: [],              // [{ key, id, externalId, name, category, source }]; id null = new OpenStreetMap place
     images: [],              // [{ blob, url, name }] already shrunk to JPG
-    video: null              // { file, url, seconds }
+    video: null,             // { file, url, seconds }
+    existing: []             // editing: attached media still kept [{ id, type, url, scanStatus }]
 };
+let hadVideo = false;        // editing: the post had a video before (replacing it is not a new video for the limit)
+let initial = null;          // editing: the form as loaded, to tell whether something changed
 let submitting = false;
 let leaving = false;         // set once the post is saved, so the leave guard steps aside
 let pendingHref = null;
 let processingImages = 0;
 
+const existingImages = () => state.existing.filter((m) => m.type === "IMAGE");
+const existingVideo = () => state.existing.find((m) => m.type === "VIDEO") || null;
+const imageCount = () => existingImages().length + state.images.length;
+
 // ---------------------------------------------------------------- start
 
 function applyText() {
+    if (EDITING) {
+        document.querySelectorAll("a[data-leave]").forEach((a) => { a.href = ROUTES.back; });
+    }
     document.title = `${TEXT.page} – Senpai ơi`;
     $("#page-title").textContent = TEXT.page;
     $("#page-sub").textContent = TEXT.sub;
@@ -133,14 +161,22 @@ async function start() {
 
 /** Topics, limits and today's usage; "Thử lại" calls this again (the header is mounted only once). */
 async function loadOptions() {
+    let post = null;
     try {
-        options = await API.compose();
+        if (EDITING) {
+            post = await API.editData(EDIT_ID);
+            options = post.options;
+        } else {
+            options = await API.compose();
+        }
     } catch (error) {
         if (error.status === 401) {
             renderGate("login", `Bạn cần đăng nhập để ${QUESTION ? "đặt câu hỏi" : "viết bài"}.`,
                 `<a class="btn pri" href="${ROUTES.login}">${ic("login")}Đăng nhập</a>`);
         } else if (error.status === 403) {
             renderGate("block", MSG.MSG18, `<a class="btn" href="${ROUTES.list}">Về ${ROUTES.listName}</a>`);
+        } else if (error.status === 404) {
+            renderGate("block", MSG.MSG19, `<a class="btn" href="${ROUTES.list}">Về ${ROUTES.listName}</a>`);
         } else {
             renderGate("error", MSG.MSG17, `<button class="btn sm" type="button" data-retry>${ic("refresh")}Thử lại</button>`);
         }
@@ -148,7 +184,37 @@ async function loadOptions() {
     }
     els.gate.hidden = true;
     els.form.hidden = false;
+    if (post) fillForm(post);
     setupForm();
+    if (post) {
+        renderEditStatus(post.status);
+        initial = snapshot();
+    }
+}
+
+/** Editing: puts the post as it is now into the form. */
+function fillForm(post) {
+    els.title.value = post.title || "";
+    els.content.value = post.content || "";
+    state.topicIds = [...post.topicIds];
+    state.places = post.places.map((p) => ({
+        key: placeKey(p), id: p.id, externalId: null, name: p.name, category: p.category, source: null
+    }));
+    state.existing = post.media.map((m) => ({ id: m.id, type: m.type, url: m.url, scanStatus: m.scanStatus }));
+    hadVideo = Boolean(existingVideo());
+}
+
+/** Editing a post that is not public yet: say why and what saving does. */
+function renderEditStatus(status) {
+    const note = {
+        PROCESSING: `Ảnh và video đang được quét; trong lúc này chỉ bạn thấy ${QUESTION ? "câu hỏi" : "bài"}.`,
+        REJECTED: `${QUESTION ? "Câu hỏi" : "Bài"} chưa được đăng vì ảnh hoặc video vi phạm Quy tắc cộng đồng `
+            + "(đã được gỡ). Sửa xong bấm “Lưu thay đổi” để đăng lại."
+    }[status];
+    if (!note) return;
+    els.quota.className = `alert quota ${status === "REJECTED" ? "full" : ""}`;
+    els.quota.innerHTML = `${ic(status === "REJECTED" ? "block" : "hourglass_top")}<span>${esc(note)}</span>`;
+    els.quota.hidden = false;
 }
 
 function renderGate(kind, message, action) {
@@ -188,7 +254,8 @@ function setupForm() {
 
 /** "Tài khoản mới, hôm nay: …" (BR-07), only during the first days of the account. */
 function renderQuota(quota) {
-    if (!quota.newAccount) {
+    // An edit is not a new post: no daily-limit note (a new video is still checked when sent)
+    if (!quota.newAccount || EDITING) {
         els.quota.hidden = true;
         return;
     }
@@ -480,7 +547,7 @@ function renderPlaceChips() {
     els.placeChips.innerHTML = state.places.map((p) => {
         const fromMap = !p.id;
         const title = fromMap ? "Địa điểm OpenStreetMap, sẽ được thêm vào Senpai ơi khi bạn đăng"
-            : (SOURCE[p.source] || SOURCE.TEAM)[1];
+            : p.source ? (SOURCE[p.source] || SOURCE.TEAM)[1] : "Địa điểm trên Senpai ơi";
         return `<span class="badge place-chip${fromMap ? " from-map" : ""}" title="${esc(title)}">${ic(fromMap ? "travel_explore" : "location_on")}${esc(p.name)}
             <button type="button" data-remove-place="${esc(p.key)}" aria-label="Bỏ địa điểm ${esc(p.name)}">${ic("close")}</button>
         </span>`;
@@ -508,13 +575,15 @@ els.addVideo.addEventListener("click", () => els.videoInput.click());
 els.imageInput.addEventListener("change", () => addImages([...els.imageInput.files]));
 els.videoInput.addEventListener("change", () => addVideo(els.videoInput.files[0]));
 
-const videoQuotaUsed = () => options.quota.newAccount && options.quota.videosUsed >= options.quota.videosLimit;
+// Replacing the video of a post that already had one is not a new video for the new-account limit
+const videoQuotaUsed = () => options.quota.newAccount && options.quota.videosUsed >= options.quota.videosLimit
+    && !hadVideo;
 
 async function addImages(files) {
     els.imageInput.value = "";
     clearFieldError("images");
     const { imagesMax, imageMaxMb } = options.limits;
-    const room = imagesMax - state.images.length - processingImages;
+    const room = imagesMax - imageCount() - processingImages;
     if (files.length > room) {
         fieldError("images", MSG.IMAGE_RULE);
         files = files.slice(0, Math.max(0, room));
@@ -529,7 +598,7 @@ async function addImages(files) {
                 continue;
             }
             const blob = await shrinkToJpeg(file);
-            if (state.images.length < imagesMax) {
+            if (imageCount() < imagesMax) {
                 state.images.push({ blob, url: URL.createObjectURL(blob), name: file.name });
             }
         } catch {
@@ -627,13 +696,29 @@ function videoLength(url) {
 
 function renderMedia() {
     const { imagesMax } = options.limits;
-    const items = state.images.map((img, i) => `
+    const scanning = (m) => (m.scanStatus === "PROCESSING"
+        ? `<span class="badge pick-tag">${ic("hourglass_top")}Đang quét</span>` : "");
+    const kept = existingImages();
+    const items = kept.map((m, i) => `
         <li class="pick">
-            <img src="${img.url}" alt="Ảnh ${i + 1}: ${esc(img.name)}">
-            <button class="pick-remove" type="button" data-remove-image="${i}" aria-label="Bỏ ảnh ${i + 1}">${ic("close")}</button>
+            <img src="${esc(m.url)}" alt="Ảnh ${i + 1} đã đăng">${scanning(m)}
+            <button class="pick-remove" type="button" data-remove-existing="${m.id}" aria-label="Bỏ ảnh ${i + 1}">${ic("close")}</button>
         </li>`);
+    items.push(...state.images.map((img, i) => `
+        <li class="pick">
+            <img src="${img.url}" alt="Ảnh ${kept.length + i + 1}: ${esc(img.name)}">
+            <button class="pick-remove" type="button" data-remove-image="${i}" aria-label="Bỏ ảnh ${kept.length + i + 1}">${ic("close")}</button>
+        </li>`));
     for (let i = 0; i < processingImages; i++) {
         items.push(`<li class="pick busy" aria-label="Đang xử lý ảnh">${ic("hourglass_top")}</li>`);
+    }
+    const oldVideo = existingVideo();
+    if (oldVideo) {
+        items.push(`<li class="pick video">
+            <video src="${esc(oldVideo.url)}" muted playsinline preload="metadata" aria-label="Video đã đăng"></video>
+            ${scanning(oldVideo) || `<span class="badge pick-tag">${ic("videocam")}Video</span>`}
+            <button class="pick-remove" type="button" data-remove-existing="${oldVideo.id}" aria-label="Bỏ video">${ic("close")}</button>
+        </li>`);
     }
     if (state.video) {
         const length = state.video.seconds === null ? "" : `${Math.round(state.video.seconds)} giây`;
@@ -645,10 +730,10 @@ function renderMedia() {
     }
     els.mediaPicks.innerHTML = items.join("");
     els.mediaPicks.hidden = !items.length;
-    els.imagesCount.textContent = `${state.images.length}/${imagesMax}`;
-    els.addImage.disabled = state.images.length + processingImages >= imagesMax;
+    els.imagesCount.textContent = `${imageCount()}/${imagesMax}`;
+    els.addImage.disabled = imageCount() + processingImages >= imagesMax;
     const videoBlocked = videoQuotaUsed();
-    els.addVideo.disabled = Boolean(state.video) || videoBlocked;
+    els.addVideo.disabled = Boolean(state.video || oldVideo) || videoBlocked;
     els.videoNote.hidden = !videoBlocked && !(state.video && state.video.seconds === null);
     els.videoNote.textContent = videoBlocked
         ? `Tài khoản mới chỉ đăng ${options.quota.videosLimit} video mỗi ngày. Hôm nay bạn đã dùng lượt này.`
@@ -656,6 +741,16 @@ function renderMedia() {
 }
 
 els.mediaPicks.addEventListener("click", (event) => {
+    const old = event.target.closest("[data-remove-existing]");
+    if (old) {
+        const id = Number(old.dataset.removeExisting);
+        const removed = state.existing.find((m) => m.id === id);
+        state.existing = state.existing.filter((m) => m.id !== id);
+        clearFieldError(removed?.type === "VIDEO" ? "video" : "images");
+        renderMedia();
+        (removed?.type === "VIDEO" ? els.addVideo : els.addImage).focus();
+        return;
+    }
     const image = event.target.closest("[data-remove-image]");
     if (image) {
         const [removed] = state.images.splice(Number(image.dataset.removeImage), 1);
@@ -778,6 +873,10 @@ els.form.addEventListener("submit", async (event) => {
         placeIds: state.places.filter((p) => p.id).map((p) => p.id),
         externalPlaceIds: state.places.filter((p) => !p.id).map((p) => p.externalId)
     };
+    if (EDITING) {
+        // Photos first, then the video, as the post shows them
+        body.keepMediaIds = [...existingImages(), ...(existingVideo() ? [existingVideo()] : [])].map((m) => m.id);
+    }
     const data = new FormData();
     data.append(API.part, new Blob([JSON.stringify(body)], { type: "application/json" }));
     state.images.forEach((img, i) => data.append("images", img.blob, `anh-${i + 1}.jpg`));
@@ -785,7 +884,7 @@ els.form.addEventListener("submit", async (event) => {
 
     setBusy(true);
     try {
-        const created = await API.create(data);
+        const created = EDITING ? await API.update(EDIT_ID, data) : await API.create(data);
         leaving = true;
         location.href = ROUTES.detail(created.id);
     } catch (error) {
@@ -812,8 +911,15 @@ function setBusy(on) {
 
 // ---------------------------------------------------------------- leaving with unsaved changes (MSG15)
 
+/** Editing: what the author can change, to compare with the post as it was loaded. */
+function snapshot() {
+    return JSON.stringify([els.title.value.trim(), els.content.value.trim(), state.topicIds, state.places.map(placeKey),
+        state.existing.map((m) => m.id), state.images.length, Boolean(state.video)]);
+}
+
 function isDirty() {
     if (leaving || !options) return false;
+    if (EDITING) return initial !== null && snapshot() !== initial;
     return Boolean(els.title.value.trim() || els.content.value.trim() || state.topicIds.length
         || state.places.length || state.images.length || state.video);
 }

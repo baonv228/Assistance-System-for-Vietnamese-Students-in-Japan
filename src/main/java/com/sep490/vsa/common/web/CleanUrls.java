@@ -50,6 +50,11 @@ public final class CleanUrls {
             "/blog", "/pages/blog-detail.html",
             "/qa", "/pages/qa-detail.html");
 
+    /** Edit forms (/blog/{id}/edit, /qa/{id}/edit) reuse the write pages; the script reads the id from the path. */
+    private static final Map<String, String> EDIT_PAGES = Map.of(
+            "/blog", "/pages/blog-write.html",
+            "/qa", "/pages/qa-ask.html");
+
     private static final Pattern ID_PARAM = Pattern.compile("(?:^|&)id=(\\d+)(?:&|$)");
 
     private CleanUrls() {
@@ -62,6 +67,8 @@ public final class CleanUrls {
             PAGES.forEach((path, file) -> registry.addViewController(path).setViewName("forward:" + file));
             DETAIL_PAGES.forEach((path, file) ->
                     registry.addViewController(path + "/{id:\\d+}").setViewName("forward:" + file));
+            EDIT_PAGES.forEach((path, file) ->
+                    registry.addViewController(path + "/{id:\\d+}/edit").setViewName("forward:" + file));
         }
     }
 

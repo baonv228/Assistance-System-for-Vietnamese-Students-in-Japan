@@ -165,6 +165,75 @@ public class BlogWriteRepository {
         jdbc.update("INSERT INTO blog_media (blog_id, media_id, sort_order) VALUES (?, ?, ?)", blogId, mediaId, sortOrder);
     }
 
+    // ---------------------------------------------------------------- editing a post
+
+    public record EditableBlog(Long id, Long authorId, String type, String status, String title, String content) {
+    }
+
+    /** The post as it is now; {@code lock} keeps the row locked until the transaction ends (the save). */
+    public Optional<EditableBlog> editableBlog(long blogId, boolean lock) {
+        return jdbc.query("SELECT id, author_id, blog_type, status, title, content FROM blogs WHERE id = ?"
+                        + (lock ? " FOR UPDATE" : ""),
+                (rs, i) -> new EditableBlog(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6)), blogId).stream().findFirst();
+    }
+
+    /** Active topics the post is linked to, in the order of the topic list. */
+    public List<Long> topicIds(long blogId) {
+        return jdbc.query("""
+                SELECT t.id FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                WHERE btl.blog_id = ? AND t.is_active ORDER BY t.is_other, t.sort_order, t.name""",
+                (rs, i) -> rs.getLong(1), blogId);
+    }
+
+    /** @param type IMAGE or VIDEO */
+    public record AttachedMedia(Long id, String type, String storageKey, String scanStatus, int sortOrder) {
+    }
+
+    /** Photos and video of the post that are not deleted (rejected files are deleted by the scan), in display order. */
+    public List<AttachedMedia> attachedMedia(long blogId) {
+        return jdbc.query("""
+                SELECT m.id, m.media_type, m.storage_key, m.scan_status, bm.sort_order
+                FROM blog_media bm JOIN media m ON m.id = bm.media_id
+                WHERE bm.blog_id = ? AND m.deleted_at IS NULL ORDER BY bm.sort_order, m.id""",
+                (rs, i) -> new AttachedMedia(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getInt(5)), blogId);
+    }
+
+    /** New title and content; the post shows "· đã sửa" from now on. */
+    public void updateBlog(long blogId, String title, String content, String status, Instant now) {
+        jdbc.update("UPDATE blogs SET title = ?, content = ?, status = ?, is_edited = TRUE, updated_at = ? WHERE id = ?",
+                title, content, status, Timestamp.from(now), blogId);
+    }
+
+    public void unlinkTopics(long blogId) {
+        jdbc.update("DELETE FROM blog_topic_links WHERE blog_id = ?", blogId);
+    }
+
+    public void unlinkPlaces(long blogId) {
+        jdbc.update("DELETE FROM blog_place_links WHERE blog_id = ?", blogId);
+    }
+
+    public void unlinkMedia(long blogId, List<Long> mediaIds) {
+        if (mediaIds.isEmpty()) {
+            return;
+        }
+        named.update("DELETE FROM blog_media WHERE blog_id = :blogId AND media_id IN (:ids)",
+                Map.of("blogId", blogId, "ids", mediaIds));
+    }
+
+    public void setMediaOrder(long blogId, long mediaId, int sortOrder) {
+        jdbc.update("UPDATE blog_media SET sort_order = ? WHERE blog_id = ? AND media_id = ?", sortOrder, blogId, mediaId);
+    }
+
+    /** True when the post has already earned its points once (they are never paid twice, even after an edit). */
+    public boolean postAwarded(long blogId) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM point_transactions WHERE ref_type = 'BLOG' AND ref_id = ? AND reason = 'BLOG_CREATED'""",
+                Integer.class, blogId);
+        return n != null && n > 0;
+    }
+
     // ---------------------------------------------------------------- publishing after the scan
 
     public record PendingBlog(Long id, Long authorId, String type, String title, String status) {
