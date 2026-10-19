@@ -1,7 +1,7 @@
 // Homepage: guests see an invitation, signed-in users see what matters to them today (as in the prototype).
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { esc, eventWhen, formatDay, ic, LOGO_SVG, STAGES, stars, tagChips } from "../lib/ui.js";
+import { esc, eventWhen, formatDay, ic, LOGO_SVG, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
 
 const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
@@ -105,10 +105,43 @@ async function renderMember() {
                     <h3>${esc(home.featured.title)}</h3>
                     <span class="note">${esc(home.featured.excerpt)}</span>
                     <span class="row">${esc(home.featured.authorName)} ${tagChips(home.featured.authorTags)}</span></a>` : ""}
+                ${forYouCard(home)}
             </div>
         </div>`;
     bindSpeak();
     bindPrompt();
+}
+
+/** "Dành cho bạn": posts near the user's area or suiting their stage first (chosen by the server). */
+function forYouCard(home) {
+    const posts = home.forYou || [];
+    const hint = home.areaName && home.stage ? "" : `<p class="note" id="foryou-hint">${forYouHint(!promptHidden())}</p>`;
+    return `<section class="card foryou" style="grid-column:1/-1" aria-labelledby="foryou-title">
+        <div class="row"><span class="badge br" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</span><span class="grow"></span>
+            <a class="link" href="/blog">Xem thêm</a></div>
+        ${hint}
+        ${posts.map((p) => `<article class="feeditem">
+            <a class="feedtitle" href="/blog/${encodeURIComponent(p.id)}">${esc(p.title)}</a>
+            ${p.excerpt ? `<span class="note">${esc(p.excerpt)}</span>` : ""}
+            <span class="row">${p.topicName ? `<span class="badge">${esc(p.topicName)}</span>` : ""}
+                ${p.reason ? `<span class="badge lan">${ic(p.reason === "Gần khu vực của bạn" ? "location_on" : "flag")}${esc(p.reason)}</span>` : ""}
+                <span class="note">${esc(p.authorName)} · ${esc(timeAgo(p.createdAt))} ·
+                    <span aria-label="${p.likeCount} lượt thích">${ic("favorite")}${p.likeCount}</span>
+                    <span aria-label="${p.commentCount} bình luận">${ic("chat_bubble")}${p.commentCount}</span></span></span>
+        </article>`).join("") || '<p class="note">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
+    </section>`;
+}
+
+/** Points to the prompt above while it is shown, otherwise to the "Tôi" page. */
+const forYouHint = (promptShown) => `${ic("tips_and_updates")}Chọn khu vực và giai đoạn ${promptShown
+    ? "ở ô phía trên" : 'ở trang <a class="link" href="/profile">Tôi</a>'} để mục này gợi ý bài hợp với bạn hơn.`;
+
+function promptHidden() {
+    try {
+        return sessionStorage.getItem("asvsj.hidePrompt") === "1";
+    } catch {
+        return false; // storage blocked
+    }
 }
 
 const areaShort = (name) => (name ? name.split("–").pop().trim() : "");
@@ -129,13 +162,7 @@ function greeting(home) {
 }
 
 function profilePrompt(home, areas) {
-    let later = false;
-    try {
-        later = sessionStorage.getItem("asvsj.hidePrompt") === "1";
-    } catch {
-        // storage blocked
-    }
-    if ((home.areaName && home.stage) || later) {
+    if ((home.areaName && home.stage) || promptHidden()) {
         return "";
     }
     return `<div class="card promptcard" id="prompt">
@@ -172,6 +199,10 @@ function bindPrompt() {
             // storage blocked
         }
         prompt.remove();
+        const hint = document.querySelector("#foryou-hint");
+        if (hint) {
+            hint.innerHTML = forYouHint(false);
+        }
     });
 }
 
