@@ -5,13 +5,13 @@ import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
 
-const soon = (feature, params = {}) => `/pages/coming-soon.html?${new URLSearchParams({ f: feature, ...params })}`;
+const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
-    detail: (id) => `/pages/qa-detail.html?id=${id}`,
-    ask: "/pages/qa-ask.html",
+    detail: (id) => `/qa/${id}`,
+    ask: "/qa/ask",
     place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
-    login: "/pages/login.html"
+    login: "/login"
 };
 
 const MSG = {

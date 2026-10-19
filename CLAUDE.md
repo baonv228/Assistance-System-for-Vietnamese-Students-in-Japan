@@ -53,14 +53,18 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   when their client ids are set in `application-local.properties` (see the `.example` file).
 
 ## Roles, homepage, profile
-- Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/pages/moderator/`, ACADEMIC_MANAGER
-  `/pages/academic/`, ADMIN `/pages/admin/` (sample dashboards). SecurityConfig enforces it: guests go to
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/blog`,
+  `/blog/new`, `/blog/{id}`, `/qa`, `/qa/ask`, `/qa/{id}`, `/coming-soon`, `/moderator`… forward to the files in
+  `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
+  addresses; a new page gets its entry in `CleanUrls.PAGES`.
+- Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
+  `/academic`, ADMIN `/admin` (sample dashboards). SecurityConfig enforces it: guests go to
   login, a wrong role is redirected to its own home; `/api/moderator|academic|admin/**` need the role,
   `/api/me/**` needs login.
 - `feature/home` reads other features' tables (places, reviews, events, blogs, guide, phrases) with plain SQL
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
-  bottom tab bar on phones). Links to features not built yet go to `/pages/coming-soon.html?f=<feature>`.
+  bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
@@ -80,7 +84,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   /api/blogs/{id}/like|save`, `POST /api/blogs/{id}/comments` (`parentId` for replies), `POST /api/blogs/{id}/report`,
   `DELETE /api/blogs/{id}` (own post: hard delete, its points withdrawn), `POST|DELETE /api/comments/{id}/like`,
   `POST /api/comments/{id}/report`, `DELETE /api/comments/{id}` (own; a comment with replies becomes an empty
-  REMOVED placeholder). Page: `pages/blog-detail.html?id=`.
+  REMOVED placeholder). Page: `/blog/{id}` (file `pages/blog-detail.html`).
 - The services take a `kind` ("POST" / "QA"): `/api/blogs/**` passes POST, `/api/questions/**` passes QA, and an id of
   the other kind answers 404 (MSG19). Only the shared `/api/comments/{id}/...` calls pass null (any kind).
   Notifications about a question use `ref_type = 'QUESTION'` (`BlogActionService.refType`); reports keep `BLOG`

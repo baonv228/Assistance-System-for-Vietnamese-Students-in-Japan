@@ -7,15 +7,15 @@ import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
 // pages/qa-detail.html (QA, Hỏi-Đáp). Each kind has its own endpoints; comment actions are shared.
 const QUESTION = document.body.dataset.kind === "QA";
-const soon = (feature, params = {}) => `/pages/coming-soon.html?${new URLSearchParams({ f: feature, ...params })}`;
+const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
-    list: QUESTION ? "/pages/qa.html" : "/pages/blog.html",
+    list: QUESTION ? "/qa" : "/blog",
     listName: QUESTION ? "Hỏi-Đáp" : "Blog",
-    topic: (id) => `${QUESTION ? "/pages/qa.html" : "/pages/blog.html"}?topics=${id}`,
+    topic: (id) => `${QUESTION ? "/qa" : "/blog"}?topics=${id}`,
     place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
     edit: (id) => soon(QUESTION ? "qa-edit" : "blog-edit", { id }),
-    login: "/pages/login.html"
+    login: "/login"
 };
 const API = QUESTION ? {
     get: apiClient.question, like: apiClient.likeQuestion, save: apiClient.saveQuestion,
@@ -46,7 +46,8 @@ const MAX_INDENT = 3;
 
 const content = document.querySelector("#content");
 const toastBox = document.querySelector("#toast");
-const blogId = Number.parseInt(new URLSearchParams(location.search).get("id"), 10);
+// Address /blog/{id} or /qa/{id} (old ?id= links are moved there by the server)
+const blogId = Number.parseInt(location.pathname.split("/").pop(), 10);
 
 let user = null;            // signed-in user or null
 let post = null;            // last BlogDetail from the API
@@ -75,7 +76,7 @@ async function load() {
 }
 
 /**
- * Questions used to open on blog-detail.html, so old bookmarks and shared links point there. When the id belongs to
+ * Questions used to open on the Blog detail page, so old bookmarks and shared links point there. When the id belongs to
  * the other kind, move to that page (keeping the query string) instead of showing "not found".
  */
 async function openOtherKind() {
@@ -84,7 +85,7 @@ async function openOtherKind() {
     } catch {
         return false;
     }
-    location.replace(`${QUESTION ? "/pages/blog-detail.html" : "/pages/qa-detail.html"}${location.search}${location.hash}`);
+    location.replace(`${QUESTION ? "/blog" : "/qa"}/${blogId}${location.search}${location.hash}`);
     return true;
 }
 
@@ -616,7 +617,7 @@ function announceCreated() {
     const params = new URLSearchParams(location.search);
     if (!params.has("created") || !post) return;
     params.delete("created");
-    history.replaceState(null, "", `${location.pathname}?${params}`);
+    history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
     if (post.status === "PROCESSING") {
         toast("Đã gửi. Ảnh và video đang được quét, trong lúc này chỉ bạn thấy bài.");
     } else if (post.status === "PUBLISHED") {

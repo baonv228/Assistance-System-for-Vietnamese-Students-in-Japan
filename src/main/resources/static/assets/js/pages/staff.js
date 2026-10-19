@@ -50,7 +50,7 @@ const role = document.body.dataset.role;
 const desk = DESKS[role];
 const user = await currentUser();
 if (!user) {
-    window.location.replace("/pages/login.html");
+    window.location.replace("/login");
 } else if (user.role !== role) {
     window.location.replace(user.homePath);
 } else {
@@ -66,7 +66,7 @@ function render() {
             <span class="grow"></span>
             <div class="site-account">
                 <a class="btn sm" href="/">${ic("home")}<span class="who">Trang người dùng</span></a>
-                <a class="btn sm" href="/pages/profile.html">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
+                <a class="btn sm" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
                 <button class="btn sm" type="button" data-logout title="Đăng xuất">${ic("logout")}<span class="sr-only">Đăng xuất</span></button>
             </div>
         </header>

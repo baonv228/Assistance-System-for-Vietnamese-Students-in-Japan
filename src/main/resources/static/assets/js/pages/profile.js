@@ -3,7 +3,7 @@ import { apiClient } from "../api/client.js";
 import { logout, mountSiteHeader } from "../components/site-header.js";
 import { esc, ic, LOGO_SVG, STAGES, tagChips } from "../lib/ui.js";
 
-const soon = (feature) => `/pages/coming-soon.html?f=${feature}`;
+const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#me");
 
 /** Perks of each rank, keyed by the minimum points in table ranks. */
@@ -86,7 +86,7 @@ function render(p) {
             <a class="btn" href="${soon("public-profile")}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
             <a class="btn" href="${soon("notebook")}">${ic("bookmark")}Sổ tay tiếng Nhật</a>
             <a class="btn" href="${soon("saved")}">${ic("bookmarks")}Đã lưu</a>
-            <a class="btn" href="/pages/terms.html?doc=tos">${ic("gavel")}Điều khoản và chính sách</a>
+            <a class="btn" href="/terms?doc=tos">${ic("gavel")}Điều khoản và chính sách</a>
             <button class="btn" type="button" id="logout">${ic("logout")}Đăng xuất</button>
         </div>
 
@@ -127,7 +127,7 @@ function askDelete() {
         event.target.disabled = true;
         try {
             await apiClient.deleteAccount();
-            window.location.replace("/pages/login.html?deleted=1");
+            window.location.replace("/login?deleted=1");
         } catch (error) {
             event.target.disabled = false;
             danger.querySelector(".note").textContent = error.message;

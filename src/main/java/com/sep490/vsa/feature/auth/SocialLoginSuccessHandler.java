@@ -24,8 +24,8 @@ import java.util.Optional;
 @Component
 public class SocialLoginSuccessHandler implements AuthenticationSuccessHandler {
 
-    static final String LOGIN = "/pages/login.html";
-    static final String COMPLETE_SIGNUP = "/pages/complete-signup.html";
+    static final String LOGIN = "/login";
+    static final String COMPLETE_SIGNUP = "/complete-signup";
 
     private final SocialLoginService socialLoginService;
     private final SessionSignIn sessionSignIn;

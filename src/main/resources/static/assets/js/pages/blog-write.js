@@ -13,21 +13,21 @@ const QUESTION = document.body.dataset.kind === "QA";
 
 // Old links to blog-write.html?type=QA open the Hỏi-Đáp page
 if (!QUESTION && (new URLSearchParams(location.search).get("type") || "").toUpperCase() === "QA") {
-    location.replace("/pages/qa-ask.html");
+    location.replace("/qa/ask");
 }
 
 const ROUTES = QUESTION ? {
-    list: "/pages/qa.html",
+    list: "/qa",
     listName: "Hỏi-Đáp",
-    detail: (id) => `/pages/qa-detail.html?id=${id}&created=1`,
-    login: "/pages/login.html",
-    newPin: "/pages/coming-soon.html?f=map"         // Map → "Cắm ghim" (New Pin), not built yet
+    detail: (id) => `/qa/${id}?created=1`,
+    login: "/login",
+    newPin: "/coming-soon?f=map"         // Map → "Cắm ghim" (New Pin), not built yet
 } : {
-    list: "/pages/blog.html",
+    list: "/blog",
     listName: "Blog",
-    detail: (id) => `/pages/blog-detail.html?id=${id}&created=1`,
-    login: "/pages/login.html",
-    newPin: "/pages/coming-soon.html?f=map"
+    detail: (id) => `/blog/${id}?created=1`,
+    login: "/login",
+    newPin: "/coming-soon?f=map"
 };
 /** Each section has its own endpoints; the rules behind them are the same. */
 const API = QUESTION

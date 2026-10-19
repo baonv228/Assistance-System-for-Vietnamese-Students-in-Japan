@@ -6,14 +6,14 @@ import { mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
 
 // Where links go. Map and Public Profile are still placeholders; change them when they exist.
-const soon = (feature, params = {}) => `/pages/coming-soon.html?${new URLSearchParams({ f: feature, ...params })}`;
+const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
-    detail: (id) => `/pages/blog-detail.html?id=${id}`,
-    write: "/pages/blog-write.html",
-    qa: "/pages/qa.html",
+    detail: (id) => `/blog/${id}`,
+    write: "/blog/new",
+    qa: "/qa",
     place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
-    login: "/pages/login.html"
+    login: "/login"
 };
 
 const MSG = {

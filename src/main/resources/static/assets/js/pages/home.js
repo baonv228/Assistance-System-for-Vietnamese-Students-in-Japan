@@ -3,7 +3,7 @@ import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { esc, eventWhen, formatDay, ic, LOGO_SVG, STAGES, stars, tagChips } from "../lib/ui.js";
 
-const soon = (feature) => `/pages/coming-soon.html?f=${feature}`;
+const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
 
 // ---------------------------------------------------------------- guest
@@ -20,7 +20,7 @@ function renderGuest(data) {
                         người Việt review, kèm câu tiếng Nhật để dùng ngay tại đó.</p>
                     <div class="row">
                         <a class="btn pri" href="${soon("map")}">${ic("map")}Xem bản đồ Nippori</a>
-                        <a class="btn" href="/pages/register.html">${ic("person_add")}Đăng ký miễn phí</a>
+                        <a class="btn" href="/register">${ic("person_add")}Đăng ký miễn phí</a>
                     </div>
                     <p class="note">Xem bản đồ, review và từ vựng không cần tài khoản.</p>
                 </div>
@@ -43,14 +43,14 @@ function renderGuest(data) {
             <div class="feat">
                 ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", soon("map"))}
                 ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", soon("learn"))}
-                ${feature("contact_support", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/pages/qa.html")}
+                ${feature("contact_support", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/qa")}
                 ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", soon("fest"))}
             </div>
             ${phraseCard(phrase)}
             <p class="note">
-                <a class="link" href="/pages/terms.html?doc=tos">Điều khoản sử dụng</a> ·
-                <a class="link" href="/pages/terms.html?doc=privacy">Chính sách bảo mật</a> ·
-                <a class="link" href="/pages/terms.html?doc=community">Quy tắc cộng đồng</a>
+                <a class="link" href="/terms?doc=tos">Điều khoản sử dụng</a> ·
+                <a class="link" href="/terms?doc=privacy">Chính sách bảo mật</a> ·
+                <a class="link" href="/terms?doc=community">Quy tắc cộng đồng</a>
             </p>
         </div>`;
     bindSpeak();
@@ -99,7 +99,7 @@ async function renderMember() {
                         <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span></span></a>`).join("")
                         || '<p class="note">Chưa có review mới.</p>'}
                 </div>
-                ${home.featured ? `<a class="card blogcard" href="/pages/blog-detail.html?id=${home.featured.id}" style="grid-column:1/-1">
+                ${home.featured ? `<a class="card blogcard" href="/blog/${home.featured.id}" style="grid-column:1/-1">
                     <span class="row"><span class="badge lan">${ic("star")}Bài nổi bật ${home.featured.period === "WEEK" ? "tuần này" : "tháng này"}</span>
                         <span class="note">${home.featured.readMinutes} phút đọc</span></span>
                     <h3>${esc(home.featured.title)}</h3>
