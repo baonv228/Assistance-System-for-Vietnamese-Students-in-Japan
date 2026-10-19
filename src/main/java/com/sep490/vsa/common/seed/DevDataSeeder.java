@@ -70,6 +70,25 @@ public class DevDataSeeder implements CommandLineRunner {
             populator.execute(dataSource);
             log.info("Loaded sample content from dev/sample-data.sql");
         }
+        upgradeSamplePlaces();
+    }
+
+    /**
+     * Sample places loaded before the switch to OpenStreetMap carried made-up Google place ids ("ChIJ-dev-…") and
+     * showed "Google Maps": Ga Nippori becomes its real OpenStreetMap station, the others team places, as in
+     * dev/sample-data.sql today. Does nothing on a database without those rows.
+     */
+    private void upgradeSamplePlaces() {
+        int changed = jdbc.update("""
+                UPDATE places SET osm_id = 'N772389775', source = 'OSM', google_place_id = NULL
+                WHERE google_place_id = 'ChIJ-dev-nippori-station'
+                  AND NOT EXISTS (SELECT 1 FROM (SELECT id FROM places WHERE osm_id = 'N772389775') taken)""");
+        changed += jdbc.update("""
+                UPDATE places SET source = 'TEAM', google_place_id = NULL
+                WHERE google_place_id LIKE 'ChIJ-dev-%' AND lat IS NOT NULL AND lng IS NOT NULL""");
+        if (changed > 0) {
+            log.info("Moved {} sample places from made-up Google ids to OpenStreetMap / team places", changed);
+        }
     }
 
     private boolean createIfMissing(Account a) {

@@ -11,18 +11,18 @@ SET @hoang   = (SELECT id FROM users WHERE email = 'kouhai@gmail.com');
 SET @nippori = (SELECT id FROM areas WHERE station = 'Nippori');
 
 -- ---------------------------------------------------------------- places
-INSERT INTO places (google_place_id, name_vi, name_ja, name_en, category_id, area_id, address, lat, lng, source, status, created_by, reviewed_by, reviewed_at) VALUES
- ('ChIJ-dev-nippori-station', 'Ga Nippori', '日暮里駅', 'Nippori Station', 'station', @nippori, 'Nishi-Nippori, Arakawa, Tokyo', 35.728100, 139.770700, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
+INSERT INTO places (osm_id, name_vi, name_ja, name_en, category_id, area_id, address, lat, lng, source, status, created_by, reviewed_by, reviewed_at) VALUES
+ ('N772389775', 'Ga Nippori', '日暮里駅', 'Nippori Station', 'station', @nippori, 'Higashi-Nippori 6, Arakawa, Tokyo', 35.728920, 139.771364, 'OSM', 'ACTIVE', @admin, @mod, NOW()),
  (NULL, 'Trường Nhật ngữ FPT', 'FPT日本語学校', 'FPT Japanese Language School', 'school', @nippori, 'Higashi-Nippori, Arakawa, Tokyo', 35.729600, 139.772800, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-midori-mart', 'Konbini Midori', 'コンビニみどり', 'Midori Mart', 'konbini', @nippori, 'Higashi-Nippori 5', 35.727500, 139.772000, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Konbini Midori', 'コンビニみどり', 'Midori Mart', 'konbini', @nippori, 'Higashi-Nippori 5', 35.727500, 139.772000, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
  (NULL, 'Quán cơm Hana', 'はな食堂', 'Hana Shokudo', 'food', @nippori, 'Ghim do cộng đồng thêm', 35.726700, 139.773500, 'USER', 'ACTIVE', @lananh, @mod, NOW()),
- ('ChIJ-dev-sakura-super', 'Siêu thị Sakura', 'さくらスーパー', 'Sakura Super', 'super', @nippori, 'Higashi-Nippori 6', 35.730900, 139.773700, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-arakawa-office', 'Văn phòng quận Arakawa', '荒川区役所', 'Arakawa City Office', 'ward', @nippori, 'Arakawa, Tokyo', 35.736000, 139.783400, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-aoi-clinic', 'Phòng khám Aoi', 'あおいクリニック', 'Aoi Clinic', 'hospital', @nippori, 'Yanaka 7', 35.727900, 139.767400, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-nippori-post', 'Bưu điện Nippori', '日暮里郵便局', 'Nippori Post Office', 'bank', @nippori, 'Higashi-Nippori 4', 35.725400, 139.771800, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-mori-pharmacy', 'Hiệu thuốc Mori', 'もり薬局', 'Mori Pharmacy', 'pharmacy', @nippori, 'Higashi-Nippori 5', 35.728300, 139.772400, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-ramen-aoba', 'Ramen Aoba', 'ラーメン青葉', 'Ramen Aoba', 'food', @nippori, 'Yanaka 3', 35.726200, 139.767000, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
- ('ChIJ-dev-coin-laundry', 'Tiệm giặt Coin Laundry Sora', 'コインランドリーそら', 'Coin Laundry Sora', 'laundry', @nippori, 'Nishi-Nippori 2', 35.725000, 139.768500, 'GOOGLE', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Siêu thị Sakura', 'さくらスーパー', 'Sakura Super', 'super', @nippori, 'Higashi-Nippori 6', 35.730900, 139.773700, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Văn phòng quận Arakawa', '荒川区役所', 'Arakawa City Office', 'ward', @nippori, 'Arakawa, Tokyo', 35.736000, 139.783400, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Phòng khám Aoi', 'あおいクリニック', 'Aoi Clinic', 'hospital', @nippori, 'Yanaka 7', 35.727900, 139.767400, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Bưu điện Nippori', '日暮里郵便局', 'Nippori Post Office', 'bank', @nippori, 'Higashi-Nippori 4', 35.725400, 139.771800, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Hiệu thuốc Mori', 'もり薬局', 'Mori Pharmacy', 'pharmacy', @nippori, 'Higashi-Nippori 5', 35.728300, 139.772400, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Ramen Aoba', 'ラーメン青葉', 'Ramen Aoba', 'food', @nippori, 'Yanaka 3', 35.726200, 139.767000, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'Tiệm giặt Coin Laundry Sora', 'コインランドリーそら', 'Coin Laundry Sora', 'laundry', @nippori, 'Nishi-Nippori 2', 35.725000, 139.768500, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
  (NULL, 'Phở Hà Nội Nippori', 'フォーハノイ', 'Pho Hanoi', 'food', @nippori, 'Ghim do cộng đồng thêm', 35.724000, 139.773000, 'USER', 'PENDING', @hoang, NULL, NULL);
 
 SET @p_station = (SELECT id FROM places WHERE name_vi = 'Ga Nippori');
