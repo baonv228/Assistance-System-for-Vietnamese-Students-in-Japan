@@ -80,6 +80,8 @@ export const apiClient = {
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
+    // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
+    saved: () => request("/me/saved"),
     areas: () => request("/areas"),
 
     // Blog Feed (UC-09), posts only. params: { q, topicIds: [..], sort, page, size }

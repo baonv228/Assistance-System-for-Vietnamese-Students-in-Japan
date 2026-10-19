@@ -27,7 +27,7 @@
     const FEATURES = {
         map: ["map", "Bản đồ"], learn: ["learn", "Học tiếng Nhật"], fest: ["fest", "Sự kiện"],
         guide: ["guide", "Cẩm nang"], tag: ["me", "Xin tag định danh"], "public-profile": ["me", "Hồ sơ công khai"],
-        notebook: ["me", "Sổ tay tiếng Nhật"], saved: ["me", "Đã lưu"],
+        notebook: ["me", "Sổ tay tiếng Nhật"],
         "blog-edit": ["blog", "Sửa bài viết"], "qa-edit": ["qa", "Sửa câu hỏi"]
     };
     const [tab, name] = FEATURES[new URLSearchParams(location.search).get("f")] || ["", "Chức năng"];

@@ -85,7 +85,7 @@ function render(p) {
         <div class="actions">
             <a class="btn" href="${soon("public-profile")}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
             <a class="btn" href="${soon("notebook")}">${ic("bookmark")}Sổ tay tiếng Nhật</a>
-            <a class="btn" href="${soon("saved")}">${ic("bookmarks")}Đã lưu</a>
+            <a class="btn" href="/saved">${ic("bookmarks")}Đã lưu (${p.savedCount})</a>
             <a class="btn" href="/terms?doc=tos">${ic("gavel")}Điều khoản và chính sách</a>
             <button class="btn" type="button" id="logout">${ic("logout")}Đăng xuất</button>
         </div>

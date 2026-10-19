@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đã lưu – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/blog.css">
+    <link rel="stylesheet" href="/assets/css/saved.css">
+</head>
+<body class="app">
+<!-- "Đã lưu" (Tôi → Đã lưu): saved places, posts and questions. Posts and questions are saved and unsaved on their
+     own pages; places will be saved from the Map. -->
+<main class="page narrow savedpage" id="saved">
+    <div>
+        <a class="link" href="/profile"><span class="ic" aria-hidden="true">chevron_left</span>Tôi</a>
+        <h2>Đã lưu</h2>
+        <p class="note" id="summary" aria-live="polite">Đang tải…</p>
+    </div>
+    <div id="content"></div>
+</main>
+<script type="module" src="/assets/js/pages/saved.js"></script>
+</body>
+</html>
