@@ -254,12 +254,20 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .module .ic.big { font-size: 28px; color: var(--brand); }
 
 /* ---------------- responsive ---------------- */
+@media (max-width: 1180px) and (min-width: 861px) {
+    .site-top { gap: 12px; padding: 10px 16px; }
+    .site-nav { gap: 0; }
+    .site-nav a { padding: 8px 7px; gap: 4px; font-size: 14px; }
+    .site-account .who { display: none; }
+}
+@media (max-width: 1000px) and (min-width: 861px) {
+    .site-nav a .ic { display: none; }
+}
 @media (max-width: 860px) {
     .site-top { padding: 10px 16px; }
     .site-nav, .site-account .who { display: none; }
     .tabbar {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
+        display: flex;
         position: fixed;
         z-index: 20;
         left: 0;
@@ -269,7 +277,9 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
         border-top: 1px solid var(--line);
         padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
     }
-    .tabbar a { flex-direction: column; gap: 2px; padding: 6px 0; font-size: 11px; justify-content: center; }
+    /* 8 tabs: small labels, and each tab is its label's width plus an equal share of the rest, so long labels
+       ("Trang chủ", "Cẩm nang") borrow room from short ones ("Học", "Tôi") and still keep a gap on a 360 px screen */
+    .tabbar a { flex: 1 1 auto; flex-direction: column; gap: 2px; padding: 6px 0; font-size: 10px; letter-spacing: -.01em; justify-content: center; min-width: 0; white-space: nowrap; }
     .tabbar a[aria-current="page"] { color: var(--brand-text); }
     body.app.has-tabbar { padding-bottom: 72px; }
     .page { padding: 18px 16px 32px; }

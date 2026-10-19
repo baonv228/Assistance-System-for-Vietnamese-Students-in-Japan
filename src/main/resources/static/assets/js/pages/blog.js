@@ -1,15 +1,16 @@
-// Blog Feed (UC-09 View Blog List, SRS 6.1): featured posts, search, topic/type filters, sorting, paging
-// and the community statistics. Filters live in the URL so refresh and the Back button keep them.
+// Blog Feed (UC-09 View Blog List, SRS 6.1): featured posts, search, topic filter, sorting, paging and the
+// community statistics. Posts only: questions have their own section, Hỏi-Đáp (pages/qa.html).
+// Filters live in the URL so refresh and the Back button keep them.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
 
-// Where links go. Write Post, Map and Public Profile are still placeholders; change them when they exist.
+// Where links go. Map and Public Profile are still placeholders; change them when they exist.
 const soon = (feature, params = {}) => `/pages/coming-soon.html?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     detail: (id) => `/pages/blog-detail.html?id=${id}`,
-    write: soon("blog-write"),
-    ask: soon("blog-ask"),
+    write: "/pages/blog-write.html",
+    qa: "/pages/qa.html",
     place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
     login: "/pages/login.html"
@@ -20,8 +21,12 @@ const MSG = {
     MSG33: "Không có bài viết nào khớp với lựa chọn của bạn.",
     MSG17: "Không tải được dữ liệu. Vui lòng thử lại."
 };
-const TYPE_LABEL = { POST: ["article", "Bài viết", "br"], QA: ["help", "Hỏi đáp", "lan"] };
 const PAGE_SIZE = 10;
+
+// Old links to the Q&A filter of the Blog now open Hỏi-Đáp
+if (new URLSearchParams(location.search).get("type") === "QA") {
+    location.replace(ROUTES.qa);
+}
 const SEARCH_DELAY = 400;
 
 const $ = (selector) => document.querySelector(selector);
@@ -43,7 +48,6 @@ function readUrl() {
     return {
         q: (p.get("q") || "").slice(0, 100),
         topicIds: (p.get("topics") || "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0),
-        type: oneOf(p.get("type"), ["ALL", "POST", "QA"], "ALL"),
         sort: oneOf(p.get("sort"), ["NEWEST", "LIKES", "COMMENTS"], "NEWEST"),
         page: Math.max(1, Number.parseInt(p.get("page"), 10) || 1)   // 1-based in the URL, 0-based in the API
     };
@@ -53,7 +57,6 @@ function writeUrl(push) {
     const p = new URLSearchParams();
     if (state.q.trim()) p.set("q", state.q.trim());
     if (state.topicIds.length) p.set("topics", state.topicIds.join(","));
-    if (state.type !== "ALL") p.set("type", state.type);
     if (state.sort !== "NEWEST") p.set("sort", state.sort);
     if (state.page > 1) p.set("page", state.page);
     const query = p.toString();
@@ -61,7 +64,7 @@ function writeUrl(push) {
     history[push ? "pushState" : "replaceState"](null, "", url);
 }
 
-const isFiltered = () => Boolean(state.q.trim()) || state.topicIds.length > 0 || state.type !== "ALL";
+const isFiltered = () => Boolean(state.q.trim()) || state.topicIds.length > 0;
 
 /** Changes the filters, goes back to page 1 unless the page itself changes, and reloads the list. */
 function update(changes, { push = true } = {}) {
@@ -104,7 +107,6 @@ function renderChips() {
 function bindControls(user) {
     // Guests are sent to sign in before writing
     $("#write").href = user ? ROUTES.write : ROUTES.login;
-    $("#ask").href = user ? ROUTES.ask : ROUTES.login;
 
     let timer;
     els.q.addEventListener("input", () => {
@@ -149,7 +151,7 @@ function bindControls(user) {
         if (target.dataset.removeTopic) {
             update({ topicIds: state.topicIds.filter((id) => id !== Number(target.dataset.removeTopic)) });
         } else if ("clear" in target.dataset) {
-            update({ q: "", topicIds: [], type: "ALL" });
+            update({ q: "", topicIds: [] });
         } else if (target.dataset.topic) {
             update({ topicIds: [Number(target.dataset.topic)] });
             els.filters.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -182,7 +184,7 @@ async function loadList() {
     }
     try {
         const page = await apiClient.blogs({
-            q: state.q.trim(), topicIds: state.topicIds, type: state.type, sort: state.sort,
+            q: state.q.trim(), topicIds: state.topicIds, sort: state.sort,
             page: state.page - 1, size: PAGE_SIZE
         });
         if (id !== lastRequest) return;
@@ -222,12 +224,9 @@ function renderList(page) {
 }
 
 function postCard(post, { featured = false, rank = 0 } = {}) {
-    const [icon, label, tone] = TYPE_LABEL[post.type] || TYPE_LABEL.POST;
     const badges = [
         rank ? `<span class="badge lan">${ic("star")}#${rank}</span>` : "",
-        `<span class="badge ${tone}">${ic(icon)}${label}</span>`,
         post.pinned && !featured ? `<span class="badge">${ic("keep")}Đã ghim</span>` : "",
-        post.type === "QA" && post.answered ? `<span class="badge ok">${ic("check_circle")}Đã có câu trả lời hay nhất</span>` : "",
         post.status === "PROCESSING" ? `<span class="badge warn" title="Chỉ bạn thấy bài này cho đến khi quét xong">${ic("hourglass_top")}Đang quét ảnh/video</span>` : ""
     ].join("");
     const topicsHtml = post.topics.map((t) =>
@@ -245,7 +244,7 @@ function postCard(post, { featured = false, rank = 0 } = {}) {
                 ${authorHtml(post.author)}
                 <span class="grow"></span>
                 <span class="stat" title="Lượt thích">${ic("favorite")}<span class="sr-only">Lượt thích:</span>${post.likeCount}</span>
-                <span class="stat" title="${post.type === "QA" ? "Câu trả lời" : "Bình luận"}">${ic("chat_bubble")}<span class="sr-only">Bình luận:</span>${post.commentCount}</span>
+                <span class="stat" title="Bình luận">${ic("chat_bubble")}<span class="sr-only">Bình luận:</span>${post.commentCount}</span>
             </div>
         </article>`;
 }
@@ -315,19 +314,11 @@ function renderOverview(overview) {
                     ${tagChips(w.author.tags)}<span class="grow"></span><span class="note">${w.postCount} bài</span></li>`).join("")}</ul>`
                 : `<p class="note">Chưa có dữ liệu.</p>`}
         </div>
-        <div class="card">
-            <h3>${ic("contact_support")} Câu hỏi chờ trả lời</h3>
-            ${overview.openQuestions.length ? `<ul class="side-list">${overview.openQuestions.map((q) => `
-                <li><a class="side-item" href="${ROUTES.detail(q.id)}"><span>${esc(q.title)}</span>
-                    <span class="note">${timeAgo(q.createdAt)}</span></a></li>`).join("")}</ul>
-                ${overview.openQuestionCount > overview.openQuestions.length
-                    ? `<button class="link" type="button" data-show-questions>Xem tất cả ${overview.openQuestionCount} câu hỏi</button>` : ""}`
-                : `<p class="note">Câu hỏi nào cũng đã có người trả lời.</p>`}
+        <div class="card qa-promo">
+            <h3>${ic("contact_support")} Có điều chưa rõ?</h3>
+            <p class="note">Đặt câu hỏi ở Hỏi-Đáp, các senpai đã trải qua sẽ trả lời bạn.</p>
+            <a class="btn sm" href="${ROUTES.qa}">${ic("arrow_forward")}Sang Hỏi-Đáp</a>
         </div>`;
-    els.side.querySelector("[data-show-questions]")?.addEventListener("click", () => {
-        update({ type: "QA", sort: "NEWEST", q: "", topicIds: [] });
-        els.filters.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
 }
 
 // ---------------------------------------------------------------- helpers

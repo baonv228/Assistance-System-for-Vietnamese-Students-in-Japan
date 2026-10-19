@@ -23,7 +23,10 @@ async function csrfHeader(force = false) {
 
 async function request(path, options = {}, retried = false) {
     const method = (options.method || "GET").toUpperCase();
-    const headers = { "Content-Type": "application/json", ...options.headers };
+    // FormData (file uploads): the browser sets multipart/form-data with its boundary itself
+    const headers = options.body instanceof FormData
+        ? { ...options.headers }
+        : { "Content-Type": "application/json", ...options.headers };
     if (method !== "GET") {
         Object.assign(headers, await csrfHeader());
     }
@@ -79,7 +82,7 @@ export const apiClient = {
     deleteAccount: () => request("/me", { method: "DELETE" }),
     areas: () => request("/areas"),
 
-    // Blog Feed (UC-09). params: { q, topicIds: [..], type, sort, page, size }
+    // Blog Feed (UC-09), posts only. params: { q, topicIds: [..], sort, page, size }
     blogs: (params = {}) => request(`/blogs?${toQuery(params)}`),
     blogOverview: () => request("/blogs/overview"),
 
@@ -90,11 +93,33 @@ export const apiClient = {
     deleteBlog: (id) => request(`/blogs/${id}`, { method: "DELETE" }),
     reportBlog: (id, body) => post(`/blogs/${id}/report`, body),
     commentBlog: (id, body) => post(`/blogs/${id}/comments`, body),
-    chooseBestComment: (id, commentId) =>
-        request(`/blogs/${id}/best-comment`, { method: "PUT", body: JSON.stringify({ commentId }) }),
     likeComment: (id, on) => request(`/comments/${id}/like`, { method: on ? "POST" : "DELETE" }),
     reportComment: (id, body) => post(`/comments/${id}/report`, body),
-    deleteComment: (id) => request(`/comments/${id}`, { method: "DELETE" })
+    deleteComment: (id) => request(`/comments/${id}`, { method: "DELETE" }),
+
+    // Write Post (UC-11). createBlog takes FormData: part "post" (JSON {title, content, topicIds, placeIds,
+    // externalPlaceIds}) + "images" (≤ 5) + "video" (≤ 1).
+    blogCompose: () => request("/blogs/compose"),
+    // "Địa điểm liên quan" (Viết bài, Đặt câu hỏi): { items: [{ id | null, externalId, name, nameJa, category,
+    // address, source }], external: ON|OFF|SHORT|UNAVAILABLE|BUSY, externalReason }. Signed-in users only.
+    searchPlaces: (q) => request(`/places/search?${toQuery({ q })}`),
+    createBlog: (formData) => request("/blogs", { method: "POST", body: formData }),
+    scamWarnings: (placeId) => request(`/blogs/scam-warnings?${toQuery({ placeId })}`),
+
+    // Hỏi-Đáp. params: { q, topicIds: [..], status: ALL|UNANSWERED|UNSOLVED|SOLVED, sort: NEWEST|LIKES|ANSWERS, page, size }
+    questions: (params = {}) => request(`/questions?${toQuery(params)}`),
+    questionOverview: () => request("/questions/overview"),
+    questionCompose: () => request("/questions/compose"),
+    // FormData: part "question" (JSON) + "images" (≤ 5) + "video" (≤ 1)
+    askQuestion: (formData) => request("/questions", { method: "POST", body: formData }),
+    question: (id) => request(`/questions/${id}`),
+    likeQuestion: (id, on) => request(`/questions/${id}/like`, { method: on ? "POST" : "DELETE" }),
+    saveQuestion: (id, on) => request(`/questions/${id}/save`, { method: on ? "POST" : "DELETE" }),
+    deleteQuestion: (id) => request(`/questions/${id}`, { method: "DELETE" }),
+    reportQuestion: (id, body) => post(`/questions/${id}/report`, body),
+    answerQuestion: (id, body) => post(`/questions/${id}/answers`, body),
+    chooseBestAnswer: (id, answerId) =>
+        request(`/questions/${id}/best-answer`, { method: "PUT", body: JSON.stringify({ answerId }) })
 };
 
 /** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */

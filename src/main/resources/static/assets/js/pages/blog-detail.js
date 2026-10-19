@@ -4,22 +4,36 @@ import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, fullDate, ic, tagChips, timeAgo } from "../lib/ui.js";
 
+// Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
+// pages/qa-detail.html (QA, Hỏi-Đáp). Each kind has its own endpoints; comment actions are shared.
+const QUESTION = document.body.dataset.kind === "QA";
 const soon = (feature, params = {}) => `/pages/coming-soon.html?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
-    list: "/pages/blog.html",
-    topic: (id) => `/pages/blog.html?topics=${id}`,
+    list: QUESTION ? "/pages/qa.html" : "/pages/blog.html",
+    listName: QUESTION ? "Hỏi-Đáp" : "Blog",
+    topic: (id) => `${QUESTION ? "/pages/qa.html" : "/pages/blog.html"}?topics=${id}`,
     place: (id) => soon("map", { place: id }),
     profile: (id) => soon("public-profile", { id }),
-    edit: (id) => soon("blog-edit", { id }),
+    edit: (id) => soon(QUESTION ? "qa-edit" : "blog-edit", { id }),
     login: "/pages/login.html"
 };
+const API = QUESTION ? {
+    get: apiClient.question, like: apiClient.likeQuestion, save: apiClient.saveQuestion,
+    remove: apiClient.deleteQuestion, report: apiClient.reportQuestion, comment: apiClient.answerQuestion
+} : {
+    get: apiClient.blog, like: apiClient.likeBlog, save: apiClient.saveBlog,
+    remove: apiClient.deleteBlog, report: apiClient.reportBlog, comment: apiClient.commentBlog
+};
+const WORD = QUESTION ? "câu hỏi" : "bài viết";
 
 const MSG = {
     MSG19: "Không tìm thấy nội dung bạn yêu cầu. Bài viết có thể đã bị gỡ hoặc đã bị xóa.",
     MSG17: "Không tải được dữ liệu. Vui lòng thử lại.",
     MSG14: "Đã có lỗi xảy ra. Vui lòng thử lại sau.",
     MSG40: "Hãy chọn lý do báo cáo.",
-    MSG16_POST: "Bạn có chắc muốn xóa bài viết này? Bình luận của bài cũng bị xóa, và điểm bài đã nhận sẽ bị thu lại.",
+    MSG16_POST: QUESTION
+        ? "Bạn có chắc muốn xóa câu hỏi này? Các câu trả lời cũng bị xóa, và điểm câu hỏi đã nhận sẽ bị thu lại."
+        : "Bạn có chắc muốn xóa bài viết này? Bình luận của bài cũng bị xóa, và điểm bài đã nhận sẽ bị thu lại.",
     MSG16_COMMENT: "Bạn có chắc muốn xóa bình luận này?"
 };
 const STATUS_NOTE = {
@@ -43,22 +57,39 @@ let reportTarget = null;    // { kind: "blog" | "comment", id }
 
 async function load() {
     if (!Number.isInteger(blogId) || blogId <= 0) {
-        renderState("error", MSG.MSG19, `<a class="btn sm" href="${ROUTES.list}">Về Blog</a>`);
+        renderState("error", MSG.MSG19, `<a class="btn sm" href="${ROUTES.list}">Về ${ROUTES.listName}</a>`);
         return;
     }
     try {
-        render(await apiClient.blog(blogId));
+        render(await API.get(blogId));
     } catch (error) {
+        if (error.status === 404 && await openOtherKind()) {
+            return;
+        }
         if (error.status === 404) {
-            renderState("empty", MSG.MSG19, `<a class="btn sm" href="${ROUTES.list}">Về Blog</a>`);
+            renderState("empty", MSG.MSG19, `<a class="btn sm" href="${ROUTES.list}">Về ${ROUTES.listName}</a>`);
         } else {
             renderState("error", MSG.MSG17, `<button class="btn sm" type="button" data-retry>${ic("refresh")}Thử lại</button>`);
         }
     }
 }
 
+/**
+ * Questions used to open on blog-detail.html, so old bookmarks and shared links point there. When the id belongs to
+ * the other kind, move to that page (keeping the query string) instead of showing "not found".
+ */
+async function openOtherKind() {
+    try {
+        await (QUESTION ? apiClient.blog(blogId) : apiClient.question(blogId));
+    } catch {
+        return false;
+    }
+    location.replace(`${QUESTION ? "/pages/blog-detail.html" : "/pages/qa-detail.html"}${location.search}${location.hash}`);
+    return true;
+}
+
 function renderState(kind, message, action) {
-    document.title = "Bài viết – Senpai ơi";
+    document.title = `${QUESTION ? "Câu hỏi" : "Bài viết"} – Senpai ơi`;
     content.innerHTML = `<div class="state ${kind}" role="${kind === "error" ? "alert" : "status"}">
         ${ic(kind === "error" ? "cloud_off" : "search_off", "big")}<p>${esc(message)}</p>${action}</div>`;
 }
@@ -93,6 +124,7 @@ function render(data) {
             </div>` : ""}
             ${mediaHtml(data.media)}
             <div class="post-body">${richText(data.content)}</div>
+            ${placeMapHtml(data.places)}
             <div class="row actions-bar">${postActions(data)}</div>
         </article>
         <section class="card comments" aria-labelledby="comments-title">
@@ -102,6 +134,7 @@ function render(data) {
                 ? `<ol class="comment-list">${data.comments.map((c) => commentHtml(c, 0)).join("")}</ol>`
                 : `<p class="note empty-comments">${question ? "Chưa có câu trả lời. Bạn biết câu trả lời thì chia sẻ nhé." : "Chưa có bình luận nào."}</p>`}
         </section>`;
+    mountPlaceMap(data.places);
 }
 
 function authorHtml(author) {
@@ -116,6 +149,100 @@ function mediaHtml(media) {
         ? `<video controls preload="metadata" src="${esc(m.url)}"></video>`
         : `<a href="${esc(m.url)}" target="_blank" rel="noopener"><img src="${esc(m.url)}" alt="Ảnh trong bài" loading="lazy"
              ${m.width ? `width="${m.width}" height="${m.height}"` : ""}></a>`).join("")}</div>`;
+}
+
+// ---------------------------------------------------------------- places map
+// The linked places on a small OpenStreetMap map (Leaflet + OSM tiles, free, no key). Leaflet is loaded only for a
+// post that has places with a position. The map lives in its own element, moved into each new render, so liking or
+// commenting does not rebuild it.
+
+const LEAFLET = {
+    css: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+    cssHash: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=",
+    js: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+    jsHash: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+};
+const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+let leafletLoading = null;
+const placeMap = { el: null, map: null, key: "", ticket: 0 };
+
+const mappable = (places) => places.filter((p) => p.lat != null && p.lng != null);
+
+function placeMapHtml(places) {
+    if (!mappable(places).length) return "";
+    return `<section class="place-map-box" aria-labelledby="place-map-title">
+            <h2 id="place-map-title">${ic("map")}Địa điểm liên quan trên bản đồ</h2>
+            <div id="place-map-slot"></div>
+        </section>`;
+}
+
+function loadLeaflet() {
+    if (!leafletLoading) {
+        leafletLoading = new Promise((resolve, reject) => {
+            const css = Object.assign(document.createElement("link"),
+                { rel: "stylesheet", href: LEAFLET.css, integrity: LEAFLET.cssHash, crossOrigin: "" });
+            const js = Object.assign(document.createElement("script"),
+                { src: LEAFLET.js, integrity: LEAFLET.jsHash, crossOrigin: "", async: true });
+            js.onload = () => (window.L ? resolve(window.L) : reject(new Error("Leaflet")));
+            js.onerror = () => {
+                leafletLoading = null;                  // try again on the next render
+                js.remove();
+                reject(new Error("Leaflet"));
+            };
+            document.head.append(css, js);
+        });
+    }
+    return leafletLoading;
+}
+
+async function mountPlaceMap(places) {
+    const slot = document.getElementById("place-map-slot");
+    const spots = mappable(places);
+    if (!slot || !spots.length) return;
+    if (!placeMap.el) {
+        placeMap.el = document.createElement("div");
+        placeMap.el.className = "place-map";
+        placeMap.el.setAttribute("role", "region");
+        placeMap.el.setAttribute("aria-label", "Bản đồ các địa điểm liên quan");
+    }
+    slot.replaceWith(placeMap.el);
+    const key = spots.map((p) => `${p.id}@${p.lat},${p.lng}`).join("|");
+    if (placeMap.map && placeMap.key === key) {
+        placeMap.map.invalidateSize();
+        return;
+    }
+    const ticket = ++placeMap.ticket;
+    let L;
+    try {
+        L = await loadLeaflet();
+    } catch {
+        if (ticket === placeMap.ticket) {
+            placeMap.el.innerHTML = `<p class="map-off">${ic("map")}Không tải được bản đồ lúc này. Các địa điểm vẫn ở phần thẻ phía trên.</p>`;
+        }
+        return;
+    }
+    if (ticket !== placeMap.ticket) return;             // a newer render is drawing the map
+    if (placeMap.map) placeMap.map.remove();
+    placeMap.el.innerHTML = "";
+    const map = L.map(placeMap.el, { scrollWheelZoom: false });
+    L.tileLayer(OSM_TILES, { maxZoom: 19, attribution: OSM_CREDIT }).addTo(map);
+    const pin = L.divIcon({ className: "map-pin", html: ic("location_on"), iconSize: [34, 34], iconAnchor: [17, 32],
+        popupAnchor: [0, -28] });
+    const markers = spots.map((p) => {
+        const line = [p.category, p.address].filter(Boolean).join(" · ");
+        return L.marker([p.lat, p.lng], { icon: pin, title: p.name, alt: p.name })
+            .bindPopup(`<b>${esc(p.name)}</b>${line ? `<br><small>${esc(line)}</small>` : ""}
+                <br><a href="${ROUTES.place(p.id)}">Xem trên Bản đồ Senpai ơi</a>`)
+            .addTo(map);
+    });
+    if (spots.length === 1) {
+        map.setView([spots[0].lat, spots[0].lng], 16);
+    } else {
+        map.fitBounds(L.featureGroup(markers).getBounds(), { padding: [32, 32], maxZoom: 16 });
+    }
+    placeMap.map = map;
+    placeMap.key = key;
 }
 
 /** Escaped text with line breaks kept and web addresses turned into links. */
@@ -169,7 +296,7 @@ function commentForm(parentId) {
         return parentId ? "" : `<p class="note">Bài chưa được đăng nên chưa nhận bình luận.</p>`;
     }
     if (!user) {
-        return parentId ? "" : `<div class="login-box"><span>Đăng nhập để ${question ? "trả lời" : "bình luận"} và thích bài viết.</span>
+        return parentId ? "" : `<div class="login-box"><span>Đăng nhập để ${question ? "trả lời" : "bình luận"} và thích ${WORD}.</span>
             <a class="btn pri sm" href="${ROUTES.login}">${ic("login")}Đăng nhập</a></div>`;
     }
     if (!post.viewer.canInteract) {
@@ -262,7 +389,7 @@ content.addEventListener("click", async (event) => {
     switch (button.dataset.act) {
         case "like-post": {
             const on = button.getAttribute("aria-pressed") !== "true";
-            const state = await busy(button, () => guarded(() => apiClient.likeBlog(blogId, on)));
+            const state = await busy(button, () => guarded(() => API.like(blogId, on)));
             if (state) {
                 post.viewer.liked = state.active;
                 post.likeCount = state.count;
@@ -272,12 +399,12 @@ content.addEventListener("click", async (event) => {
         }
         case "save-post": {
             const on = button.getAttribute("aria-pressed") !== "true";
-            const state = await busy(button, () => guarded(() => apiClient.saveBlog(blogId, on)));
+            const state = await busy(button, () => guarded(() => API.save(blogId, on)));
             if (state) {
                 post.viewer.saved = state.saved;
                 button.outerHTML = actionButton({ act: "save-post", pressed: state.saved,
                     icon: state.saved ? "bookmark_added" : "bookmark", label: state.saved ? "Đã lưu" : "Lưu" });
-                toast(state.saved ? "Đã lưu bài viết. Xem lại ở Tôi → Đã lưu." : "Đã bỏ lưu bài viết.");
+                toast(state.saved ? `Đã lưu ${WORD}. Xem lại ở Tôi → Đã lưu.` : `Đã bỏ lưu ${WORD}.`);
             }
             break;
         }
@@ -287,9 +414,9 @@ content.addEventListener("click", async (event) => {
             break;
         case "delete-post":
             if (await confirmDialog(MSG.MSG16_POST)) {
-                const ok = await guarded(() => apiClient.deleteBlog(blogId).then(() => true));
+                const ok = await guarded(() => API.remove(blogId).then(() => true));
                 if (ok) {
-                    toast("Đã xóa bài viết.");
+                    toast(`Đã xóa ${WORD}.`);
                     setTimeout(() => location.replace(ROUTES.list), 900);
                 }
             }
@@ -328,7 +455,7 @@ content.addEventListener("click", async (event) => {
             }
             break;
         case "best": {
-            const data = await busy(button, () => guarded(() => apiClient.chooseBestComment(blogId, commentId)));
+            const data = await busy(button, () => guarded(() => apiClient.chooseBestAnswer(blogId, commentId)));
             if (data) {
                 render(data);
                 toast("Đã chọn câu trả lời hay nhất. Người trả lời được +5 điểm.");
@@ -357,7 +484,7 @@ content.addEventListener("submit", async (event) => {
     const text = form.content.value.trim();
     const error = form.querySelector(".field-error");
     if (!text) {
-        error.textContent = "Hãy viết nội dung bình luận.";
+        error.textContent = QUESTION && !form.dataset.parent ? "Hãy viết câu trả lời." : "Hãy viết nội dung bình luận.";
         error.hidden = false;
         form.content.focus();
         return;
@@ -365,11 +492,11 @@ content.addEventListener("submit", async (event) => {
     const submit = form.querySelector('[type="submit"]');
     const parentId = form.dataset.parent ? Number(form.dataset.parent) : null;
     try {
-        const data = await busy(submit, () => apiClient.commentBlog(blogId, { content: text, parentId }));
+        const data = await busy(submit, () => API.comment(blogId, { content: text, parentId }));
         const before = new Set(allIds(post.comments));
         replyTo = null;
         render(data);
-        toast("Đã đăng bình luận.");
+        toast(QUESTION && !parentId ? "Đã đăng câu trả lời." : "Đã đăng bình luận.");
         const added = allIds(data.comments).find((id) => !before.has(id));
         const node = added && document.querySelector(`#c-${added}`);
         if (node) {
@@ -407,7 +534,7 @@ const reportError = document.querySelector("#report-error");
 
 function openReport(target) {
     reportTarget = target;
-    document.querySelector("#report-title").textContent = target.kind === "blog" ? "Báo cáo bài viết" : "Báo cáo bình luận";
+    document.querySelector("#report-title").textContent = target.kind === "blog" ? `Báo cáo ${WORD}` : "Báo cáo bình luận";
     document.querySelector("#report-reasons").innerHTML = `<legend class="sr-only">Lý do</legend>`
         + post.reportReasons.map((r) => `<label class="check"><input type="radio" name="reason" value="${r.id}"><span>${esc(r.label)}</span></label>`).join("");
     document.querySelector("#report-note").value = "";
@@ -427,7 +554,7 @@ reportForm.addEventListener("submit", async (event) => {
     const submit = document.querySelector("#report-submit");
     try {
         const result = await busy(submit, () => reportTarget.kind === "blog"
-            ? apiClient.reportBlog(reportTarget.id, body)
+            ? API.report(reportTarget.id, body)
             : apiClient.reportComment(reportTarget.id, body));
         reportDlg.close();
         toast("Cảm ơn bạn. Báo cáo đã được gửi.");                       // MSG38
@@ -480,5 +607,19 @@ function toast(message, kind = "ok") {
 
 // ---------------------------------------------------------------- start
 
-user = await mountSiteHeader("blog");
+user = await mountSiteHeader(QUESTION ? "qa" : "blog");
 await load();
+announceCreated();
+
+/** Arriving from Write Post (?created=1): say whether the post is public or still being scanned (MSG34). */
+function announceCreated() {
+    const params = new URLSearchParams(location.search);
+    if (!params.has("created") || !post) return;
+    params.delete("created");
+    history.replaceState(null, "", `${location.pathname}?${params}`);
+    if (post.status === "PROCESSING") {
+        toast("Đã gửi. Ảnh và video đang được quét, trong lúc này chỉ bạn thấy bài.");
+    } else if (post.status === "PUBLISHED") {
+        toast(QUESTION ? "Câu hỏi của bạn đã được đăng." : "Bài viết của bạn đã được đăng.");
+    }
+}

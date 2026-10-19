@@ -12,6 +12,7 @@ const TABS = [
     ["learn", "Học", "school", soon("learn")],
     ["fest", "Sự kiện", "celebration", soon("fest")],
     ["blog", "Blog", "forum", "/pages/blog.html"],
+    ["qa", "Hỏi-Đáp", "contact_support", "/pages/qa.html"],
     ["guide", "Cẩm nang", "menu_book", soon("guide")],
     ["me", "Tôi", "person", "/pages/profile.html"]
 ];

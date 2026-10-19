@@ -27,8 +27,14 @@
 }
 .blog-search .count { flex: none; font-variant-numeric: tabular-nums; }
 
+/* blog.html and qa.html: one column that never grows past the screen, so a wide button group scrolls inside
+   itself instead of widening the whole page on a phone */
+.blogpage { grid-template-columns: minmax(0, 1fr); }
+
 /* ---------------- filters ---------------- */
 .blog-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* a button group moves to its own line before it starts scrolling */
+.blog-filters .seg { flex: none; }
 .seg {
     display: inline-flex;
     padding: 3px;
@@ -200,6 +206,9 @@
 .side-item:focus-visible { outline: none; box-shadow: var(--focus); }
 .side-item .note { flex: none; }
 .writer { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; }
+/* link card to Hỏi-Đáp (questions have their own section) */
+.qa-promo { background: var(--ai-soft); border-color: transparent; }
+.qa-promo .btn { justify-self: start; }
 
 @media (max-width: 860px) {
     .blog-layout { grid-template-columns: 1fr; }

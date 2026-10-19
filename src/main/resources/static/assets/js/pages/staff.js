@@ -41,7 +41,7 @@ const DESKS = {
             ["tune", "Cấu hình hệ thống", "Ngưỡng báo cáo, giới hạn tài khoản mới"],
             ["block", "Từ khóa cấm", "Bộ lọc nội dung tự động"],
             ["history", "Nhật ký hệ thống", "Ai làm gì, lúc nào"],
-            ["speed", "Hạn mức dịch vụ", "Google Maps, kiểm duyệt ảnh, lưu trữ"]
+            ["speed", "Hạn mức dịch vụ", "Bản đồ OpenStreetMap, kiểm duyệt ảnh, lưu trữ"]
         ]
     }
 };
