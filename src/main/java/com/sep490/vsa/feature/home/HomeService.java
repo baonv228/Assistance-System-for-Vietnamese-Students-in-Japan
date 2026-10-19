@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.home;
 
 import com.sep490.vsa.feature.home.HomeDtos.EventItem;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
+import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
 import com.sep490.vsa.feature.home.HomeDtos.GuideNext;
 import com.sep490.vsa.feature.home.HomeDtos.GuideProgress;
@@ -23,7 +24,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Read-only data for the homepage. Places, reviews, events, blogs and the guide are owned by other
@@ -37,6 +40,18 @@ public class HomeService {
     private static final int EVENT_DAYS = 14;
     /** Featured posts: score = likes + 2 × comments + rank bonus, at least 10. */
     private static final int FEATURED_MIN_SCORE = 10;
+    /** "Dành cho bạn": up to 5 posts, those of the last 30 days first, older ones fill the rest. */
+    private static final int FOR_YOU_SIZE = 5;
+    private static final int FOR_YOU_DAYS = 30;
+    static final String REASON_AREA = "Gần khu vực của bạn";
+    static final String REASON_STAGE = "Hợp giai đoạn của bạn";
+    /** Blog topics that suit each stage, by name so the ids do not matter. */
+    static final Map<String, List<String>> STAGE_TOPICS = Map.of(
+            "PRE", List.of("Thủ tục giấy tờ", "Visa và cư trú", "Nhà ở", "Học tiếng Nhật"),
+            "ARR", List.of("Kinh nghiệm", "Nhà ở", "Việc làm thêm", "Đi lại", "Ăn uống", "Y tế", "Ngân hàng và tiền",
+                    "Cảnh báo lừa đảo"),
+            "LEAVE", List.of("Thủ tục giấy tờ", "Visa và cư trú", "Ngân hàng và tiền", "Nhà ở"),
+            "HOME", List.of("Sau khi về nước", "Kinh nghiệm"));
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
@@ -78,7 +93,50 @@ public class HomeService {
 
         return new MemberHome((String) me.get("display_name"), stage, (String) me.get("area_name"), points, rankName,
                 phraseOfToday(), guide(userId, stage == null ? "ARR" : stage), events(), reviews(userId, areaId),
-                featured());
+                featured(), forYou(userId, areaId, stage));
+    }
+
+    /**
+     * Published posts (not questions) by other people for "Dành cho bạn". Posts of the last 30 days come first and
+     * older ones only fill the list; within each group: linked to a place in the user's area, then a topic that suits
+     * the user's stage, then likes + 2 × comments, then newest.
+     */
+    private List<FeedPost> forYou(Long userId, Long areaId, String stage) {
+        List<String> topics = stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
+        String near = areaId == null ? "FALSE" : """
+                EXISTS (SELECT 1 FROM blog_place_links bpl JOIN places p ON p.id = bpl.place_id
+                        JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
+                        WHERE bpl.blog_id = b.id AND shown.status = 'ACTIVE' AND shown.area_id = ?)""";
+        String fits = topics.isEmpty() ? "FALSE" : """
+                EXISTS (SELECT 1 FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                        WHERE btl.blog_id = b.id AND t.name IN (%s))"""
+                .formatted(String.join(", ", Collections.nCopies(topics.size(), "?")));
+        List<Object> params = new ArrayList<>();
+        if (areaId != null) {
+            params.add(areaId);
+        }
+        params.addAll(topics);
+        params.add(userId);
+        params.add(Timestamp.from(clock.instant().minus(Duration.ofDays(FOR_YOU_DAYS))));
+        params.add(FOR_YOU_SIZE);
+        return jdbc.query("""
+                SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
+                       b.comment_count, b.created_at,
+                       (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                        WHERE btl.blog_id = b.id ORDER BY t.is_other, t.sort_order, t.name LIMIT 1) AS topic_name,
+                       %s AS near, %s AS fits
+                FROM blogs b JOIN users u ON u.id = b.author_id
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> ?
+                  AND u.status <> 'DELETED' AND u.deleted_at IS NULL
+                ORDER BY (b.created_at >= ?) DESC, near DESC, fits DESC, b.like_count + 2 * b.comment_count DESC,
+                         b.created_at DESC, b.id DESC
+                LIMIT ?""".formatted(near, fits),
+                (rs, i) -> new FeedPost(rs.getLong("id"), rs.getString("title"),
+                        excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
+                        rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
+                        rs.getTimestamp("created_at").toInstant(),
+                        rs.getBoolean("near") ? REASON_AREA : rs.getBoolean("fits") ? REASON_STAGE : null),
+                params.toArray());
     }
 
     private GuideProgress guide(Long userId, String stageCode) {
