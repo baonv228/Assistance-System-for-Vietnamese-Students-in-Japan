@@ -40,6 +40,25 @@ public interface ExternalPlaces {
     List<Hit> searchStations(String name);
 
     /**
+     * Like {@link #search} but among places with one of these OSM tags ("leisure:park"), for "công viên Ueno" (the
+     * plain search does not know Vietnamese words and lists bike rentals and guest houses named "Ueno Park" first).
+     *
+     * @throws ExternalPlacesException when the service cannot be reached or answers with an error
+     */
+    default List<Hit> searchTagged(String text, List<String> osmTags) {
+        return search(text);
+    }
+
+    /**
+     * Named places around a point the user clicked on the map, nearest first (shops, stations, parks… not streets).
+     *
+     * @throws ExternalPlacesException when the service cannot be reached or answers with an error
+     */
+    default List<Hit> nearby(double lat, double lng) {
+        return List.of();
+    }
+
+    /**
      * The places with these ids ({@link Hit#id()}), keyed by id. An id the map does not know (deleted since, or
      * outside the configured countries) is missing from the answer.
      *

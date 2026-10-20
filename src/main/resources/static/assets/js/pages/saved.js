@@ -5,7 +5,7 @@ import { esc, fullDate, ic, timeAgo } from "../lib/ui.js";
 
 const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
-    place: (id) => soon("map", { place: id }),     // Map not built yet
+    place: (id) => `/map?place=${id}`,
     POST: (id) => `/blog/${id}`,
     QA: (id) => `/qa/${id}`,
     login: "/login"

@@ -39,6 +39,16 @@ if (registeredEmail) {
     form.password.focus();
 }
 
+/**
+ * Where to go after signing in: back to the page that sent a User here (/login?next=/map?place=12), else the home
+ * page of the role. Only paths of this site are followed; staff always land on their own page.
+ */
+function returnPath(user) {
+    const next = new URLSearchParams(location.search).get("next") || "";
+    const local = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\");
+    return user.role === "USER" && local ? next : user.homePath;
+}
+
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
     hideAlert(alertBox);
@@ -51,7 +61,7 @@ form.addEventListener("submit", async (event) => {
     }
     try {
         const user = await withBusy(submit, "Đang đăng nhập…", () => apiClient.login({ email, password }));
-        window.location.replace(user.homePath);
+        window.location.replace(returnPath(user));
     } catch (error) {
         markInvalid(form, error.fields);
         showAlert(alertBox, error.message);

@@ -101,6 +101,13 @@ public class OsmPlaces implements ExternalPlaces {
     private final RestClient client;
     private final String searchTemplate;
     private final String stationTemplate;
+    private final String taggedBase;
+    private final String reverseTemplate;
+    private final RestClient photon;
+    private final String nominatimSearchTemplate;
+    private final String nominatimReverseTemplate;
+    /** After Photon failed or was too slow, searches go straight to Nominatim until then. */
+    private volatile long photonDownUntil;
     private final String lookupTemplate;
     private final List<String> regions;
     private final long lookupGapMs;
@@ -135,6 +142,19 @@ public class OsmPlaces implements ExternalPlaces {
         };
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(8_000);
+        // Photon is asked first but only waited for briefly: the public server is sometimes overloaded (10–20 s per
+        // answer), and then Nominatim answers instead
+        SimpleClientHttpRequestFactory quick = new SimpleClientHttpRequestFactory() {
+            @Override
+            protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
+                super.prepareConnection(connection, httpMethod);
+                if (ssl != null && connection instanceof HttpsURLConnection https) {
+                    https.setSSLSocketFactory(ssl);
+                }
+            }
+        };
+        quick.setConnectTimeout(3_000);
+        quick.setReadTimeout(PHOTON_WAIT_MS);
         // The typed text goes in as a URI variable and is fully encoded ("+" and "&" included)
         DefaultUriBuilderFactory uris = new DefaultUriBuilderFactory();
         uris.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.TEMPLATE_AND_VALUES);
@@ -144,10 +164,29 @@ public class OsmPlaces implements ExternalPlaces {
                 .defaultHeader("User-Agent", userAgent)
                 .defaultHeader("Accept", "application/json")
                 .build();
+        this.photon = RestClient.builder()
+                .requestFactory(quick)
+                .uriBuilderFactory(uris)
+                .defaultHeader("User-Agent", userAgent)
+                .defaultHeader("Accept", "application/json")
+                .build();
+        String nominatim = lookupUrl.replaceFirst("/lookup/?$", "");
+        List<String> codes = regions.stream().map(r -> r.strip().toLowerCase(Locale.ROOT)).filter(r -> !r.isEmpty())
+                .toList();
+        String countries = codes.isEmpty() ? "" : "&countrycodes=" + String.join(",", codes);
+        this.nominatimSearchTemplate = nominatim + "/search?q={q}&format=jsonv2&limit=10&accept-language=en"
+                + "&namedetails=1&addressdetails=1" + countries;
+        this.nominatimReverseTemplate = nominatim + "/reverse?lat={lat}&lon={lon}&zoom=18&format=jsonv2"
+                + "&accept-language=en&namedetails=1&addressdetails=1";
         String search = searchUrl + "?q={q}&limit={limit}&lang=en&lat={lat}&lon={lon}";
         this.searchTemplate = search + "&layer=house&layer=other"
                 + LEFT_OUT.stream().map(t -> "&osm_tag=!" + t).collect(Collectors.joining());
         this.stationTemplate = search + STATION_TAGS.stream().map(t -> "&osm_tag=" + t).collect(Collectors.joining());
+        this.taggedBase = search;
+        // Photon reverse: the places around a point the user clicked on the map (radius in km)
+        this.reverseTemplate = searchUrl.replaceFirst("/api/?$", "/reverse")
+                + "?lat={lat}&lon={lon}&limit={limit}&radius={radius}&lang=en&layer=house&layer=other"
+                + LEFT_OUT.stream().map(t -> "&osm_tag=!" + t).collect(Collectors.joining());
         this.lookupTemplate = lookupUrl
                 + "?osm_ids={ids}&format=jsonv2&accept-language=en&namedetails=1&addressdetails=1";
         this.regions = regions.stream().map(r -> r.strip().toLowerCase(Locale.ROOT)).filter(r -> !r.isEmpty()).toList();
@@ -163,17 +202,101 @@ public class OsmPlaces implements ExternalPlaces {
 
     @Override
     public List<Hit> search(String text) {
-        return search(searchTemplate, text);
+        return search(searchTemplate, text, text);
     }
 
     @Override
     public List<Hit> searchStations(String name) {
-        return search(stationTemplate, name);
+        return search(stationTemplate, name, name + " station");
     }
 
-    private List<Hit> search(String template, String text) {
-        Map<String, Object> vars = Map.of("q", text, "limit", SEARCH_ASKED, "lat", BIAS_LAT, "lon", BIAS_LON);
-        JsonNode response = call("Photon search", () -> client.get().uri(template, vars).retrieve().body(JsonNode.class));
+    /** Among places with one of these tags ("leisure:park"): "công viên Ueno" is "Ueno" among parks. */
+    @Override
+    public List<Hit> searchTagged(String text, List<String> osmTags) {
+        List<String> tags = osmTags.stream().filter(t -> t.matches("[a-z_]+:[a-z_]+")).toList();
+        String template = taggedBase + tags.stream().map(t -> "&osm_tag=" + t).collect(Collectors.joining());
+        Set<String> wanted = tags.stream().map(t -> t.replace(':', '=')).collect(Collectors.toSet());
+        // Nominatim (the fallback) has no tag filter: keep only places of the asked kind ("Ueno" finds the station too)
+        return search(template, text, text).stream().filter(h -> wanted.contains(h.tag())).toList();
+    }
+
+    /**
+     * Named places within about {@value #NEARBY_RADIUS_KM} km of a point, nearest first (Photon reverse). When Photon
+     * is down or slow: the place Nominatim finds at that point (one, the nearest named building or shop).
+     */
+    @Override
+    public List<Hit> nearby(double lat, double lng) {
+        if (System.currentTimeMillis() >= photonDownUntil) {
+            try {
+                Map<String, Object> vars = Map.of("lat", lat, "lon", lng, "limit", SEARCH_ASKED,
+                        "radius", NEARBY_RADIUS_KM);
+                return hits(call("Photon reverse",
+                        () -> photon.get().uri(reverseTemplate, vars).retrieve().body(JsonNode.class)));
+            } catch (ExternalPlacesException e) {
+                photonFailed(e);
+            }
+        }
+        Map<String, Object> vars = Map.of("lat", lat, "lon", lng);
+        JsonNode place = paced(() -> call("Nominatim reverse",
+                () -> client.get().uri(nominatimReverseTemplate, vars).retrieve().body(JsonNode.class)));
+        Hit hit = place == null ? null : nominatimHit(place);
+        return hit == null || !inRegions(hit.countryCode()) || noise(hit.tag()) ? List.of() : List.of(hit);
+    }
+
+    static final double NEARBY_RADIUS_KM = 0.15;
+    /** How long Photon is waited for before Nominatim is asked instead. */
+    static final int PHOTON_WAIT_MS = 4_000;
+    /** After a Photon failure, how long searches skip it. */
+    static final long PHOTON_RETRY_MS = 2 * 60_000L;
+
+    /**
+     * Photon first ({@code template} with {@code text}); when it is down or slower than {@value #PHOTON_WAIT_MS} ms,
+     * Nominatim's search with {@code fallbackText} (Nominatim has no tag filter, so "Ueno park" rather than "Ueno").
+     */
+    private List<Hit> search(String template, String text, String fallbackText) {
+        if (System.currentTimeMillis() >= photonDownUntil) {
+            try {
+                Map<String, Object> vars = Map.of("q", text, "limit", SEARCH_ASKED, "lat", BIAS_LAT, "lon", BIAS_LON);
+                return hits(call("Photon search", () -> photon.get().uri(template, vars).retrieve().body(JsonNode.class)));
+            } catch (ExternalPlacesException e) {
+                photonFailed(e);
+            }
+        }
+        return nominatimSearch(fallbackText);
+    }
+
+    private void photonFailed(ExternalPlacesException e) {
+        photonDownUntil = System.currentTimeMillis() + PHOTON_RETRY_MS;
+        log.info("Photon {} ({}): Nominatim answers for the next {} minutes", e.reason(), e.getMessage(),
+                PHOTON_RETRY_MS / 60_000);
+    }
+
+    /** Nominatim's search (1 request a second for the whole server, like the lookups), map noise left out. */
+    private List<Hit> nominatimSearch(String text) {
+        Map<String, Object> vars = Map.of("q", text);
+        JsonNode response = paced(() -> call("Nominatim search",
+                () -> client.get().uri(nominatimSearchTemplate, vars).retrieve().body(JsonNode.class)));
+        List<Hit> hits = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        if (response == null) {
+            return hits;
+        }
+        for (JsonNode place : response) {
+            Hit hit = nominatimHit(place);
+            if (hit != null && inRegions(hit.countryCode()) && !noise(hit.tag()) && ids.add(hit.id())) {
+                hits.add(hit);
+                remember(hit);
+            }
+        }
+        return hits;
+    }
+
+    private static boolean noise(String tag) {
+        int eq = tag.indexOf('=');
+        return eq < 0 || noise(tag.substring(0, eq), tag.substring(eq + 1));
+    }
+
+    private List<Hit> hits(JsonNode response) {
         List<Hit> hits = new ArrayList<>();
         Set<String> ids = new HashSet<>();
         if (response == null) {

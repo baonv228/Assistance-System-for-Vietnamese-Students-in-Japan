@@ -17,9 +17,15 @@ public final class PlaceDtos {
      * @param category   category name; for a new OpenStreetMap place, the category its OSM tag maps to
      * @param source     OSM ("OpenStreetMap"), GOOGLE (places saved before the switch to OpenStreetMap), TEAM or
      *                   MODERATOR ("Nhóm ASVSJ thêm"), USER ("Ghim cộng đồng")
+     * @param lat        position, so the Map can show the place (null for old Google places saved without one)
      */
     public record PlaceOption(Long id, String externalId, String name, String nameJa, String category,
-                              String address, String source) {
+                              String address, String source, Double lat, Double lng) {
+
+        public PlaceOption(Long id, String externalId, String name, String nameJa, String category,
+                           String address, String source) {
+            this(id, externalId, name, nameJa, category, address, source, null, null);
+        }
     }
 
     /**
