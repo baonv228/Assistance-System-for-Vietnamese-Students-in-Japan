@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.auth;
 
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.feature.legal.LegalService;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.user.User;
 import com.sep490.vsa.feature.user.UserAuthProvider;
 import com.sep490.vsa.feature.user.UserAuthProviderRepository;
@@ -23,13 +24,15 @@ public class SocialLoginService {
     private final UserRepository users;
     private final UserAuthProviderRepository providers;
     private final LegalService legalService;
+    private final ContentFilter filter;
     private final Clock clock;
 
     public SocialLoginService(UserRepository users, UserAuthProviderRepository providers, LegalService legalService,
-                              Clock clock) {
+                              ContentFilter filter, Clock clock) {
         this.users = users;
         this.providers = providers;
         this.legalService = legalService;
+        this.filter = filter;
         this.clock = clock;
     }
 
@@ -59,11 +62,13 @@ public class SocialLoginService {
     }
 
     /**
-     * Creates the account of a first-time Google/Facebook user. Two requests for the same email at once (two tabs): the
-     * second meets the first account at the email's unique key and answers 409 instead of 500.
+     * Creates the account of a first-time Google/Facebook user; the display name may not hold a banned keyword. Two
+     * requests for the same email at once (two tabs): the second meets the first account at the email's unique key and
+     * answers 409 instead of 500.
      */
     @Transactional
     public User completeSignup(PendingSocialSignup profile, String displayName) {
+        filter.checkDisplayName(displayName);
         Instant now = clock.instant();
         String email = normalizeEmail(profile.email());
         if (users.existsByEmailIgnoreCase(email)) {

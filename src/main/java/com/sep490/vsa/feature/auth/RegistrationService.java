@@ -9,6 +9,7 @@ import com.sep490.vsa.feature.auth.AuthDtos.SendCodeResponse;
 import com.sep490.vsa.feature.auth.AuthDtos.VerifyCodeResponse;
 import com.sep490.vsa.feature.auth.EmailVerificationCodeRepository.SentCode;
 import com.sep490.vsa.feature.legal.LegalService;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.user.User;
 import com.sep490.vsa.feature.user.UserRepository;
 import org.slf4j.Logger;
@@ -60,6 +61,7 @@ public class RegistrationService {
     private final PasswordEncoder passwordEncoder;
     private final EmailSender emailSender;
     private final SystemSettings settings;
+    private final ContentFilter filter;
     private final TransactionTemplate tx;
     private final Clock clock;
     /** Codes sent for each client address in the last hour. Kept in memory: a restart simply resets it. */
@@ -69,13 +71,14 @@ public class RegistrationService {
 
     public RegistrationService(EmailVerificationCodeRepository codes, UserRepository users, LegalService legalService,
                                PasswordEncoder passwordEncoder, EmailSender emailSender, SystemSettings settings,
-                               PlatformTransactionManager transactionManager, Clock clock) {
+                               ContentFilter filter, PlatformTransactionManager transactionManager, Clock clock) {
         this.codes = codes;
         this.users = users;
         this.legalService = legalService;
         this.passwordEncoder = passwordEncoder;
         this.emailSender = emailSender;
         this.settings = settings;
+        this.filter = filter;
         this.tx = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -168,13 +171,14 @@ public class RegistrationService {
     }
 
     /**
-     * Step 3. The display name arrives already stripped (AuthDtos). The same ticket sent twice at once (a double
-     * click), or the same email finished in two tabs: the first one creates the account, the other answers 409 like
-     * an email that is already registered, whether it sees the ticket used or meets the new row at the email's unique
-     * key.
+     * Step 3. The display name arrives already stripped (AuthDtos) and may not hold a banned keyword. The same ticket
+     * sent twice at once (a double click), or the same email finished in two tabs: the first one creates the account,
+     * the other answers 409 like an email that is already registered, whether it sees the ticket used or meets the new
+     * row at the email's unique key.
      */
     @Transactional
     public User complete(CompleteRegistrationRequest request) {
+        filter.checkDisplayName(request.displayName());
         checkPassword(request.password());
         Instant now = clock.instant();
         EmailVerificationCode entry = codes.findByTicketHash(TokenHasher.sha256(request.ticket())).orElse(null);

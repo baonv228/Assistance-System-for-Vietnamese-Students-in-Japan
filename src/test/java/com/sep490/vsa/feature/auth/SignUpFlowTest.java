@@ -434,6 +434,29 @@ class SignUpFlowTest {
     }
 
     @Test
+    void aDisplayNameWithABannedWordIsRefusedOnBothSignUpPages() throws Exception {
+        String refused = "Tên hiển thị chứa từ khóa không được phép “gái gọi”. Hãy chọn tên khác.";
+        String email = "banned" + tag + "@signup.test";
+        String ticket = ticket(email, address(1));
+        complete(ticket, "Gái gọi Shinjuku", PASSWORD).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(refused))
+                .andExpect(jsonPath("$.data.displayName").value(refused));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email = ?", Long.class, email)).isZero();
+        // The ticket is still good: another name goes through
+        complete(ticket, "Trần Minh", PASSWORD).andExpect(status().isOk());
+
+        String socialEmail = "bannedsocial" + tag + "@signup.test";
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(PendingSocialSignup.SESSION_KEY,
+                new PendingSocialSignup("GOOGLE", "g-banned-" + tag, socialEmail, "Casino King", null));
+        completeSocial(session, "Casino King").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.data.displayName").value(
+                        "Tên hiển thị chứa từ khóa không được phép “casino”. Hãy chọn tên khác."));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email = ?", Long.class, socialEmail)).isZero();
+        completeSocial(session, "Hoa Nguyen").andExpect(status().isOk());
+    }
+
+    @Test
     void aDisplayNameIsCheckedAfterItsSpacesAreRemoved() throws Exception {
         String email = "name" + tag + "@signup.test";
         String ticket = ticket(email, address(1));

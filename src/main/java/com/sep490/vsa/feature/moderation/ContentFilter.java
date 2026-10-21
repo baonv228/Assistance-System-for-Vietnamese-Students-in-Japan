@@ -33,7 +33,9 @@ import java.util.stream.Collectors;
  *   <li>Banned keywords (Admin list, MSG36), compared word by word ({@link #findKeyword}): accents may be left out
  *       ("vay nong" matches "vay nóng") but another accented word does not match ("vậy nóng", "cá đông"); spaces and
  *       punctuation between the words do not matter ("Việc nhẹ, lương-cao"), and disguises are read through
- *       ("v.a.y n.ó.n.g", "vaynong", "v4y n0ng", fullwidth or Cyrillic letters).</li>
+ *       ("v.a.y n.ó.n.g", "vaynong", "v4y n0ng", fullwidth or Cyrillic letters). A keyword standing only inside an
+ *       everyday phrase is not counted ("co bac nao biet" is "có bác nào biết", {@link #EVERYDAY_PHRASES}). Also
+ *       checked: display names ({@link #checkDisplayName}).</li>
  *   <li>Links: only accounts with an identity tag may post links, and shortened links are never allowed.</li>
  *   <li>Contact details, same rule as links: Vietnamese and Japanese mobile numbers and Zalo, LINE, Telegram… ids
  *       only from accounts with an identity tag. Landlines and toll-free numbers (a ward office) stay allowed.</li>
@@ -235,6 +237,17 @@ public class ContentFilter {
         bannedKeyword(text).ifPresent(keyword -> {
             throw ApiException.badRequest(
                     "Chưa đăng được: nội dung chứa từ khóa không được phép “" + keyword + "”. Hãy sửa rồi gửi lại.");
+        });
+    }
+
+    /**
+     * A display name is shown on every post and comment, so a banned keyword is refused there too ("Gái gọi Shinjuku").
+     * Throws 400 with the message under the name field.
+     */
+    public void checkDisplayName(String displayName) {
+        bannedKeyword(displayName).ifPresent(keyword -> {
+            String message = "Tên hiển thị chứa từ khóa không được phép “" + keyword + "”. Hãy chọn tên khác.";
+            throw ApiException.invalid(message, Map.of("displayName", message));
         });
     }
 
