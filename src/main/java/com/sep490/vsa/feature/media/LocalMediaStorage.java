@@ -1,6 +1,8 @@
 package com.sep490.vsa.feature.media;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -13,7 +15,8 @@ import java.util.regex.Pattern;
 
 /**
  * Keeps media files in a folder on the server ({@code app.media.local-dir}, default {@code uploads/} next to
- * where the app runs; git-ignored). {@link MediaWebConfig} serves the folder at {@code /media/**}.
+ * where the app runs; git-ignored). {@link MediaController} serves them at {@code /media/**}, one checked file at a
+ * time ({@link MediaAccess}); the folder itself is never published.
  */
 @Component
 public class LocalMediaStorage implements MediaStorage {
@@ -32,10 +35,12 @@ public class LocalMediaStorage implements MediaStorage {
         }
     }
 
-    /** The folder as a file: URL ending in "/", as Spring's resource handler needs for a directory. */
-    public String rootLocation() {
-        String uri = root.toUri().toString();
-        return uri.endsWith("/") ? uri : uri + "/";
+    /**
+     * True for a key in the form {@link MediaService} makes ("blog/2026/10/&lt;uuid&gt;.jpg"): lower-case letters, digits,
+     * "-", "/" and one "." before the extension only, so no "..", backslash, "%" or upper-case spelling of a file.
+     */
+    static boolean isSafeKey(String key) {
+        return key != null && SAFE_KEY.matcher(key).matches();
     }
 
     @Override
@@ -65,6 +70,13 @@ public class LocalMediaStorage implements MediaStorage {
         }
     }
 
+    /** The file on disk, streamed as it is read (a Range request reads only that part); null when it is not there. */
+    @Override
+    public Resource resource(String key) {
+        Path path = resolve(key);
+        return Files.isRegularFile(path) ? new FileSystemResource(path) : null;
+    }
+
     @Override
     public void delete(String key) {
         try {
@@ -75,7 +87,7 @@ public class LocalMediaStorage implements MediaStorage {
     }
 
     private Path resolve(String key) {
-        if (key == null || !SAFE_KEY.matcher(key).matches()) {
+        if (!isSafeKey(key)) {
             throw new IllegalArgumentException("Invalid media key: " + key);
         }
         Path path = root.resolve(key).normalize();

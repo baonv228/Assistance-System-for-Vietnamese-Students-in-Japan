@@ -3,14 +3,14 @@
 // Filters live in the URL so refresh and the Back button keep them.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { avatar, esc, fullDate, ic, placeChip, tagChips, timeAgo } from "../lib/ui.js";
+import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     detail: (id) => `/qa/${id}`,
     ask: "/qa/ask",
     profile: (id) => soon("public-profile", { id }),
-    login: "/login"
+    login: loginUrl
 };
 
 const MSG = {
@@ -352,7 +352,7 @@ async function start() {
 }
 
 const user = await mountSiteHeader("qa");
-els.ask.href = user ? ROUTES.ask : ROUTES.login;     // Guests sign in before asking
+els.ask.href = user ? ROUTES.ask : ROUTES.login(ROUTES.ask);     // Guests sign in before asking, then ask
 bindControls();
 syncControls();
 await start();

@@ -1,7 +1,7 @@
 // Top navigation (desktop) and bottom tab bar (phone), as in the prototype.
 // Usage: const user = await mountSiteHeader("home");  → returns the signed-in user or null.
 import { apiClient, currentUser } from "../api/client.js";
-import { esc, ic, LOGO_SVG } from "../lib/ui.js";
+import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
 
 /** Features other members are building link to a placeholder page for now. */
 const soon = (feature) => `/coming-soon?f=${feature}`;
@@ -40,12 +40,18 @@ export async function mountSiteHeader(active) {
     document.body.classList.add("has-tabbar");
 
     header.querySelector("[data-logout]")?.addEventListener("click", logout);
+    // Back to this page after signing in. Read again when pressed: list pages keep their filters in the address and
+    // change it after the header is drawn.
+    const login = header.querySelector("[data-login]");
+    const refresh = () => { login.href = loginUrl(); };
+    login?.addEventListener("pointerdown", refresh);
+    login?.addEventListener("click", refresh);
     return user;
 }
 
 function accountHtml(user, active) {
     if (!user) {
-        return `<a class="btn pri sm" href="/login">${ic("login")}Đăng nhập</a>`;
+        return `<a class="btn pri sm" href="${esc(loginUrl())}" data-login>${ic("login")}Đăng nhập</a>`;
     }
     const staff = user.role !== "USER"
         ? `<a class="btn sm" href="${esc(user.homePath)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`

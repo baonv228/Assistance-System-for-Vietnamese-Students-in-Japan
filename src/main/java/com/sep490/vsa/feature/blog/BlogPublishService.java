@@ -46,6 +46,8 @@ public class BlogPublishService {
     private final Clock clock;
     /** Posts being scanned right now, so the job and the after-commit scan do not work on the same post. */
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
+    /** The retry job's place in the waiting posts: the last id of its previous page, 0 to start from the oldest. */
+    private volatile long retryAfter;
 
     public BlogPublishService(BlogWriteRepository repository, MediaScanService scanner, MediaService media,
                               PointService points, NotificationService notifications,
@@ -65,11 +67,17 @@ public class BlogPublishService {
         process(blogId);
     }
 
-    /** Every 2 minutes: posts still PROCESSING one minute after they were sent. */
+    /**
+     * Every 2 minutes: the next {@value #RETRY_BATCH} posts still PROCESSING one minute after they were sent. Each run
+     * goes on after the last post of the previous one and starts again from the oldest after a short page, so every
+     * waiting post is tried within a few runs however many others stay stuck.
+     */
     @Scheduled(fixedDelayString = "${app.moderation.retry-delay-ms:120000}",
             initialDelayString = "${app.moderation.retry-initial-delay-ms:30000}")
     public void retryPending() {
-        List<Long> ids = repository.processingBlogIds(clock.instant().minus(Duration.ofMinutes(1)), RETRY_BATCH);
+        List<Long> ids = repository.processingBlogIds(clock.instant().minus(Duration.ofMinutes(1)), retryAfter,
+                RETRY_BATCH);
+        retryAfter = ids.size() < RETRY_BATCH ? 0 : ids.get(ids.size() - 1);
         for (Long id : ids) {
             try {
                 process(id);

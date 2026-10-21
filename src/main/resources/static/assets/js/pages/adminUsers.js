@@ -133,6 +133,8 @@ function renderTable(container, pageResult) {
         rowsHtml = items.map(user => {
             const isMe = loggedInUser && loggedInUser.id === user.id;
             const isLocked = user.status === "LOCKED";
+            // A deleted account keeps its role and status (the server refuses changes to it)
+            const isDeleted = user.status === "DELETED";
             const initial = (user.displayName || "U").charAt(0).toUpperCase();
 
             return `
@@ -140,7 +142,7 @@ function renderTable(container, pageResult) {
                     <td>
                         <div class="user-cell">
                             <div class="user-avatar">
-                                ${user.avatarUrl ? `<img src="${esc(user.avatarUrl)}" alt="">` : initial}
+                                ${user.avatarUrl ? `<img src="${esc(user.avatarUrl)}" alt="">` : esc(initial)}
                             </div>
                             <div class="user-meta">
                                 <span class="name">
@@ -161,9 +163,10 @@ function renderTable(container, pageResult) {
                     </td>
                     <td><span class="note">${esc(formatDateTime(user.createdAt))}</span></td>
                     <td>
+                        ${isDeleted ? '<span class="note">-</span>' : `
                         <div style="display:flex; gap:6px;">
                             <button type="button" class="btn sm" data-edit-role="${user.id}" 
-                                    data-user='${JSON.stringify(user)}'
+                                    data-user="${esc(JSON.stringify(user))}"
                                     ${isMe ? 'disabled title="Không thể tự đổi vai trò của chính mình"' : 'title="Phân quyền tài khoản"'}>
                                 ${ic("manage_accounts")} Vai trò
                             </button>
@@ -181,6 +184,7 @@ function renderTable(container, pageResult) {
                                 </button>
                             `}
                         </div>
+                        `}
                     </td>
                 </tr>
             `;
@@ -281,7 +285,7 @@ function openChangeRoleModal(user) {
         </div>
 
         <div class="info" style="font-size:13px;" id="modLimitNotice">
-            ${ic("info")} Lưu ý: Hệ thống chỉ cho phép tối đa <b>3 Moderator</b> hoạt động cùng một thời điểm theo cấu hình hệ thống.
+            ${ic("info")} Lưu ý: Số Moderator hoạt động cùng một thời điểm không vượt quá cấu hình <b>Số lượng Moderator tối đa</b> (tối đa 3).
         </div>
     `;
 
@@ -316,7 +320,7 @@ function openToggleStatusModal(userId, userName, nextStatus) {
         </div>
         <div class="field">
             <label for="lockReasonInput">Lý do khóa tài khoản (lưu nhật ký kiểm toán):</label>
-            <input type="text" id="lockReasonInput" class="admin-search-input" 
+            <input type="text" id="lockReasonInput" class="admin-search-input" maxlength="500"
                    placeholder="Ví dụ: Đăng tải nội dung lừa đảo, vi phạm nhiều lần…">
         </div>
     ` : `

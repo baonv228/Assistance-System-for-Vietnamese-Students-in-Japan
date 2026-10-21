@@ -44,11 +44,15 @@ public class PointService {
         jdbc.update("UPDATE users SET points = points + ? WHERE id = ?", delta, userId);
     }
 
-    /** Points this user currently holds from one piece of content (sum of its transactions). */
+    /**
+     * Points this user currently holds from one piece of content (sum of its transactions). A locking read: it sees
+     * the latest committed rows (not the transaction's snapshot) and keeps them locked, so two withdrawals of the
+     * same content at the same moment cannot both take the points back.
+     */
     public int balanceFor(long userId, String refType, long refId) {
         Integer sum = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(delta), 0) FROM point_transactions
-                WHERE user_id = ? AND ref_type = ? AND ref_id = ?""", Integer.class, userId, refType, refId);
+                WHERE user_id = ? AND ref_type = ? AND ref_id = ? FOR UPDATE""", Integer.class, userId, refType, refId);
         return sum == null ? 0 : sum;
     }
 

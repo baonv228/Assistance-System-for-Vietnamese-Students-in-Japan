@@ -115,7 +115,8 @@ function askDelete() {
     danger.innerHTML = `<div class="card warncard">
         <b>Xóa tài khoản?</b>
         <p class="note">Hồ sơ, điểm và tag bị xóa; yêu cầu tag đang chờ và ảnh minh chứng bị hủy. Bạn sẽ bị đăng xuất và
-            không thể khôi phục. Bài viết và review của bạn được xóa hoặc ẩn danh (nhóm đang chốt).</p>
+            không thể khôi phục. Bài viết, câu hỏi, bình luận và câu trả lời của bạn sẽ bị ẩn với mọi người; review của
+            bạn được xóa hoặc ẩn danh (nhóm đang chốt).</p>
         <div class="row"><button class="btn dan solid" type="button" id="delete-yes">Xóa tài khoản</button>
             <button class="btn" type="button" id="delete-no">Hủy</button></div>
     </div>`;

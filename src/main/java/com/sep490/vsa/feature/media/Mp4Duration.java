@@ -20,7 +20,8 @@ public final class Mp4Duration {
     /**
      * The video's length, or empty when the bytes are not an MP4/MOV file, have no readable duration (0), or
      * are fragmented ({@code moof} boxes: the movie header then does not cover the whole video, so its length
-     * cannot be trusted; phone cameras do not write such files).
+     * cannot be trusted; phone cameras do not write such files). A box size past the end of the file is read as
+     * "up to the end", so every offset stays between 0 and {@code data.length} and crafted sizes cannot loop.
      */
     public static Optional<Info> read(byte[] data) {
         if (data == null || data.length < 16) {
@@ -46,6 +47,9 @@ public final class Mp4Duration {
             if (size < header || !isBoxType(type)) {
                 return Optional.empty();
             }
+            // A 64-bit size can be up to 2^63 - 1: without this cap pos would overflow, wrap back into the file and
+            // loop forever (or reach a negative offset). pos + header <= data.length was checked, so size >= header.
+            size = Math.min(size, data.length - pos);
             if ("ftyp".equals(type) && pos + header + 4 <= data.length) {
                 quickTime = "qt  ".equals(type(data, pos + header));
             } else if ("moov".equals(type) && moovStart < 0) {
@@ -82,6 +86,7 @@ public final class Mp4Duration {
             if (size < header) {
                 return Optional.empty();
             }
+            size = Math.min(size, end - pos);       // same overflow guard as in read(): pos never passes end
             if ("mvhd".equals(type)) {
                 long body = pos + header;
                 if (body + 4 > end) {

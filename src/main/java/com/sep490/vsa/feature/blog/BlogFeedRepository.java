@@ -31,10 +31,14 @@ import java.util.Map;
 @Repository
 public class BlogFeedRepository {
 
-    /** Posts a viewer may see: published ones, plus their own posts whose media is still being scanned. */
+    /**
+     * Posts a viewer may see: published ones, plus their own posts whose media is still being scanned; never those of
+     * a locked or deleted account ({@link ActiveAuthors}).
+     */
     private static final String VISIBLE = """
             b.blog_type = 'POST'
-            AND (b.status = 'PUBLISHED' OR (b.status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))""";
+            AND (b.status = 'PUBLISHED' OR (b.status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))
+            AND %s""".formatted(ActiveAuthors.of("b"));
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -72,13 +76,17 @@ public class BlogFeedRepository {
                 params, BlogFeedRepository::row);
     }
 
-    /** Published posts (not questions) with these ids, in the given order (used for the featured block). */
+    /**
+     * Published posts (not questions) of active accounts with these ids, in the given order (used for the featured
+     * block: a post whose author was locked after the hourly snapshot is left out at once).
+     */
     public List<Row> findPublished(List<Long> ids) {
         if (ids.isEmpty()) {
             return List.of();
         }
         Map<Long, Row> byId = new HashMap<>();
-        jdbc.query(SELECT_ROW + " WHERE b.id IN (:ids) AND b.status = 'PUBLISHED' AND b.blog_type = 'POST'", Map.of("ids", ids),
+        jdbc.query(SELECT_ROW + " WHERE b.id IN (:ids) AND b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND "
+                        + ActiveAuthors.of("b"), Map.of("ids", ids),
                 (ResultSet rs) -> {
                     while (rs.next()) {
                         Row r = row(rs, 0);
@@ -213,13 +221,14 @@ public class BlogFeedRepository {
                 (rs, i) -> new TopicRef(rs.getLong(1), rs.getString(2)));
     }
 
+    /** Topics with the most published posts of active accounts. */
     public List<TopicCount> popularTopics(int limit) {
         return jdbc.query("""
                 SELECT t.id, t.name, COUNT(*) AS posts FROM blog_topic_links btl
                 JOIN blog_topics t ON t.id = btl.topic_id JOIN blogs b ON b.id = btl.blog_id
-                WHERE t.is_active AND b.status = 'PUBLISHED' AND b.blog_type = 'POST'
+                WHERE t.is_active AND b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND %s
                 GROUP BY t.id, t.name, t.is_other, t.sort_order
-                ORDER BY posts DESC, t.is_other, t.sort_order LIMIT :limit""",
+                ORDER BY posts DESC, t.is_other, t.sort_order LIMIT :limit""".formatted(ActiveAuthors.of("b")),
                 Map.of("limit", limit), (rs, i) -> new TopicCount(rs.getLong(1), rs.getString(2), rs.getLong(3)));
     }
 
@@ -237,29 +246,41 @@ public class BlogFeedRepository {
 
     // ---------------------------------------------------------------- featured snapshots
 
-    /** Blog ids of the latest snapshot for WEEK or MONTH, by rank. */
-    public List<Long> latestFeatured(String period) {
+    /**
+     * Blog ids of the latest snapshot for WEEK or MONTH, by rank, whose score still reaches {@code minScore} (an Admin
+     * who raises featured_min_score sees it at once; a lower minimum waits for the next hourly snapshot).
+     */
+    public List<Long> latestFeatured(String period, int minScore) {
         return jdbc.query("""
                 SELECT fs.blog_id FROM featured_snapshots fs
-                WHERE fs.period = :period
+                WHERE fs.period = :period AND fs.score >= :minScore
                   AND fs.computed_at = (SELECT MAX(x.computed_at) FROM featured_snapshots x WHERE x.period = :period)
                 ORDER BY fs.rank_no""",
-                Map.of("period", period), (rs, i) -> rs.getLong(1));
+                Map.of("period", period, "minScore", minScore), (rs, i) -> rs.getLong(1));
     }
 
-    /** Candidate for a featured snapshot (posts only): score = likes + 2 × comments + the author's rank bonus. */
+    /**
+     * Candidate for a featured snapshot (posts only): score = likes + 2 × comments + the author's rank bonus. Only
+     * published comments by active accounts other than the post's author count, so an author cannot push their own
+     * post into "Bài nổi bật" by commenting under it ({@code comment_count}, shown on the cards, still counts them);
+     * comments of locked or deleted accounts are hidden ({@link ActiveAuthors}) and count nowhere.
+     */
     public record Candidate(Long blogId, Long authorId, int score) {
     }
 
+    /** Candidates since {@code since} with at least {@code minScore}, best first (newer first on a tie). */
     public List<Candidate> featuredCandidates(Instant since, int minScore) {
         return jdbc.query("""
                 SELECT b.id, b.author_id,
-                       b.like_count + 2 * b.comment_count
+                       b.like_count
+                         + 2 * (SELECT COUNT(*) FROM comments c
+                                WHERE c.blog_id = b.id AND c.status = 'PUBLISHED' AND c.author_id <> b.author_id
+                                  AND %s)
                          + COALESCE((SELECT MAX(r.featured_bonus) FROM ranks r WHERE r.min_points <= u.points), 0) AS score
                 FROM blogs b JOIN users u ON u.id = b.author_id
                 WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.created_at >= :since AND u.status = 'ACTIVE'
                 HAVING score >= :minScore
-                ORDER BY score DESC, b.created_at DESC, b.id DESC""",
+                ORDER BY score DESC, b.created_at DESC, b.id DESC""".formatted(ActiveAuthors.of("c")),
                 Map.of("since", Timestamp.from(since), "minScore", minScore),
                 (rs, i) -> new Candidate(rs.getLong(1), rs.getLong(2), rs.getInt(3)));
     }

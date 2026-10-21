@@ -55,7 +55,7 @@
                     </button>
                 </div>
                 <div class="divider">hoặc đăng ký bằng email</div>
-                <form id="email-form" novalidate>
+                <form id="email-form" method="post" novalidate>
                     <div class="field">
                         <label for="email">Email</label>
                         <input class="input" id="email" name="email" type="email" autocomplete="email" required>
@@ -71,7 +71,7 @@
                     <span id="email-shown"></span>
                     <button class="link link-button" type="button" id="change-email">Đổi</button>
                 </div>
-                <form id="code-form" novalidate>
+                <form id="code-form" method="post" novalidate>
                     <div class="field">
                         <label for="code">Mã xác thực</label>
                         <input class="input code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
@@ -88,7 +88,7 @@
 
             <!-- Step 3: name + password + consent -->
             <section class="step" data-step="3" hidden>
-                <form id="password-form" novalidate>
+                <form id="password-form" method="post" novalidate>
                     <div class="field">
                         <label for="displayName">Tên hiển thị</label>
                         <input class="input" id="displayName" name="displayName" autocomplete="nickname" maxlength="60" required>

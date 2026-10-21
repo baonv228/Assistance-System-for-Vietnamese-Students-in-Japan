@@ -31,12 +31,6 @@ async function request(path, options = {}, retried = false) {
         Object.assign(headers, await csrfHeader());
     }
     const response = await fetch(`${API_BASE}${path}`, { ...options, method, headers, credentials: "same-origin" });
-
-    // The CSRF token changes after login; fetch a fresh one and retry once
-    if (response.status === 403 && method !== "GET" && !retried) {
-        await csrfHeader(true);
-        return request(path, options, true);
-    }
     if (response.status === 204) {
         return null;
     }
@@ -45,6 +39,15 @@ async function request(path, options = {}, retried = false) {
         payload = await response.json();
     } catch {
         payload = null;
+    }
+
+    // The CSRF token changes after login (also in another tab): Spring Security then refuses the call before the
+    // application runs it, with Spring's own error body ({ status, error, path }, no "success"). Fetch a fresh token
+    // and send it once more. A 403 of the application itself (MSG18, reporting locked…) is an ApiResponse with
+    // "success": it is final and never sent twice.
+    if (response.status === 403 && method !== "GET" && !retried && payload?.success === undefined) {
+        await csrfHeader(true);
+        return request(path, options, true);
     }
     if (!response.ok || payload?.success === false) {
         const message = payload?.message

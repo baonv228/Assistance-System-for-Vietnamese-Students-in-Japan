@@ -3,7 +3,7 @@
 // Filters live in the URL so refresh and the Back button keep them.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { avatar, esc, fullDate, ic, placeChip, tagChips, timeAgo } from "../lib/ui.js";
+import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Where links go. Public Profile is still a placeholder; change it when it exists. Places open on openstreetmap.org.
 const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
@@ -12,7 +12,7 @@ const ROUTES = {
     write: "/blog/new",
     qa: "/qa",
     profile: (id) => soon("public-profile", { id }),
-    login: "/login"
+    login: loginUrl
 };
 
 const MSG = {
@@ -104,8 +104,8 @@ function renderChips() {
 }
 
 function bindControls(user) {
-    // Guests are sent to sign in before writing
-    $("#write").href = user ? ROUTES.write : ROUTES.login;
+    // Guests are sent to sign in before writing, then on to the form
+    $("#write").href = user ? ROUTES.write : ROUTES.login(ROUTES.write);
 
     let timer;
     els.q.addEventListener("input", () => {

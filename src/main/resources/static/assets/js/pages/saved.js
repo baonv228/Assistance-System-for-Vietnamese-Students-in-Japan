@@ -1,14 +1,14 @@
 // "Đã lưu" (UC Browse Favorites): saved places, posts and questions of the signed-in Member, newest saved first.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { esc, fullDate, ic, timeAgo } from "../lib/ui.js";
+import { esc, fullDate, ic, loginUrl, timeAgo } from "../lib/ui.js";
 
 const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     place: (id) => soon("map", { place: id }),     // Map not built yet
     POST: (id) => `/blog/${id}`,
     QA: (id) => `/qa/${id}`,
-    login: "/login"
+    login: loginUrl                                // back to "Đã lưu" after signing in
 };
 const SECTIONS = [
     { key: "places", title: "Địa điểm", icon: "location_on", empty: "Chưa lưu địa điểm nào." },
@@ -26,7 +26,7 @@ try {
     render();
 } catch (error) {
     if (error.status === 401) {
-        location.replace(ROUTES.login);
+        location.replace(ROUTES.login());
     } else {
         summary.textContent = "";
         content.innerHTML = `<div class="alert error">${esc(error.message)}</div>`;

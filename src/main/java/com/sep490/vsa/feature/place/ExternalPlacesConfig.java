@@ -25,7 +25,8 @@ public class ExternalPlacesConfig {
             @Value("${app.places.osm.search-url:https://photon.komoot.io/api/}") String searchUrl,
             @Value("${app.places.osm.lookup-url:https://nominatim.openstreetmap.org/lookup}") String lookupUrl,
             @Value("${app.places.osm.user-agent:SenpaiOi/1.0 (ASVSJ, FPT University SEP490 project)}") String userAgent,
-            @Value("${app.places.regions:jp,vn}") List<String> regions) {
+            @Value("${app.places.regions:jp,vn}") List<String> regions,
+            ApiUsageCounter usage) {
         if (devFake) {
             log.warn("app.places.dev-fake=true: place search shows made-up places (development only).");
             return new DevOsmPlaces();
@@ -33,7 +34,7 @@ public class ExternalPlacesConfig {
         if (osm) {
             log.info("Place search includes OpenStreetMap (Photon, Nominatim; countries: {}).",
                     regions.isEmpty() ? "all" : regions);
-            return new OsmPlaces(searchUrl, lookupUrl, userAgent, regions);
+            return new OsmPlaces(searchUrl, lookupUrl, userAgent, regions, usage);
         }
         log.warn("app.places.osm.enabled=false: place search shows ASVSJ places only.");
         return ExternalPlaces.DISABLED;

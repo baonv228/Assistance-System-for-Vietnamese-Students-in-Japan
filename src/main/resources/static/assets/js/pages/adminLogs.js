@@ -98,7 +98,7 @@ function renderLogsTable(container, pageResult) {
                     <td>${esc(log.description || "-")}</td>
                     <td>
                         ${hasDetail ? `
-                            <button type="button" class="btn sm" data-view-diff="${log.id}" data-log='${JSON.stringify(log)}'>
+                            <button type="button" class="btn sm" data-view-diff="${log.id}" data-log="${esc(JSON.stringify(log))}">
                                 ${ic("visibility")} Chi tiết
                             </button>
                         ` : '<span class="note">-</span>'}
@@ -174,7 +174,7 @@ function openDiffModal(log) {
         </div>
         <div class="field">
             <label>Mô tả:</label>
-            <div>${esc(log.description)}</div>
+            <div style="overflow-wrap:anywhere;">${esc(log.description)}</div>
         </div>
         ${log.oldValue ? `
             <div class="field">

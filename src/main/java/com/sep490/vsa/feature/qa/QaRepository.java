@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.qa;
 
+import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.BlogDtos.Author;
 import com.sep490.vsa.feature.blog.BlogDtos.TopicCount;
 import com.sep490.vsa.feature.qa.QaDtos.Stats;
@@ -22,17 +23,32 @@ import java.util.Map;
 @Repository
 public class QaRepository {
 
-    /** Questions a viewer may see: published ones, plus their own whose media is still being scanned. */
+    /**
+     * Questions a viewer may see: published ones, plus their own whose media is still being scanned; never those of a
+     * locked or deleted account ({@link ActiveAuthors}).
+     */
     private static final String VISIBLE = """
             b.blog_type = 'QA'
-            AND (b.status = 'PUBLISHED' OR (b.status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))""";
+            AND (b.status = 'PUBLISHED' OR (b.status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))
+            AND %s""".formatted(ActiveAuthors.of("b"));
 
     /**
-     * Solved = the chosen best answer is still published. A best answer later hidden by reports or removed no longer
-     * counts, the same as on the question page ({@code BlogDetailService} only shows a visible best answer).
+     * Solved = the chosen best answer is still published and its writer's account still active. A best answer later
+     * hidden by reports, removed, or written by an account that was locked or deleted no longer counts, the same as on
+     * the question page ({@code BlogDetailService} only shows a visible best answer). Also used by feature/saved.
      */
-    private static final String SOLVED_SQL =
-            "EXISTS (SELECT 1 FROM comments bc WHERE bc.id = b.best_comment_id AND bc.status = 'PUBLISHED')";
+    public static final String SOLVED_SQL = """
+            EXISTS (SELECT 1 FROM comments bc WHERE bc.id = b.best_comment_id AND bc.status = 'PUBLISHED' AND %s)"""
+            .formatted(ActiveAuthors.of("bc"));
+
+    /**
+     * "Chưa ai trả lời": no published answer (top-level comment) by an active account and not solved. Replies do not
+     * count, nor do they keep a hidden or removed answer alive; the asker's own top-level comment counts as an answer.
+     */
+    private static final String UNANSWERED_SQL = """
+            (NOT EXISTS (SELECT 1 FROM comments a WHERE a.blog_id = b.id AND a.parent_id IS NULL AND a.status = 'PUBLISHED'
+                         AND %s)
+             AND NOT %s)""".formatted(ActiveAuthors.of("a"), SOLVED_SQL);
 
     private static final String SELECT_ROW = """
             SELECT b.id, b.status, b.is_pinned, %s AS solved, b.title,
@@ -86,7 +102,7 @@ public class QaRepository {
         List<String> parts = new ArrayList<>();
         parts.add("(" + VISIBLE + ")");
         switch (query.status()) {
-            case UNANSWERED -> parts.add("b.comment_count = 0 AND NOT " + SOLVED_SQL);
+            case UNANSWERED -> parts.add(UNANSWERED_SQL);
             case UNSOLVED -> parts.add("NOT " + SOLVED_SQL);
             case SOLVED -> parts.add(SOLVED_SQL);
             case ALL -> { }
@@ -118,23 +134,26 @@ public class QaRepository {
 
     // ---------------------------------------------------------------- side statistics
 
+    /** Published questions of active accounts: all, unanswered, solved. */
     public Stats stats() {
         return jdbc.queryForObject("""
                 SELECT COUNT(*),
-                       COALESCE(SUM(b.comment_count = 0 AND NOT %1$s), 0),
-                       COALESCE(SUM(%1$s), 0)
-                FROM blogs b WHERE b.blog_type = 'QA' AND b.status = 'PUBLISHED'""".formatted(SOLVED_SQL), Map.of(),
+                       COALESCE(SUM(%1$s), 0),
+                       COALESCE(SUM(%2$s), 0)
+                FROM blogs b WHERE b.blog_type = 'QA' AND b.status = 'PUBLISHED' AND %3$s"""
+                        .formatted(UNANSWERED_SQL, SOLVED_SQL, ActiveAuthors.of("b")),
+                Map.of(),
                 (rs, i) -> new Stats(rs.getLong(1), rs.getLong(2), rs.getLong(3)));
     }
 
-    /** Topics with the most published questions. */
+    /** Topics with the most published questions of active accounts. */
     public List<TopicCount> popularTopics(int limit) {
         return jdbc.query("""
                 SELECT t.id, t.name, COUNT(*) AS questions FROM blog_topic_links btl
                 JOIN blog_topics t ON t.id = btl.topic_id JOIN blogs b ON b.id = btl.blog_id
-                WHERE t.is_active AND b.status = 'PUBLISHED' AND b.blog_type = 'QA'
+                WHERE t.is_active AND b.status = 'PUBLISHED' AND b.blog_type = 'QA' AND %s
                 GROUP BY t.id, t.name, t.is_other, t.sort_order
-                ORDER BY questions DESC, t.is_other, t.sort_order LIMIT :limit""",
+                ORDER BY questions DESC, t.is_other, t.sort_order LIMIT :limit""".formatted(ActiveAuthors.of("b")),
                 Map.of("limit", limit), (rs, i) -> new TopicCount(rs.getLong(1), rs.getString(2), rs.getLong(3)));
     }
 
@@ -143,7 +162,8 @@ public class QaRepository {
 
     /**
      * Members whose answers (top-level comments on published questions) since {@code since} were chosen as best
-     * most often, then who answered most. Answers to one's own question do not count.
+     * most often, then who answered most. Answers to one's own question do not count, nor answers to a question of a
+     * locked or deleted account (hidden, {@link ActiveAuthors}).
      */
     public List<AnswererRow> topAnswerers(Instant since, int limit) {
         return jdbc.query("""
@@ -152,11 +172,11 @@ public class QaRepository {
                 FROM comments c
                 JOIN blogs b ON b.id = c.blog_id
                 JOIN users u ON u.id = c.author_id
-                WHERE b.blog_type = 'QA' AND b.status = 'PUBLISHED' AND c.status = 'PUBLISHED'
+                WHERE b.blog_type = 'QA' AND b.status = 'PUBLISHED' AND c.status = 'PUBLISHED' AND %s
                   AND c.parent_id IS NULL AND c.author_id <> b.author_id
                   AND c.created_at >= :since AND u.status = 'ACTIVE'
                 GROUP BY u.id, u.display_name, u.avatar_url
-                ORDER BY best DESC, answers DESC, MAX(c.created_at) DESC LIMIT :limit""",
+                ORDER BY best DESC, answers DESC, MAX(c.created_at) DESC LIMIT :limit""".formatted(ActiveAuthors.of("b")),
                 Map.of("since", Timestamp.from(since), "limit", limit),
                 (rs, i) -> new AnswererRow(new Author(rs.getLong(1), rs.getString(2), rs.getString(3), List.of()),
                         rs.getLong(4), rs.getLong(5)));

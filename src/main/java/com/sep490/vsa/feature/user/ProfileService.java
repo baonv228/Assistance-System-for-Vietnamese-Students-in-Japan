@@ -2,6 +2,9 @@ package com.sep490.vsa.feature.user;
 
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.settings.SystemSettings;
+import com.sep490.vsa.feature.blog.ActiveAuthors;
+import com.sep490.vsa.feature.blog.AuthorStatusSync;
+import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.saved.SavedRepository;
 import com.sep490.vsa.feature.user.ProfileDtos.AreaResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.DailyUsage;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -28,6 +32,8 @@ import java.util.List;
 public class ProfileService {
 
     static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
+    /** reject_reason of the tag requests still pending when their owner deletes the account. */
+    static final String DELETED_ACCOUNT_REASON = "Tài khoản đã xóa";
 
     private final UserRepository users;
     private final UserAuthProviderRepository providers;
@@ -35,15 +41,22 @@ public class ProfileService {
     private final Clock clock;
     private final SystemSettings settings;
     private final SavedRepository saved;
+    private final ActiveAdminGuard adminGuard;
+    private final AuthorStatusSync authorStatusSync;
+    private final MediaService media;
 
     public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock,
-                          SystemSettings settings, SavedRepository saved) {
+                          SystemSettings settings, SavedRepository saved, ActiveAdminGuard adminGuard,
+                          AuthorStatusSync authorStatusSync, MediaService media) {
         this.users = users;
         this.providers = providers;
         this.jdbc = jdbc;
         this.clock = clock;
         this.settings = settings;
         this.saved = saved;
+        this.adminGuard = adminGuard;
+        this.authorStatusSync = authorStatusSync;
+        this.media = media;
     }
 
     @Transactional(readOnly = true)
@@ -100,11 +113,39 @@ public class ProfileService {
         return get(userId);
     }
 
+    /**
+     * Staff may delete their own account too, except the last active Admin ({@link ActiveAdminGuard}). The account's
+     * posts, questions, comments and answers are kept but hidden from everyone ({@link ActiveAuthors}); the comment
+     * counts of the posts it commented on are recounted in the same transaction, and "Bài nổi bật" after it
+     * ({@link AuthorStatusSync}).
+     * <p>
+     * As the "Xóa tài khoản" box says: the profile is anonymized, the points go to 0, the identity tags are revoked,
+     * pending tag requests are closed (REJECTED, "Tài khoản đã xóa") and every tag proof photo is discarded (file
+     * removed after commit). Point and tag history rows stay.
+     */
     @Transactional
     public void deleteAccount(Long userId) {
         User user = load(userId);
+        authorStatusSync.beforeStatusChange(userId);
+        if (user.getRole() == Role.ADMIN) {
+            adminGuard.assertAnotherActiveAdmin(userId);
+        }
+        Instant now = clock.instant();
         providers.deleteByUserId(userId);
-        user.anonymize(clock.instant());
+        jdbc.update("UPDATE user_tags SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                Timestamp.from(now), userId);
+        media.discard(jdbc.queryForList("""
+                SELECT proof_media_id FROM tag_requests WHERE user_id = ? AND proof_media_id IS NOT NULL""",
+                Long.class, userId));
+        jdbc.update("""
+                UPDATE tag_requests SET status = 'REJECTED', reject_reason = ?, reviewed_at = ?
+                WHERE user_id = ? AND status = 'PENDING'""", DELETED_ACCOUNT_REASON, Timestamp.from(now), userId);
+        // points is read-only in User (kept in step with point_transactions by PointService)
+        jdbc.update("UPDATE users SET points = 0 WHERE id = ?", userId);
+        user.anonymize(now);
+        // Write the DELETED status now, so the recount (plain SQL in this transaction) sees it
+        users.flush();
+        authorStatusSync.afterStatusChange(userId);
     }
 
     public List<AreaResponse> areas() {

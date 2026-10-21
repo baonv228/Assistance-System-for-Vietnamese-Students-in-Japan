@@ -80,12 +80,17 @@ class BlogFeedQueryTest {
         List<Candidate> sorted = List.of(
                 new Candidate(1L, 10L, 40), new Candidate(2L, 10L, 35), new Candidate(3L, 11L, 30),
                 new Candidate(4L, 12L, 20), new Candidate(5L, 13L, 15));
-        assertThat(FeaturedSnapshotService.top(sorted)).extracting(Candidate::blogId).containsExactly(1L, 3L, 4L);
+        assertThat(FeaturedSnapshotService.top(sorted, 3, 10)).extracting(Candidate::blogId).containsExactly(1L, 3L, 4L);
+        // featured_top_n = 1 (Admin setting)
+        assertThat(FeaturedSnapshotService.top(sorted, 1, 10)).extracting(Candidate::blogId).containsExactly(1L);
     }
 
     @Test
     void featuredIgnoresScoresBelowTheMinimum() {
         List<Candidate> sorted = List.of(new Candidate(1L, 10L, 12), new Candidate(2L, 11L, 9));
-        assertThat(FeaturedSnapshotService.top(sorted)).extracting(Candidate::blogId).containsExactly(1L);
+        assertThat(FeaturedSnapshotService.top(sorted, 3, 10)).extracting(Candidate::blogId).containsExactly(1L);
+        // featured_min_score (Admin setting) lowered to 5, raised to 13
+        assertThat(FeaturedSnapshotService.top(sorted, 3, 5)).extracting(Candidate::blogId).containsExactly(1L, 2L);
+        assertThat(FeaturedSnapshotService.top(sorted, 3, 13)).isEmpty();
     }
 }

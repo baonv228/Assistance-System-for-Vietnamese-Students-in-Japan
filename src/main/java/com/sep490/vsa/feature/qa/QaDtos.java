@@ -20,7 +20,7 @@ public final class QaDtos {
      *
      * @param status      PUBLISHED, or PROCESSING when the asker views their own question while its media is scanned
      * @param solved      the asker chose a best answer ("Đã giải quyết")
-     * @param answerCount published answers and replies
+     * @param answerCount published answers and replies of active accounts
      */
     public record QuestionCard(Long id, String status, boolean pinned, boolean solved, String title, String excerpt,
                                Author author, List<TopicRef> topics, List<PlaceRef> places, int likeCount,

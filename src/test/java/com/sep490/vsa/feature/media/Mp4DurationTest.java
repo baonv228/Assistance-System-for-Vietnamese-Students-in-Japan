@@ -5,9 +5,11 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class Mp4DurationTest {
 
@@ -95,5 +97,37 @@ class Mp4DurationTest {
     @Test
     void zeroTimescaleIsUnreadable() {
         assertThat(Mp4Duration.read(concat(ftyp("isom"), box("moov", mvhd0(0, 5000))))).isEmpty();
+    }
+
+    // ---------------------------------------------------------------- crafted box sizes (W1)
+
+    /** A box with a 64-bit size: {@code 00000001 type size}. */
+    private static byte[] largeBox(String type, long size) {
+        return ByteBuffer.allocate(16).putInt(1).put(type.getBytes(StandardCharsets.ISO_8859_1)).putLong(size).array();
+    }
+
+    @Test
+    void aHugeBoxSizeCannotWrapTheReaderBackToTheStart() {
+        // 16 + 0x7FFFFFFFFFFFFFF0 overflows to Long.MIN_VALUE, whose int cast is 0: before the fix the reader went
+        // back to the ftyp box and looped forever on a 32-byte upload
+        byte[] file = concat(ftyp("isom"), largeBox("free", 0x7FFFFFFFFFFFFFF0L));
+        assertThat(file).hasSize(32);
+        assertTimeoutPreemptively(Duration.ofSeconds(1), () -> assertThat(Mp4Duration.read(file)).isEmpty());
+    }
+
+    @Test
+    void aHugeBoxSizeInsideTheMovieBoxCannotWrapEither() {
+        // Same wrap inside moov: the second child jumps back to the first one, again and again
+        byte[] file = concat(ftyp("isom"), box("moov", concat(box("free", new byte[8]), largeBox("free", 0x7FFFFFFFFFFFFFF0L))));
+        assertTimeoutPreemptively(Duration.ofSeconds(1), () -> assertThat(Mp4Duration.read(file)).isEmpty());
+    }
+
+    @Test
+    void aBoxSizeLeadingToANegativeOffsetIsUnreadableNotAnError() {
+        // The last box wraps the position to Long.MIN_VALUE + 8, where bytes 8..23 of the first box read as one more
+        // 64-bit box that lands at -4: before the fix, ArrayIndexOutOfBoundsException (a 500 for the upload)
+        byte[] file = concat(box("free", largeBox("skip", 0x7FFFFFFFFFFFFFF4L)), largeBox("free", 0x7FFFFFFFFFFFFFF0L));
+        assertThat(file).hasSize(40);
+        assertTimeoutPreemptively(Duration.ofSeconds(1), () -> assertThat(Mp4Duration.read(file)).isEmpty());
     }
 }

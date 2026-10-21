@@ -2,14 +2,25 @@ package com.sep490.vsa.feature.place;
 
 import com.sep490.vsa.feature.place.ExternalPlaces.Hit;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceOption;
+import com.sep490.vsa.feature.place.PlaceDtos.PlaceSearch;
 import com.sep490.vsa.feature.place.PlaceRepository.Nearby;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.data.Offset.offset;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class PlaceServiceRulesTest {
 
@@ -109,6 +120,59 @@ class PlaceServiceRulesTest {
         // A restaurant named like the station 300 m away is not the station
         assertThat(PlaceService.sameAsvsjPlace(hit("N7", "Nippori", "amenity=restaurant", 35.7300, 139.7735), near))
                 .isEmpty();
+    }
+
+    @Test
+    void aMapPlaceIsShownAsTheAsvsjPlaceWhenOnlyItsTwinIsCloseToIt() {
+        // N3 and W2 are one cafe (same name, 40 m apart); W2 is 30 m from the ASVSJ place P, N3 is 70 m from it
+        Nearby p = new Nearby(new PlaceOption(7L, null, "Cafe Hoa", null, "Quán ăn", null, "TEAM"), "food", "Cafe Hoa",
+                35.70000, 139.70000);
+        Hit n3 = hit("N3", "Cafe Hoa", "amenity=cafe", 35.70063, 139.70000);
+        Hit w2 = hit("W2", "Cafe Hoa", "building=yes", 35.70027, 139.70000);
+        assertThat(PlaceService.metres(n3.lat(), n3.lng(), w2.lat(), w2.lng())).isCloseTo(40, offset(0.5));
+        assertThat(PlaceService.metres(w2.lat(), w2.lng(), p.lat(), p.lng())).isCloseTo(30, offset(0.5));
+        assertThat(PlaceService.metres(n3.lat(), n3.lng(), p.lat(), p.lng())).isCloseTo(70, offset(0.5));
+
+        PlaceRepository repository = repository();
+        when(repository.activeNear(anyList(), anyDouble())).thenReturn(List.of(p));
+        ExternalPlaces map = map();
+        when(map.search(anyString())).thenReturn(List.of(n3, w2));
+
+        PlaceSearch found = new PlaceService(repository, map, Clock.systemUTC()).search(1L, "Cafe Hoa");
+        assertThat(found.items()).extracting(PlaceOption::id).containsExactly(7L);    // P, and no new place
+        // Both copies were compared with the ASVSJ places, not only the one kept
+        verify(repository).activeNear(argThat(points -> points.size() == 2), anyDouble());
+    }
+
+    @Test
+    void theSearchMemoryKeepsJapaneseVoicingMarksAndAccentsApart() {
+        PlaceRepository repository = repository();
+        ExternalPlaces map = map();
+        when(map.search(anyString())).thenReturn(List.of());
+        PlaceService service = new PlaceService(repository, map, Clock.systemUTC());
+
+        for (String text : List.of("パン", "バン", "ハン", " パン ", "phở", "pho", "PHO", "Phở  Hà   Nội", "phở hà nội")) {
+            service.search(1L, text);
+        }
+        for (String asked : List.of("パン", "バン", "ハン", "phở", "pho", "Phở  Hà   Nội")) {
+            verify(map, times(1)).search(asked);
+        }
+        verify(map, times(6)).search(anyString());            // " パン ", "PHO" and "phở hà nội" came from memory
+        assertThat(PlaceService.searchKey(" Phở 　 HÀ  Nội ")).isEqualTo("phở hà nội");
+    }
+
+    private static PlaceRepository repository() {
+        PlaceRepository repository = mock(PlaceRepository.class);
+        when(repository.search(anyString(), anyInt())).thenReturn(List.of());
+        when(repository.otherCategory()).thenReturn(new PlaceRepository.Category("other", "Địa điểm khác"));
+        return repository;
+    }
+
+    private static ExternalPlaces map() {
+        ExternalPlaces map = mock(ExternalPlaces.class);
+        when(map.engine()).thenReturn("OSM");
+        when(map.enabled()).thenReturn(true);
+        return map;
     }
 
     @Test

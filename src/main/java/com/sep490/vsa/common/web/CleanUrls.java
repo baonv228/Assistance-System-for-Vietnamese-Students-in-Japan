@@ -45,6 +45,9 @@ public final class CleanUrls {
         PAGES.put("/moderator", "/pages/moderator/index.html");
         PAGES.put("/academic", "/pages/academic/index.html");
         PAGES.put("/admin", "/pages/admin/index.html");
+        PAGES.put("/admin/users", "/pages/admin/users.html");
+        PAGES.put("/admin/system-config", "/pages/admin/system-config.html");
+        PAGES.put("/admin/activity-log", "/pages/admin/activity-log.html");
     }
 
     private static final Map<String, String> DETAIL_PAGES = Map.of(

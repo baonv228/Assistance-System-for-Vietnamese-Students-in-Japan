@@ -9,16 +9,15 @@ const codeForm = document.querySelector("#code-form");
 const passwordForm = document.querySelector("#password-form");
 const resendButton = document.querySelector("#resend");
 
-const state = { email: "", ticket: "", resendTimer: null };
+// passwordMinLength: Admin setting password_min_length, sent with the verified code (8 until then)
+const state = { email: "", ticket: "", resendTimer: null, passwordMinLength: 8 };
 
-const signedIn = await currentUser();
-if (signedIn) {
-    window.location.replace(signedIn.homePath);
-}
-
+// Everything the forms need is set up before any await (the checks are at the end of this file): pressing Enter
+// early must never send a form itself. The forms are method="post" too, so a native submit never puts the
+// email, code or password in the address bar.
 setupPasswordToggles();
-await setupSocialButtons(apiClient);
-const passwordOk = setupPasswordRules(passwordForm.password, document.querySelector("#password-rules"));
+const passwordOk = setupPasswordRules(passwordForm.password, document.querySelector("#password-rules"),
+    () => state.passwordMinLength);
 
 function goTo(step) {
     document.querySelectorAll(".step").forEach((section) => {
@@ -122,6 +121,12 @@ codeForm.addEventListener("submit", async (event) => {
         const result = await withBusy(document.querySelector("#verify"), "Đang kiểm tra…",
             () => apiClient.verifyRegisterCode(state.email, code));
         state.ticket = result.ticket;
+        if (Number.isInteger(result.passwordMinLength) && result.passwordMinLength > 0) {
+            state.passwordMinLength = result.passwordMinLength;
+        }
+        document.querySelector('#password-rules [data-rule="length"]').textContent =
+            `Từ ${state.passwordMinLength} ký tự`;
+        passwordForm.password.dispatchEvent(new Event("input"));
         clearInterval(state.resendTimer);
         markInvalid(codeForm);
         showAlert(alertBox, "Email đã được xác thực. Hãy tạo mật khẩu.", "success");
@@ -146,8 +151,11 @@ passwordForm.addEventListener("submit", async (event) => {
     };
     const problems = {};
     if (body.displayName.length < 2) problems.displayName = "Tên hiển thị dài từ 2 đến 60 ký tự.";
-    if (!passwordOk()) problems.password = "Mật khẩu chưa đạt yêu cầu: từ 8 ký tự, có cả chữ và số.";
-    else if (passwordForm.confirm.value !== body.password) problems.confirm = "Mật khẩu nhập lại không khớp.";
+    if (!passwordOk()) {
+        problems.password = `Mật khẩu chưa đạt yêu cầu: từ ${state.passwordMinLength} ký tự, có cả chữ và số.`;
+    } else if (passwordForm.confirm.value !== body.password) {
+        problems.confirm = "Mật khẩu nhập lại không khớp.";
+    }
     if (!body.adultConfirmed) problems.adultConfirmed = "Bạn phải từ đủ 18 tuổi để đăng ký.";
     else if (!body.acceptTerms) problems.acceptTerms = "Bạn cần đồng ý Điều khoản, Chính sách bảo mật và Quy tắc cộng đồng.";
     if (Object.keys(problems).length) {
@@ -173,3 +181,11 @@ passwordForm.addEventListener("submit", async (event) => {
         }
     }
 });
+
+// Already signed in → go to the home page of this role. If the check fails (network, server error) the forms still work.
+const signedIn = await currentUser().catch(() => null);
+if (signedIn) {
+    window.location.replace(signedIn.homePath);
+}
+
+await setupSocialButtons(apiClient);

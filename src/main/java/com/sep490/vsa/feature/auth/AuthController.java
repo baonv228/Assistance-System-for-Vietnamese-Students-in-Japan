@@ -77,9 +77,11 @@ public class AuthController {
 
     // ----- Email sign-up: 1. send code → 2. verify code → 3. name + password -----
 
+    /** The client address counts toward the hourly code limit (behind a proxy it must be the visitor's address). */
     @PostMapping("/register/send-code")
-    public ApiResponse<SendCodeResponse> sendCode(@Valid @RequestBody SendCodeRequest request) {
-        return ApiResponse.ok("Đã gửi mã xác thực tới email của bạn.", registrationService.sendCode(request.email()));
+    public ApiResponse<SendCodeResponse> sendCode(@Valid @RequestBody SendCodeRequest body, HttpServletRequest request) {
+        return ApiResponse.ok("Đã gửi mã xác thực tới email của bạn.",
+                registrationService.sendCode(body.email(), request.getRemoteAddr()));
     }
 
     @PostMapping("/register/verify-code")

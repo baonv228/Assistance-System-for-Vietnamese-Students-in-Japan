@@ -9,7 +9,7 @@
 // the form is filled from GET …/{id}/edit and sent with PUT; attached photos/video can be removed (keepMediaIds).
 import { apiClient, ApiError } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { esc, ic } from "../lib/ui.js";
+import { esc, ic, loginUrl } from "../lib/ui.js";
 
 const QUESTION = document.body.dataset.kind === "QA";
 const EDIT_ID = Number((location.pathname.match(/^\/(?:blog|qa)\/(\d+)\/edit\/?$/) || [])[1]) || null;
@@ -25,14 +25,14 @@ const ROUTES = QUESTION ? {
     listName: "Hỏi-Đáp",
     detail: (id) => `/qa/${id}?${EDITING ? "edited" : "created"}=1`,
     back: EDITING ? `/qa/${EDIT_ID}` : "/qa",
-    login: "/login",
+    login: loginUrl,                     // back to this form after signing in
     newPin: "/coming-soon?f=map"         // Map → "Cắm ghim" (New Pin), not built yet
 } : {
     list: "/blog",
     listName: "Blog",
     detail: (id) => `/blog/${id}?${EDITING ? "edited" : "created"}=1`,
     back: EDITING ? `/blog/${EDIT_ID}` : "/blog",
-    login: "/login",
+    login: loginUrl,
     newPin: "/coming-soon?f=map"
 };
 /** Each section has its own endpoints; the rules behind them are the same. */
@@ -153,7 +153,7 @@ async function start() {
     const user = await mountSiteHeader(QUESTION ? "qa" : "blog");
     if (!user) {
         renderGate("login", `Bạn cần đăng nhập để ${QUESTION ? "đặt câu hỏi" : "viết bài"}.`,
-            `<a class="btn pri" href="${ROUTES.login}">${ic("login")}Đăng nhập</a>`);
+            `<a class="btn pri" href="${esc(ROUTES.login())}">${ic("login")}Đăng nhập</a>`);
         return;
     }
     await loadOptions();
@@ -172,7 +172,7 @@ async function loadOptions() {
     } catch (error) {
         if (error.status === 401) {
             renderGate("login", `Bạn cần đăng nhập để ${QUESTION ? "đặt câu hỏi" : "viết bài"}.`,
-                `<a class="btn pri" href="${ROUTES.login}">${ic("login")}Đăng nhập</a>`);
+                `<a class="btn pri" href="${esc(ROUTES.login())}">${ic("login")}Đăng nhập</a>`);
         } else if (error.status === 403) {
             renderGate("block", MSG.MSG18, `<a class="btn" href="${ROUTES.list}">Về ${ROUTES.listName}</a>`);
         } else if (error.status === 404) {
@@ -242,7 +242,7 @@ function setupForm() {
     }
     els.linkNote.innerHTML = canPostLinks
         ? `${ic("link")} Bạn có tag định danh nên được chèn link. Không dùng link rút gọn (bit.ly, tinyurl…).`
-        : `${ic("link_off")} Chỉ tài khoản đã có tag định danh mới được chèn link.`;
+        : `${ic("link_off")} Chỉ tài khoản đã có tag định danh mới được chèn link, ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.`;
     els.mediaRules.textContent = `Ảnh JPG, PNG hoặc HEIC, tối đa ${limits.imagesMax} ảnh, mỗi ảnh không quá ${limits.imageMaxMb} MB. `
         + `Video MP4 hoặc MOV, tối đa ${limits.videoMaxSeconds} giây và ${limits.videoMaxMb} MB.`;
     renderQuota(quota);
@@ -359,9 +359,13 @@ const placeCache = new Map(); // text → answer, so typing back and forth does 
 
 els.placeQ.addEventListener("input", () => {
     clearTimeout(placeTimer);
-    // The list on screen belongs to the previous text: Enter must not pick from it
+    // The list on screen belongs to the previous text: Enter must not pick from it, it is shown as out of date, and an
+    // answer still on its way for that text is ignored. Without this, an answer arriving during the pause before the
+    // new search (longer in a background tab) was drawn as if it were current and selected its first place again.
+    placeSearch++;
     activePlace = -1;
     syncActivePlace();
+    if (!els.placeList.hidden) els.placeList.setAttribute("aria-busy", "true");
     placeTimer = setTimeout(searchPlaces, SEARCH_DELAY);
 });
 
@@ -448,6 +452,7 @@ function renderPlaceList(q, failed, signedOut = false) {
     }
     const opening = els.placeList.hidden;
     els.placeList.innerHTML = html;
+    els.placeList.removeAttribute("aria-busy");
     els.placeList.hidden = false;
     els.placeQ.setAttribute("aria-expanded", "true");
     syncActivePlace();
@@ -483,6 +488,7 @@ function closePlaceList() {
     placeSearch++;                                      // answers still on their way are ignored
     els.placeList.hidden = true;
     els.placeList.innerHTML = "";
+    els.placeList.removeAttribute("aria-busy");
     els.placeQ.setAttribute("aria-expanded", "false");
     els.placeQ.removeAttribute("aria-activedescendant");
     placeResults = [];

@@ -6,12 +6,14 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -32,36 +34,60 @@ public class BlogDetailRepository {
 
     // ---------------------------------------------------------------- reads
 
+    /** @param authorStatus {@code users.status} of the author: only an ACTIVE author's post is shown ({@link ActiveAuthors}) */
     public record BlogRow(Long id, Long authorId, String authorName, String avatarUrl, int authorPoints,
-                          String type, String title, String content, String status, boolean pinned, boolean edited,
-                          Long bestCommentId, int likeCount, int commentCount, Instant createdAt) {
+                          String authorStatus, String type, String title, String content, String status, boolean pinned,
+                          boolean edited, Long bestCommentId, int likeCount, int commentCount, Instant createdAt) {
+
+        public boolean authorActive() {
+            return "ACTIVE".equals(authorStatus);
+        }
+    }
+
+    private static final String SELECT_BLOG = """
+            SELECT b.id, b.author_id, u.display_name, u.avatar_url, u.points, u.status, b.blog_type, b.title, b.content,
+                   b.status, b.is_pinned, b.is_edited, b.best_comment_id, b.like_count, b.comment_count, b.created_at
+            FROM blogs b JOIN users u ON u.id = b.author_id WHERE b.id = ?""";
+
+    private static BlogRow blog(ResultSet rs, int i) throws SQLException {
+        return new BlogRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getInt(5),
+                rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9), rs.getString(10),
+                rs.getBoolean(11), rs.getBoolean(12), nullableLong(rs, 13), rs.getInt(14), rs.getInt(15),
+                instant(rs.getTimestamp(16)));
     }
 
     public Optional<BlogRow> findBlog(long id) {
-        return jdbc.query("""
-                SELECT b.id, b.author_id, u.display_name, u.avatar_url, u.points, b.blog_type, b.title, b.content,
-                       b.status, b.is_pinned, b.is_edited, b.best_comment_id, b.like_count, b.comment_count, b.created_at
-                FROM blogs b JOIN users u ON u.id = b.author_id WHERE b.id = ?""",
-                (rs, i) -> new BlogRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getInt(5),
-                        rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9), rs.getBoolean(10),
-                        rs.getBoolean(11), nullableLong(rs, 12), rs.getInt(13), rs.getInt(14), instant(rs.getTimestamp(15))),
-                id).stream().findFirst();
+        return jdbc.query(SELECT_BLOG, BlogDetailRepository::blog, id).stream().findFirst();
     }
 
+    /**
+     * {@link #findBlog} with the post row locked until the transaction ends, so actions on one post run one after
+     * another. Only the post row is locked ({@code OF b}): a lock on the author's {@code users} row would also block
+     * everyone who notifies or pays that author.
+     */
+    public Optional<BlogRow> lockBlog(long id) {
+        return jdbc.query(SELECT_BLOG + " FOR UPDATE OF b", BlogDetailRepository::blog, id).stream().findFirst();
+    }
+
+    /** @param authorStatus {@code users.status} of the writer: a comment of a locked or deleted account is hidden */
     public record CommentRow(Long id, Long blogId, Long parentId, Long authorId, String authorName, String avatarUrl,
-                             int authorPoints, String content, String status, boolean edited, int likeCount,
-                             Instant createdAt) {
+                             int authorPoints, String authorStatus, String content, String status, boolean edited,
+                             int likeCount, Instant createdAt) {
+
+        public boolean authorActive() {
+            return "ACTIVE".equals(authorStatus);
+        }
     }
 
     private static final String SELECT_COMMENT = """
-            SELECT c.id, c.blog_id, c.parent_id, c.author_id, u.display_name, u.avatar_url, u.points, c.content,
+            SELECT c.id, c.blog_id, c.parent_id, c.author_id, u.display_name, u.avatar_url, u.points, u.status, c.content,
                    c.status, c.is_edited, c.like_count, c.created_at
             FROM comments c JOIN users u ON u.id = c.author_id""";
 
     private static CommentRow comment(ResultSet rs, int i) throws SQLException {
         return new CommentRow(rs.getLong(1), rs.getLong(2), nullableLong(rs, 3), rs.getLong(4), rs.getString(5),
-                rs.getString(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getBoolean(10), rs.getInt(11),
-                instant(rs.getTimestamp(12)));
+                rs.getString(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getBoolean(11),
+                rs.getInt(12), instant(rs.getTimestamp(13)));
     }
 
     /** Every comment of the post, oldest first; the service decides what each viewer sees. */
@@ -72,6 +98,19 @@ public class BlogDetailRepository {
 
     public Optional<CommentRow> findComment(long id) {
         return jdbc.query(SELECT_COMMENT + " WHERE c.id = ?", BlogDetailRepository::comment, id).stream().findFirst();
+    }
+
+    /** {@link #findComment} with the comment row (only that row) locked until the transaction ends. */
+    public Optional<CommentRow> lockComment(long id) {
+        return jdbc.query(SELECT_COMMENT + " WHERE c.id = ? FOR UPDATE OF c", BlogDetailRepository::comment, id)
+                .stream().findFirst();
+    }
+
+    /** The comment's parent id; null for a top-level comment or a comment that no longer exists. */
+    public Long parentIdOf(long commentId) {
+        List<Long> parent = jdbc.query("SELECT parent_id FROM comments WHERE id = ?",
+                (rs, i) -> nullableLong(rs, 1), commentId);
+        return parent.isEmpty() ? null : parent.get(0);
     }
 
     public boolean hasReplies(long commentId) {
@@ -127,12 +166,51 @@ public class BlogDetailRepository {
                 WHERE c.blog_id = ? AND cl.user_id = ?""", (rs, i) -> rs.getLong(1), blogId, userId));
     }
 
-    public record Member(String role, String status) {
+    public record Member(String role, String status, Instant createdAt) {
     }
 
     public Optional<Member> member(long userId) {
-        return jdbc.query("SELECT role, status FROM users WHERE id = ?",
-                (rs, i) -> new Member(rs.getString(1), rs.getString(2)), userId).stream().findFirst();
+        return jdbc.query("SELECT role, status, created_at FROM users WHERE id = ?",
+                (rs, i) -> new Member(rs.getString(1), rs.getString(2), instant(rs.getTimestamp(3))), userId)
+                .stream().findFirst();
+    }
+
+    // ---------------------------------------------------------------- comment limits (spam)
+
+    /**
+     * Locks the user's {@code user_daily_usage} row of {@code day} (made when missing) until the transaction ends:
+     * the same lock Write Post takes, so one user's comments (and posts) run one after another. The upsert takes
+     * the row lock directly. Not the {@code users} row: other people's comments, likes and notifications take shared
+     * locks on users rows (foreign keys), so two users answering each other at the same moment would deadlock.
+     */
+    public void lockUserDay(long userId, LocalDate day) {
+        jdbc.update("""
+                INSERT INTO user_daily_usage (user_id, usage_date) VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE posts = posts""", userId, Date.valueOf(day));
+    }
+
+    /** When the user last wrote a comment, reply or answer (any status); null if never. */
+    public Instant lastCommentAt(long userId) {
+        return instant(jdbc.queryForObject("SELECT MAX(created_at) FROM comments WHERE author_id = ?",
+                Timestamp.class, userId));
+    }
+
+    /** The user's comments written in [from, to), any status (a comment the author deleted is gone). */
+    public long countComments(long userId, Instant from, Instant to) {
+        return count("SELECT COUNT(*) FROM comments WHERE author_id = ? AND created_at >= ? AND created_at < ?",
+                userId, Timestamp.from(from), Timestamp.from(to));
+    }
+
+    public record CommentText(Long blogId, String content) {
+    }
+
+    /** The user's newest comments since {@code since} on posts other than {@code exceptBlogId}, at most {@code limit}. */
+    public List<CommentText> recentCommentsElsewhere(long userId, long exceptBlogId, Instant since, int limit) {
+        return jdbc.query("""
+                SELECT blog_id, content FROM comments WHERE author_id = ? AND blog_id <> ? AND created_at >= ?
+                ORDER BY id DESC LIMIT ?""",
+                (rs, i) -> new CommentText(rs.getLong(1), rs.getString(2)),
+                userId, exceptBlogId, Timestamp.from(since), limit);
     }
 
     // ---------------------------------------------------------------- likes and saves
@@ -196,12 +274,37 @@ public class BlogDetailRepository {
         return key.getKey().longValue();
     }
 
-    /** Keeps {@code blogs.comment_count} equal to the number of published comments and replies. */
+    /** Published comments and replies of active accounts: what {@code blogs.comment_count} counts. */
+    private static final String SHOWN_COMMENTS = """
+            SELECT COUNT(*) FROM comments c WHERE c.blog_id = %s AND c.status = 'PUBLISHED' AND %s""";
+
+    /**
+     * Keeps {@code blogs.comment_count} equal to the number of published comments and replies whose writer is an
+     * active account (comments of locked or deleted accounts are hidden, {@link ActiveAuthors}).
+     */
     public void recountComments(long blogId) {
         jdbc.update("""
-                UPDATE blogs SET comment_count = (SELECT COUNT(*) FROM comments WHERE blog_id = ? AND status = 'PUBLISHED'),
-                                 updated_at = updated_at
-                WHERE id = ?""", blogId, blogId);
+                UPDATE blogs SET comment_count = (%s), updated_at = updated_at
+                WHERE id = ?""".formatted(SHOWN_COMMENTS.formatted("?", ActiveAuthors.of("c"))), blogId, blogId);
+    }
+
+    /**
+     * Locks the rows of the posts the user commented on, in id order, until the transaction ends. An account change
+     * takes these locks before it writes the {@code users} row: the comment actions also lock the post first and
+     * reach users rows later (foreign keys, {@link #recountComments}), so the two never wait for each other in a circle.
+     */
+    public void lockPostsCommentedBy(long userId) {
+        jdbc.query("""
+                SELECT b.id FROM blogs b WHERE b.id IN (SELECT x.blog_id FROM comments x WHERE x.author_id = ?)
+                ORDER BY b.id FOR UPDATE OF b""", (rs, i) -> rs.getLong(1), userId);
+    }
+
+    /** {@link #recountComments} for every post the user commented on, after the user's status changed. */
+    public void recountPostsCommentedBy(long userId) {
+        jdbc.update("""
+                UPDATE blogs b SET b.comment_count = (%s), b.updated_at = b.updated_at
+                WHERE b.id IN (SELECT x.blog_id FROM comments x WHERE x.author_id = ?)"""
+                .formatted(SHOWN_COMMENTS.formatted("b.id", ActiveAuthors.of("c"))), userId);
     }
 
     /** New text of a published comment, marked "đã sửa". Likes, replies and the best-answer mark stay. */
@@ -246,8 +349,14 @@ public class BlogDetailRepository {
         return jdbc.update("UPDATE blogs SET status = 'HIDDEN' WHERE id = ? AND status = 'PUBLISHED'", blogId) > 0;
     }
 
-    /** Deletes the post; topics, places, media links, likes, saves, comments and snapshots go with it (CASCADE). */
+    /**
+     * Deletes the post; topics, places, media links, likes, saves and snapshots go with it (CASCADE). Its comments
+     * are deleted first, newest first: a reply is always newer than the comment it answers, so each comment goes
+     * after its replies and no cascade runs down a chain of replies (MySQL refuses cascades deeper than 15 levels,
+     * which a thread of 15 nested replies already reaches).
+     */
     public void deleteBlog(long blogId) {
+        jdbc.update("DELETE FROM comments WHERE blog_id = ? ORDER BY id DESC", blogId);
         jdbc.update("DELETE FROM blogs WHERE id = ?", blogId);
     }
 

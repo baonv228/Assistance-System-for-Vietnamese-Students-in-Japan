@@ -12,7 +12,8 @@ public final class AdminDtos {
     }
 
     /**
-     * Dữ liệu thống kê tổng quan hệ thống hiển thị tại Dashboard
+     * Dữ liệu thống kê tổng quan hệ thống hiển thị tại Dashboard.
+     * Không tính tài khoản đã xóa; moderatorCount chỉ tính Moderator đang hoạt động (so với maxModerators).
      */
     public record DashboardStats(
             long totalUsers,
@@ -60,7 +61,9 @@ public final class AdminDtos {
     ) {}
 
     /**
-     * Thông tin một tham số cấu hình hệ thống
+     * Thông tin một tham số cấu hình hệ thống.
+     * {@code wired}: hệ thống đang dùng tham số này (sửa được, giá trị nguyên từ {@code min} đến {@code max});
+     * false = "Chưa áp dụng", chỉ xem, min và max là null.
      */
     public record SystemSettingItem(
             String settingKey,
@@ -68,7 +71,10 @@ public final class AdminDtos {
             String label,
             String group,
             String description,
-            Instant updatedAt
+            Instant updatedAt,
+            boolean wired,
+            Integer min,
+            Integer max
     ) {}
 
     /**

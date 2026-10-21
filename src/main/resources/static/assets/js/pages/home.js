@@ -1,7 +1,7 @@
 // Homepage: guests see an invitation, signed-in users see what matters to them today (as in the prototype).
-import { apiClient } from "../api/client.js";
+import { apiClient, ApiError } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { esc, eventWhen, formatDay, ic, LOGO_SVG, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
+import { esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
 
 const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
@@ -176,6 +176,7 @@ function profilePrompt(home, areas) {
                 <select class="select" id="hp-stage"><option value="">Chưa chọn</option>
                 ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === home.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         </div>
+        <p class="alert error" data-error role="alert" hidden></p>
         <div class="row"><button class="btn pri sm" type="button" data-save>Lưu</button>
             <button class="btn sm" type="button" data-later>Để sau</button></div>
     </div>`;
@@ -186,11 +187,28 @@ function bindPrompt() {
     if (!prompt) {
         return;
     }
-    prompt.querySelector("[data-save]").addEventListener("click", async () => {
+    const save = prompt.querySelector("[data-save]");
+    const error = prompt.querySelector("[data-error]");
+    save.addEventListener("click", async () => {
         const areaId = document.querySelector("#hp-area").value;
         const stage = document.querySelector("#hp-stage").value;
-        await apiClient.updateProfile({ areaId: areaId ? Number(areaId) : null, stage: stage || null });
-        await renderMember();
+        save.disabled = true;                       // one save at a time
+        save.textContent = "Đang lưu…";
+        error.hidden = true;
+        try {
+            await apiClient.updateProfile({ areaId: areaId ? Number(areaId) : null, stage: stage || null });
+            await renderMember();                   // draws the page again, without the prompt
+        } catch (err) {
+            // The choices stay; "Lưu" can be pressed again (also when the page could not be reloaded after saving)
+            save.disabled = false;
+            save.textContent = "Lưu";
+            // The server's message; a network failure gets MSG14 (the browser's own text is in English)
+            const message = err instanceof ApiError && err.message ? err.message : "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
+            error.innerHTML = err.status === 401
+                ? `${esc(message)} <a class="link" href="${esc(loginUrl())}">Đăng nhập lại</a>`
+                : esc(message);
+            error.hidden = false;
+        }
     });
     prompt.querySelector("[data-later]").addEventListener("click", () => {
         try {
