@@ -105,7 +105,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   BCrypt's 72-byte limit. Display names are stripped (Unicode spaces too) before validation. SMTP waits at most 5 s
   (`spring.mail.properties.mail.smtp.*timeout`).
 - "Xóa tài khoản" (`ProfileService.deleteAccount`) also revokes the user's tags, closes pending tag requests (REJECTED,
-  "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction.
+  "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
+  COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`,
@@ -131,7 +132,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `system_settings` (`FOR UPDATE`, READ COMMITTED), so changes run one at a time; promoting to MODERATOR and unlocking a
   MODERATOR are refused when the ACTIVE Moderators already reach the limit (value kept within 1–3). Lock order:
   system_settings → posts (AuthorStatusSync) → users. The dashboard counts no DELETED account and only ACTIVE
-  Moderators. Missing user → 404. Lock/unlock reason kept to 500 characters.
+  Moderators. Missing user → 404. Lock/unlock reason kept to 500 characters. "Xóa tài khoản" does not wait for that
+  lock, so the role/status UPDATE only applies while the row is still as read (not DELETED, same status); otherwise
+  400 "Tài khoản này đã bị xóa…".
 - Settings (`AdminConfigService.SETTING_METADATA`): only "wired" settings (read by the code) can be changed, each to a
   whole number in its range ("cần chốt" ranges in that table; ASCII digits only, stored as "7" not "007"); the others
   answer 400 "Cài đặt này chưa được áp dụng trong hệ thống." and show "Chưa áp dụng" on the page. A new setting the code

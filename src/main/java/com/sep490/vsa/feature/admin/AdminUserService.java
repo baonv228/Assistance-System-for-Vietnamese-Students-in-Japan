@@ -211,8 +211,11 @@ public class AdminUserService {
             assertModeratorSlot(maxModerators);
         }
 
-        // Cập nhật vai trò
-        jdbc.update("UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", newRole.name(), targetUserId);
+        // Cập nhật vai trò. "Xóa tài khoản" không chờ khóa ở trên: tài khoản vừa bị xóa trong lúc này thì không đổi gì
+        if (jdbc.update("UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'DELETED'",
+                newRole.name(), targetUserId) == 0) {
+            throw ApiException.badRequest(DELETED_ACCOUNT);
+        }
 
         // Ghi nhận nhật ký kiểm toán
         logService.recordLog(
@@ -285,8 +288,12 @@ public class AdminUserService {
             adminGuard.assertAnotherActiveAdmin(targetUserId);
         }
 
-        // Cập nhật trạng thái, rồi đếm lại số bình luận của các bài đó
-        jdbc.update("UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", newStatus.name(), targetUserId);
+        // Cập nhật trạng thái, rồi đếm lại số bình luận của các bài đó. Chỉ khi trạng thái vẫn như lúc đọc: người dùng có
+        // thể vừa "Xóa tài khoản" (không chờ khóa ở trên), và một tài khoản đã xóa không bao giờ bị khóa/mở lại
+        if (jdbc.update("UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?",
+                newStatus.name(), targetUserId, targetUser.status()) == 0) {
+            throw ApiException.badRequest(DELETED_ACCOUNT);
+        }
         authorStatusSync.afterStatusChange(targetUserId);
 
         String cleanReason = reason != null && !reason.isBlank()

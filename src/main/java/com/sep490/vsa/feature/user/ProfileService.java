@@ -13,6 +13,7 @@ import com.sep490.vsa.feature.user.ProfileDtos.RankResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.TagResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
@@ -122,8 +123,12 @@ public class ProfileService {
      * As the "Xóa tài khoản" box says: the profile is anonymized, the points go to 0, the identity tags are revoked,
      * pending tag requests are closed (REJECTED, "Tài khoản đã xóa") and every tag proof photo is discarded (file
      * removed after commit). Point and tag history rows stay.
+     * <p>
+     * READ COMMITTED like an Admin's lock ({@code AdminUserService.updateUserStatus}): the comment recount then locks
+     * only the posts it changes, not every post row it reads, so a member commenting at the same time waits for no
+     * other post and the two cannot deadlock.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteAccount(Long userId) {
         User user = load(userId);
         authorStatusSync.beforeStatusChange(userId);

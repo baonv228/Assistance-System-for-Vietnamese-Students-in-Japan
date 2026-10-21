@@ -400,7 +400,10 @@ public class AdminConfigService {
         BannedKeyword kw = keywordRepository.findById(id)
                 .orElseThrow(() -> ApiException.badRequest("Không tìm thấy từ khóa cấm với ID: " + id));
 
-        keywordRepository.delete(kw);
+        // Một Admin khác (hoặc tab khác) có thể vừa xóa đúng từ này: khi đó không còn gì để xóa, báo như từ không có
+        if (jdbc.update("DELETE FROM banned_keywords WHERE id = ?", id) == 0) {
+            throw ApiException.badRequest("Không tìm thấy từ khóa cấm với ID: " + id);
+        }
         contentFilter.keywordsChanged();
 
         logService.recordLog(
