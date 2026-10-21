@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -111,6 +112,17 @@ class LoginFlowTest {
         assertThat(row.get("locked_until")).isNull();
         assertThat(count(id)).isZero();
         assertThat(row.get("last_login_at")).isNotNull();
+    }
+
+    @Test
+    void signingInDropsTheCsrfTokenFromBefore() throws Exception {
+        long id = user("ACTIVE", HASH);
+        // The token the page used to sign in is cleared, so a token planted before the sign-in is worth nothing
+        login(email(id), PASSWORD).andExpect(status().isOk())
+                .andExpect(cookie().maxAge("XSRF-TOKEN", 0));
+        // A failed sign-in keeps it (nothing changed)
+        login(email(id), WRONG_PASSWORD).andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("XSRF-TOKEN"));
     }
 
     @Test

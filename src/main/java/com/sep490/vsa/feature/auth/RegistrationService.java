@@ -127,7 +127,7 @@ public class RegistrationService {
 
         try {
             tx.executeWithoutResult(status ->
-                    codes.invalidateOtherOpenCodes(email, PURPOSE_REGISTER, codeId, clock.instant()));
+                    codes.invalidateOlderOpenCodes(email, PURPOSE_REGISTER, codeId, clock.instant()));
         } catch (RuntimeException e) {
             // The email is out; older codes cannot be verified anyway (only the newest one is checked)
             log.warn("Could not close the older sign-up codes after sending a new one: {}", e.toString());

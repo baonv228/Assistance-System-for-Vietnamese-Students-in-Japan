@@ -4,6 +4,7 @@ import com.sep490.vsa.feature.user.User;
 import com.sep490.vsa.feature.user.UserStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -52,7 +53,14 @@ public class SocialLoginSuccessHandler implements AuthenticationSuccessHandler {
             response.sendRedirect(LOGIN + "?error=social_no_email");
             return;
         }
-        Optional<User> existing = socialLoginService.findOrLink(profile);
+        Optional<User> existing;
+        try {
+            existing = socialLoginService.findOrLink(profile);
+        } catch (DataIntegrityViolationException e) {
+            // The same Google account signed in twice at once (two tabs): the other one has just linked it to the
+            // account, so it is found by that link now
+            existing = socialLoginService.findOrLink(profile);
+        }
         if (existing.isPresent()) {
             if (existing.get().getStatus() != UserStatus.ACTIVE) {
                 response.sendRedirect(LOGIN + "?error=account_locked");

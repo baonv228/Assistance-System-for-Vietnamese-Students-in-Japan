@@ -18,6 +18,7 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -50,15 +51,22 @@ public class SecurityConfig {
         return new HttpSessionSecurityContextRepository();
     }
 
+    /** The XSRF-TOKEN cookie; also cleared by SessionSignIn so a token from before the sign-in is not kept. */
+    @Bean
+    public CsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    SecurityContextRepository contextRepository,
+                                                   CsrfTokenRepository csrfTokenRepository,
                                                    JdbcTemplate jdbc,
                                                    ObjectProvider<ClientRegistrationRepository> clientRegistrations,
                                                    AuthenticationSuccessHandler socialLoginSuccessHandler) throws Exception {
         http
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
                 .securityContext(context -> context.securityContextRepository(contextRepository))
                 // Role and status are read again on every request: a lock or role change applies at once

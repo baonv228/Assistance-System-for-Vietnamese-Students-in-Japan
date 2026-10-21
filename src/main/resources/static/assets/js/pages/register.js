@@ -76,7 +76,7 @@ emailForm.addEventListener("submit", async (event) => {
         codeForm.code.value = "";
         goTo(2);
     } catch (error) {
-        markInvalid(emailForm, error.fields.email ? error.fields : { email: true });
+        markInvalid(emailForm, error.fields?.email ? error.fields : { email: true });
         showAlert(alertBox, error.message);
     }
 });

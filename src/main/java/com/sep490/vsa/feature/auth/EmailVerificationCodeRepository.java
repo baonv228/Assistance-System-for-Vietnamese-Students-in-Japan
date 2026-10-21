@@ -34,11 +34,14 @@ public interface EmailVerificationCodeRepository extends JpaRepository<EmailVeri
     /** Codes sent since {@code since}, of every email: the per-mailbox and whole-site sending limits. */
     List<SentCode> findByCreatedAtAfter(Instant since);
 
-    /** Closes every other unused code of this email once a new one has been sent. */
+    /**
+     * Closes the older unused codes of this email once a new one has been sent. Only older ones: a code saved after
+     * {@code keepId} (another tab, while this email waited on a slow mail server) is newer and stays open.
+     */
     @Modifying
     @Query("update EmailVerificationCode c set c.usedAt = :now "
-            + "where c.email = :email and c.purpose = :purpose and c.usedAt is null and c.id <> :keepId")
-    int invalidateOtherOpenCodes(@Param("email") String email, @Param("purpose") String purpose,
+            + "where c.email = :email and c.purpose = :purpose and c.usedAt is null and c.id < :keepId")
+    int invalidateOlderOpenCodes(@Param("email") String email, @Param("purpose") String purpose,
                                  @Param("keepId") long keepId, @Param("now") Instant now);
 
     /**

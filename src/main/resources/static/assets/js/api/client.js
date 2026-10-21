@@ -11,11 +11,25 @@ export class ApiError extends Error {
 
 let csrf = null;
 
+const OFFLINE = "Không kết nối được máy chủ. Hãy kiểm tra mạng rồi thử lại.";
+
+/** fetch, with a lost connection (offline, server down) turned into an ApiError the pages show like any other. */
+async function send(url, options) {
+    try {
+        return await fetch(url, options);
+    } catch {
+        throw new ApiError(OFFLINE, 0);
+    }
+}
+
 /** Spring Security needs the CSRF token in a header for every POST/PUT/PATCH/DELETE. */
 async function csrfHeader(force = false) {
     if (!csrf || force) {
-        const response = await fetch(`${API_BASE}/auth/csrf`, { credentials: "same-origin" });
-        const payload = await response.json();
+        const response = await send(`${API_BASE}/auth/csrf`, { credentials: "same-origin" });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.data?.headerName) {
+            throw new ApiError("Có lỗi xảy ra, vui lòng thử lại.", response.status);
+        }
         csrf = payload.data;
     }
     return { [csrf.headerName]: csrf.token };
@@ -30,7 +44,7 @@ async function request(path, options = {}, retried = false) {
     if (method !== "GET") {
         Object.assign(headers, await csrfHeader());
     }
-    const response = await fetch(`${API_BASE}${path}`, { ...options, method, headers, credentials: "same-origin" });
+    const response = await send(`${API_BASE}${path}`, { ...options, method, headers, credentials: "same-origin" });
     if (response.status === 204) {
         return null;
     }

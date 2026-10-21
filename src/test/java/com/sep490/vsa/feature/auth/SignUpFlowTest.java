@@ -263,6 +263,39 @@ class SignUpFlowTest {
         verifyCode(other, first).andExpect(status().isOk()).andExpect(jsonPath("$.data.ticket").isNotEmpty());
     }
 
+    @Test
+    void aSlowEmailNeverClosesTheNewerCodeSentMeanwhile() throws Exception {
+        setting("email_code_resend_seconds", "0");
+        String email = "slow" + tag + "@signup.test";
+        CountDownLatch firstMailing = new CountDownLatch(1);
+        CountDownLatch secondSent = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger mails = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            if (mails.incrementAndGet() == 1) {
+                firstMailing.countDown();
+                secondSent.await(10, TimeUnit.SECONDS);         // the first email waits on a slow mail server
+            }
+            return null;
+        }).when(mail).send(eq(email), anyString(), anyString());
+
+        // Two tabs: the first code is saved, then its email hangs while the second code is saved and sent
+        CompletableFuture<Integer> first = CompletableFuture.supplyAsync(() -> {
+            try {
+                return sendCode(email, address(1)).andReturn().getResponse().getStatus();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        assertThat(firstMailing.await(10, TimeUnit.SECONDS)).isTrue();
+        sendCode(email, address(1)).andExpect(status().isOk());
+        String newest = codeSentTo(email);
+        secondSent.countDown();
+        assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+
+        // The slow request closed only the older codes: the newest one, in the newest email, still works
+        verifyCode(email, newest).andExpect(status().isOk()).andExpect(jsonPath("$.data.ticket").isNotEmpty());
+    }
+
     // ---------------------------------------------------------------- verify-code (S8)
 
     @Test

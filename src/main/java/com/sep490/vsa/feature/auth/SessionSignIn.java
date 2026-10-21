@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -18,9 +19,11 @@ import java.util.List;
 public class SessionSignIn {
 
     private final SecurityContextRepository contextRepository;
+    private final CsrfTokenRepository csrfTokenRepository;
 
-    public SessionSignIn(SecurityContextRepository contextRepository) {
+    public SessionSignIn(SecurityContextRepository contextRepository, CsrfTokenRepository csrfTokenRepository) {
         this.contextRepository = contextRepository;
+        this.csrfTokenRepository = csrfTokenRepository;
     }
 
     public void signIn(User user, HttpServletRequest request, HttpServletResponse response) {
@@ -37,5 +40,8 @@ public class SessionSignIn {
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         contextRepository.saveContext(context, request, response);
+        // A new CSRF token too, as Spring's own login does: one planted before the sign-in is no use afterwards. The
+        // page fetches the new one (client.js asks again after Spring's 403)
+        csrfTokenRepository.saveToken(null, request, response);
     }
 }

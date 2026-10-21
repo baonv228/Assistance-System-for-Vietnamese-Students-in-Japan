@@ -77,6 +77,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - CSRF is on: frontend code must call the API through `assets/js/api/client.js`, which sends the
   `X-XSRF-TOKEN` header. A non-GET call is sent once more with a fresh token only when the 403 is Spring Security's own
   (CSRF rejection: Spring's error body, no `success`); a 403 of the application (MSG18, reporting locked) is never resent.
+  `SessionSignIn` clears the `XSRF-TOKEN` cookie at every sign-in (as Spring's own login does), so a token from before
+  is worthless; the page gets the new one through that resend. A lost connection becomes an `ApiError` (status 0,
+  "Không kết nối được máy chủ…") that pages show like any other error.
 - Links and redirects that send a guest to sign in use `loginUrl()` (`lib/ui.js`): `/login?next=<this page>` (the
   header button reads the address when pressed; "Viết bài" / "Đặt câu hỏi" go on to the form). `login.js` follows `next`
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
