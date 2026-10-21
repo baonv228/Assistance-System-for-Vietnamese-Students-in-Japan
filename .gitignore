@@ -1,6 +1,8 @@
 target/
 .idea/
 *.log
+# Log files and rotated archives (logging.file.name=logs/asvsj.log)
+logs/
 
 # Local secrets (copy from application-local.properties.example)
 src/main/resources/application-local.properties
