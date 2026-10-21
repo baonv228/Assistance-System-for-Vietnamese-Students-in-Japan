@@ -317,12 +317,56 @@ class BlogWriteFlowTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("“nhận bao nuôi”")));
         assertThat(postsBy(veteran)).isZero();
+    }
 
-        // Only phrases that solicit or advertise are banned: a warning or a question about the topic goes through
-        created(send(veteran, post("QA", "Pachinko có phải là cờ bạc không?",
-                "Mình bị rủ đánh bạc và có người gạ tình trong nhóm, co bac nao biet nen bao ai khong?",
+    @Test
+    void generalProstitutionAndGamblingWordsAreRefusedButEverydayPhrasesPass() throws Exception {
+        // The post that went through before V6: title and text "mại dâm"
+        send(veteran, post("POST", "mại dâm", "mại dâm", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Chưa đăng được: nội dung chứa từ khóa không được phép “mại dâm”. Hãy sửa rồi gửi lại."));
+        send(veteran, post("QA", "Pachinko có phải là cờ bạc không?", "", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“cờ bạc”")));
+        send(veteran, post("POST", "Kinh nghiệm", "Tối nay rủ nhau chơi co bac online", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“cờ bạc”")));
+        send(veteran, post("POST", "Làm thêm", "Du học sinh làm ở quán 風俗 được không", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“風俗”")));
+        assertThat(postsBy(veteran)).isZero();
+
+        // Everyday phrases that look like those words are not refused
+        long id = created(send(veteran, post("QA", "Co bac nao biet cho doi bang lai khong?",
+                "Bạn gái gọi điện bảo con gái bao nhiêu tuổi thì được đi du học. Mình đi khách sạn ở Osaka.",
                 List.of(experience), List.of())));
         assertThat(postsBy(veteran)).isEqualTo(1);
+
+        // A comment or answer holding such a word is refused the same way, a new one and an edit alike
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/questions/" + id + "/answers").session(session(tagged, "USER"))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Ra sòng bạc mà hỏi\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“sòng bạc”")));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/questions/" + id + "/answers").session(session(tagged, "USER"))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Ra trung tâm sát hạch nhé\"}"))
+                .andExpect(status().isOk());
+        long answer = jdbc.queryForObject("SELECT id FROM comments WHERE blog_id = ?", Long.class, id);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/comments/" + answer).session(session(tagged, "USER"))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Ra trung tâm hoặc đi mua dâm\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“mua dâm”")));
+        assertThat(jdbc.queryForObject("SELECT content FROM comments WHERE id = ?", String.class, answer))
+                .isEqualTo("Ra trung tâm sát hạch nhé");
     }
 
     @Test

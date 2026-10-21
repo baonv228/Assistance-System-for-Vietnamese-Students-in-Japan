@@ -83,6 +83,25 @@ public class ContentFilter {
             Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.THAI,
             Character.UnicodeScript.LAO, Character.UnicodeScript.KHMER, Character.UnicodeScript.MYANMAR);
     private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{M}\\p{N}]+");
+    /**
+     * Everyday phrases that hold a banned keyword, or are one once their accents are left out: a keyword found only
+     * inside one of them is not counted ({@link Everyday}). "co bac nao biet" is "có bác nào biết", not "cờ bạc";
+     * "bạn gái gọi điện" holds no "gái gọi"; "支援交流" no "援交". Compared like keywords (accents may be left out).
+     * As long as needed and no longer: a longer keyword around the same words is still found ("chơi lô đề" in
+     * "choi lo de", although "lo để" is an everyday phrase). Cần chốt.
+     */
+    static final List<String> EVERYDAY_PHRASES = List.of(
+            // gambling words: cờ bạc, cá cược, đặt cược, lô đề, số đề, đánh đề, ghi đề, nổ hũ, đá gà, bầu cua, nhà cái
+            "có bác nào", "có bác sĩ", "có bác ai", "các cô bác", "cả cuộc đời", "cả cuộc sống", "đặt cuộc hẹn",
+            "đặt cuộc gọi", "lo để", "số để", "dành để", "ghi đè", "nó hư", "da gà", "bầu của", "nhà cái gì",
+            "nhà cái nào cũng",
+            // prostitution words: mại dâm, bán dâm, mua dâm, gái điếm, nhà thổ, bao nuôi, gái bao, trai bao, gái gọi,
+            // đi khách, 援交, 風俗
+            "mai đám cưới", "mai đám giỗ", "mai đám ma", "bàn đàm phán", "bận đám cưới", "bận đám giỗ", "mưa dầm",
+            "gái điểm cao", "gái điểm thấp", "nhà thờ", "bảo nuôi", "gái bao nhiêu", "gái bao giờ", "trai bao nhiêu",
+            "trai bao giờ", "bạn gái gọi", "con gái gọi", "cô gái gọi", "em gái gọi", "chị gái gọi", "gái gọi điện",
+            "đi khách sạn", "支援交", "応援交", "救援交", "風俗習慣");
+    private static final List<Keyword> EVERYDAY = prepare(EVERYDAY_PHRASES);
 
     // ---------------------------------------------------------------- links (BR-22)
 
@@ -301,6 +320,8 @@ public class ContentFilter {
      *       inside a longer word ("tuyenviecnheluongcaongay").</li>
      *   <li>Both sides are read through {@link #keywordCopy}: fullwidth and look-alike letters, "v4y", "v@y".</li>
      *   <li>A keyword in Japanese or Chinese (no spaces between words) is found anywhere in the text.</li>
+     *   <li>A keyword standing only inside an everyday phrase ({@link #EVERYDAY_PHRASES}: "có bác", "bạn gái gọi") is
+     *       not counted ({@link Everyday}).</li>
      * </ul>
      */
     static Optional<String> findKeyword(String text, List<Keyword> keywords) {
@@ -308,12 +329,58 @@ public class ContentFilter {
             return Optional.empty();
         }
         Words words = Words.of(text);
+        Everyday everyday = Everyday.in(words);
         for (Keyword keyword : keywords) {
-            if (keyword.foundIn(words)) {
+            if (keyword.foundIn(words, everyday)) {
                 return Optional.of(keyword.text());
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Where the everyday phrases ({@link #EVERYDAY_PHRASES}) stand in a text: ranges of words, and of characters in
+     * the words run together (for Japanese and Chinese). A phrase written as it is ("bạn gái gọi") always counts; one
+     * found only because accents were left out ("co bac" for "có bác", "bầu cua" for "bầu của") counts only when the
+     * whole text is typed without accents: someone who writes with accents and leaves them out of just "co bac" is
+     * hiding "cờ bạc".
+     */
+    record Everyday(List<int[]> wordRanges, List<int[]> joinedRanges) {
+
+        static Everyday in(Words text) {
+            List<int[]> wordRanges = new ArrayList<>();
+            List<int[]> joinedRanges = new ArrayList<>();
+            for (Keyword phrase : EVERYDAY) {
+                if (phrase.unspaced()) {
+                    for (int at = text.joined().indexOf(phrase.joined()); at >= 0;
+                         at = text.joined().indexOf(phrase.joined(), at + 1)) {
+                        joinedRanges.add(new int[]{at, at + phrase.joined().length()});
+                    }
+                    continue;
+                }
+                int n = phrase.words().size();
+                for (int start : phrase.starts(text.words())) {
+                    boolean asWritten = true;
+                    for (int j = 0; j < n && asWritten; j++) {
+                        asWritten = phrase.words().get(j).exact().equals(text.words().get(start + j).exact());
+                    }
+                    if (asWritten || !text.anyMarked()) {
+                        wordRanges.add(new int[]{start, start + n});
+                    }
+                }
+            }
+            return new Everyday(wordRanges, joinedRanges);
+        }
+
+        /** True when the words {@code [from, to)} lie inside one everyday phrase. */
+        boolean coversWords(int from, int to) {
+            return wordRanges.stream().anyMatch(r -> r[0] <= from && to <= r[1]);
+        }
+
+        /** True when the characters {@code [from, to)} of the joined words lie inside one everyday phrase. */
+        boolean coversJoined(int from, int to) {
+            return joinedRanges.stream().anyMatch(r -> r[0] <= from && to <= r[1]);
+        }
     }
 
     /** Keywords as {@link #findKeyword} needs them; one without any letter or digit is left out. */
@@ -340,10 +407,11 @@ public class ContentFilter {
 
     /**
      * The words of a text: as split by spaces and punctuation ({@code words}), the same with every run of single
-     * characters joined into one spelled word ({@code glued}: "v.a.y nóng" → "vay", "nóng"), and all words run
-     * together ({@code joined}) for keywords in Japanese or Chinese.
+     * characters joined into one spelled word ({@code glued}: "v.a.y nóng" → "vay", "nóng"; glued word {@code g} is
+     * words {@code [gluedFrom[g], gluedTo[g])}), all words run together ({@code joined}) for keywords in Japanese or
+     * Chinese, and whether any word carries accents ({@code anyMarked}).
      */
-    record Words(List<Word> words, List<Word> glued, String joined) {
+    record Words(List<Word> words, List<Word> glued, int[] gluedFrom, int[] gluedTo, String joined, boolean anyMarked) {
 
         static Words of(String text) {
             List<String> tokens = new ArrayList<>();
@@ -359,12 +427,15 @@ public class ContentFilter {
                 joined.append(word.exact());
             }
             List<Word> glued = new ArrayList<>();
+            int[] gluedFrom = new int[tokens.size()];
+            int[] gluedTo = new int[tokens.size()];
             int i = 0;
             while (i < tokens.size()) {
                 int j = i;
                 while (j < tokens.size() && isSingle(tokens.get(j))) {
                     j++;
                 }
+                gluedFrom[glued.size()] = i;
                 if (j - i >= 2) {
                     glued.add(Word.of(String.join("", tokens.subList(i, j)), true));
                     i = j;
@@ -372,8 +443,10 @@ public class ContentFilter {
                     glued.add(words.get(i));
                     i++;
                 }
+                gluedTo[glued.size() - 1] = i;
             }
-            return new Words(words, glued, joined.toString());
+            return new Words(words, glued, gluedFrom, gluedTo, joined.toString(),
+                    words.stream().anyMatch(Word::marked));
         }
     }
 
@@ -401,12 +474,25 @@ public class ContentFilter {
                     joined.codePoints().anyMatch(cp -> UNSPACED_SCRIPTS.contains(Character.UnicodeScript.of(cp)))));
         }
 
-        boolean foundIn(Words in) {
+        boolean foundIn(Words in, Everyday everyday) {
             if (unspaced) {
-                return in.joined().contains(joined);
+                for (int at = in.joined().indexOf(joined); at >= 0; at = in.joined().indexOf(joined, at + 1)) {
+                    if (!everyday.coversJoined(at, at + joined.length())) {
+                        return true;
+                    }
+                }
+                return false;
             }
-            if (inOrder(in.words()) || inOrder(in.glued())) {
-                return true;
+            int n = words.size();
+            for (int start : starts(in.words())) {
+                if (!everyday.coversWords(start, start + n)) {
+                    return true;
+                }
+            }
+            for (int start : starts(in.glued())) {
+                if (!everyday.coversWords(in.gluedFrom()[start], in.gluedTo()[start + n - 1])) {
+                    return true;
+                }
             }
             for (Word word : in.glued()) {
                 // Written as one word ("vaynong"), spelled out ("c.á đ.ộ b.ó.n.g") or inside a longer word
@@ -418,8 +504,9 @@ public class ContentFilter {
             return false;
         }
 
-        /** The keyword's words one after another somewhere in {@code text}. */
-        private boolean inOrder(List<Word> text) {
+        /** Every place in {@code text} where the keyword's words stand one after another, by its first word. */
+        List<Integer> starts(List<Word> text) {
+            List<Integer> starts = new ArrayList<>();
             int n = words.size();
             for (int i = 0; i + n <= text.size(); i++) {
                 int j = 0;
@@ -427,10 +514,10 @@ public class ContentFilter {
                     j++;
                 }
                 if (j == n) {
-                    return true;
+                    starts.add(i);
                 }
             }
-            return false;
+            return starts;
         }
 
         /**

@@ -129,13 +129,12 @@ class ContentFilterTest {
         assertThat(VietnameseText.fold("バイト")).isEqualTo(VietnameseText.fold("ハイト"));
     }
 
-    // ---------------------------------------------------------------- prostitution and gambling list (V5)
+    // ---------------------------------------------------------------- prostitution and gambling lists (V5, V6)
 
-    /** The keywords V5__prostitution_gambling_keywords.sql adds, as written there. */
-    private static List<String> v5Keywords() throws Exception {
-        try (var in = ContentFilterTest.class.getResourceAsStream(
-                "/db/migration/V5__prostitution_gambling_keywords.sql")) {
-            assertThat(in).as("V5 migration on the classpath").isNotNull();
+    /** The keywords a migration inserts into banned_keywords, as written there. */
+    private static List<String> migrationKeywords(String file) throws Exception {
+        try (var in = ContentFilterTest.class.getResourceAsStream("/db/migration/" + file)) {
+            assertThat(in).as(file + " on the classpath").isNotNull();
             String sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).lines()
                     .filter(line -> !line.strip().startsWith("--"))
                     .collect(java.util.stream.Collectors.joining("\n"));
@@ -148,25 +147,83 @@ class ContentFilterTest {
         }
     }
 
+    private static List<String> v5Keywords() throws Exception {
+        return migrationKeywords("V5__prostitution_gambling_keywords.sql");
+    }
+
+    private static List<String> v6Keywords() throws Exception {
+        return migrationKeywords("V6__general_prostitution_gambling_keywords.sql");
+    }
+
+    /** Every keyword the database starts with, in id order (V1, V5, V6), as the server checks a post. */
+    private static List<ContentFilter.Keyword> allSeeded() throws Exception {
+        List<String> all = new ArrayList<>(List.of("vay nóng", "cá độ", "visa nhanh", "việc nhẹ lương cao"));
+        all.addAll(v5Keywords());
+        all.addAll(v6Keywords());
+        return ContentFilter.prepare(all);
+    }
+
     @Test
-    void theProstitutionAndGamblingListIsUsableAsAdminKeywords() throws Exception {
-        List<String> keywords = v5Keywords();
+    void theProstitutionAndGamblingListsAreUsableAsAdminKeywords() throws Exception {
+        List<String> keywords = new ArrayList<>(v5Keywords());
         assertThat(keywords).hasSizeGreaterThan(80);
+        assertThat(v6Keywords()).hasSizeGreaterThan(45);
+        keywords.addAll(v6Keywords());
         List<ContentFilter.Keyword> prepared = ContentFilter.prepare(keywords);
         assertThat(prepared).hasSameSizeAs(keywords);
         for (String keyword : keywords) {
-            // Written the way the Admin page stores keywords, and each one finds itself
+            // Written the way the Admin page stores keywords (and accepts them), and each one finds itself
             assertThat(keyword).isEqualTo(keyword.strip().toLowerCase(java.util.Locale.ROOT));
             assertThat(keyword.length()).isLessThanOrEqualTo(100);
+            assertThat(VietnameseText.squash(keyword).codePointCount(0, VietnameseText.squash(keyword).length()))
+                    .as(keyword).isGreaterThanOrEqualTo(keyword.codePoints().anyMatch(cp -> cp > 0x3000) ? 2 : 3);
             assertThat(ContentFilter.findKeyword(keyword, prepared)).as(keyword).isPresent();
         }
-        // No two are the same keyword for the filter (the Admin page refuses such a pair too)
-        assertThat(keywords.stream().map(VietnameseText::squashKeepingMarks).distinct()).hasSameSizeAs(keywords);
+        // No two are the same once accents are left out, like the column's UNIQUE key (utf8mb4_0900_ai_ci): INSERT
+        // IGNORE would drop the second one without a word. With the keywords of V1 too.
+        List<String> withV1 = new ArrayList<>(List.of("vay nóng", "cá độ", "visa nhanh", "việc nhẹ lương cao"));
+        withV1.addAll(keywords);
+        assertThat(withV1.stream().map(VietnameseText::fold).distinct()).hasSameSizeAs(withV1);
+    }
+
+    @Test
+    void generalProstitutionAndGamblingWordsAreFoundHoweverTheyAreWritten() throws Exception {
+        List<ContentFilter.Keyword> list = allSeeded();
+        Map<String, String> texts = new java.util.LinkedHashMap<>();
+        texts.put("mại dâm", "mại dâm");                                          // the post that went through before
+        texts.put("MẠI DÂM", "mại dâm");
+        texts.put("Dịch vụ mai dam giá rẻ", "mại dâm");                           // accents left out of one word only
+        texts.put("dich vu mai dam gia re", "mại dâm");                           // typed without any accents
+        texts.put("m.ạ.i d.â.m", "mại dâm");
+        texts.put("maidam", "mại dâm");
+        texts.put("Mình muốn bán dâm", "bán dâm");
+        texts.put("Pachinko có phải là cờ bạc không?", "cờ bạc");
+        texts.put("Chơi co bac online uy tín", "cờ bạc");
+        texts.put("choi co bac online", "cờ bạc");
+        texts.put("Có ai biết chỗ chơi co bac nao uy tín không", "cờ bạc");     // "co bac nao" in an accented text
+        texts.put("Ở Nhật đánh bạc bị phạt thế nào?", "đánh bạc");
+        texts.put("Rủ nhau cá cược bóng chày", "cá cược");
+        texts.put("Nhà cái này trả thưởng nhanh", "nhà cái");
+        texts.put("Hôm nay ra lô đề con gì", "lô đề");
+        texts.put("Tết này chơi bầu cua không", "bầu cua");
+        texts.put("Đi CASINO ở Hàn Quốc", "casino");
+        texts.put("Tối nay chơi poker", "poker");
+        texts.put("Mình làm thêm ở quán pachinko được không?", "pachinko");
+        texts.put("パチンコ店でバイト", "パチンコ");
+        texts.put("Du học sinh không được làm thêm ở quán 風俗", "風俗");
+        texts.put("援交の募集", "援交");
+        texts.put("売春は違法", "売春");
+        texts.put("Gái gọi Shinjuku", "gái gọi");
+        texts.put("Con gái bao đêm", "gái bao");
+        texts.put("Ai cần bao nuôi không", "bao nuôi");
+        texts.put("Tối nay đi khách", "đi khách");
+        texts.put("Tuyển gái điếm", "gái điếm");
+        texts.forEach((text, keyword) -> assertThat(ContentFilter.findKeyword(text, list)).as(text).contains(keyword));
     }
 
     @Test
     void prostitutionAndGamblingAdsAreFoundHoweverTheyAreWritten() throws Exception {
-        List<ContentFilter.Keyword> list = ContentFilter.prepare(v5Keywords());
+        List<ContentFilter.Keyword> list = allSeeded();
         Map<String, String> ads = new java.util.LinkedHashMap<>();
         ads.put("Nhà cái uy tín số 1, nạp lần đầu tặng 100%", "nhà cái uy tín");
         ads.put("nha cai uy tin nhat 2026", "nhà cái uy tín");
@@ -193,27 +250,48 @@ class ContentFilterTest {
     }
 
     @Test
-    void warningsQuestionsAndEverydayPhrasesAreNotTakenForProstitutionOrGambling() throws Exception {
-        List<ContentFilter.Keyword> list = ContentFilter.prepare(v5Keywords());
+    void everydayPhrasesAreNotTakenForProstitutionOrGambling() throws Exception {
+        List<ContentFilter.Keyword> list = allSeeded();
         List<String> ordinary = List.of(
-                // warnings and questions about the topic (general words are not banned)
-                "Pachinko có phải là cờ bạc không?", "Cảnh báo: có người gạ tình trong nhóm",
-                "Du học sinh không được làm thêm ở quán 風俗", "Ở Nhật đánh bạc bị phạt thế nào?",
-                // everyday phrases that look like a banned phrase once accents are left out or words run together
+                // Everyday phrases that look like a banned word once accents are left out or words run together
                 "Có bác nào biết chỗ đổi bằng lái không?", "Co bac nao biet cho doi bang lai khong",
-                "Bạn gái gọi điện mãi mà mình không nghe", "Con gái bao nhiêu tuổi thì được đi du học?",
-                "Bạn trai bao nhiêu tuổi rồi?", "Mình xem 3 căn nhà, cái nào cũng xa ga",
+                "co bac si nao noi tieng Viet khong", "Chao cac co bac a",
+                "Bạn gái gọi điện mãi mà mình không nghe", "ban gai goi dien mai", "Con gái gọi về nhà",
+                "Em gái gọi mình dậy", "Con gái bao nhiêu tuổi thì được đi du học?", "con gai bao nhieu tuoi",
+                "Bạn trai bao nhiêu tuổi rồi?", "Con gái bao giờ cũng thích đi chợ",
+                "Mình xem 3 căn nhà, cái nào cũng xa ga", "Ở Nhật nhà cái gì cũng nhỏ",
                 "Phải lo để dành tiền đóng học phí", "phai lo de danh tien dong hoc phi",
+                "Cho mình xin số để liên lạc", "cho minh xin so de lien lac", "Tiền dành để đóng học phí",
+                "tien danh de dong hoc phi", "File bị ghi đè mất rồi", "file bi ghi de mat roi",
                 "Cái máy giặt nó hư rồi", "may giat no hu roi", "Da gà chiên giòn ở quán này ngon", "da ga chien",
-                "Mình là con gái, dịch vụ cắt tóc ở đâu rẻ?", "Cuối tuần có kèo bóng đá ở công viên Yoyogi",
-                "Cả cuộc đời mình chưa thấy tuyết", "ca cuoc doi", "Mưa dầm cả tuần", "mua dam ca tuan",
+                "Chị ấy có bầu của anh", "chi ay co bau cua anh", "Mình là con gái, dịch vụ cắt tóc ở đâu rẻ?",
+                "Cuối tuần có kèo bóng đá ở công viên Yoyogi", "Cả cuộc đời mình chưa thấy tuyết", "ca cuoc doi",
+                "ca cuoc song o Nhat", "Mình đặt cuộc hẹn ở văn phòng quận", "minh dat cuoc hen o van phong quan",
+                "Mưa dầm cả tuần", "mua dam ca tuan", "Mai đám cưới bạn mình", "mai dam cuoi ban minh",
+                "ban dam phan hop dong", "minh ban dam cuoi", "Con gái điểm cao", "con gai diem cao",
+                "Chủ nhật đi nhà thờ", "chu nhat di nha tho", "Mẹ bảo nuôi chó", "me bao nuoi cho",
+                "Mình đi khách sạn ở Osaka", "minh di khach san o Osaka", "Đi xe khách về quê",
                 "Bản trình bày của mình", "Bạn thân mình mới sang Nhật", "Tài xế xe buýt rất lịch sự",
                 "Lần nạp đầu tiên vào thẻ Suica", "Tiền cước điện thoại được hoàn trả", "Mình ngủ khách sạn qua đêm",
-                "Massage ở Nhật giá bao nhiêu?", "Mình làm thêm ở quán pachinko được không?",
-                "留学生支援交流会に参加しました", "Kích thước vali bao nhiêu thì mang lên máy bay?");
+                "Massage ở Nhật giá bao nhiêu?", "Cảnh báo: có người gạ tình trong nhóm",
+                "Kích thước vali bao nhiêu thì mang lên máy bay?", "Vé xổ số ở Nhật mua ở đâu?",
+                "Chơi Pokémon GO ở Ueno", "Bác sĩ khám bệnh lây qua đường tình dục ở đâu?",
+                "留学生支援交流会に参加しました", "日本の風俗習慣を学ぶ", "ボディソープを買う", "SIMスロットが壊れた");
         for (String text : ordinary) {
             assertThat(ContentFilter.findKeyword(text, list)).as(text).isEmpty();
         }
+    }
+
+    @Test
+    void anEverydayPhraseNeverHidesALongerBannedPhraseAroundIt() throws Exception {
+        List<ContentFilter.Keyword> list = allSeeded();
+        // "lo để" is an everyday phrase, "chơi lô đề" and "lô đề online" are not
+        assertThat(ContentFilter.findKeyword("choi lo de", list)).contains("chơi lô đề");
+        assertThat(ContentFilter.findKeyword("lo de online", list)).contains("lô đề online");
+        // "bạn gái gọi" is, "gái gọi cao cấp" is not
+        assertThat(ContentFilter.findKeyword("Có bạn gái gọi cao cấp", list)).contains("gái gọi cao cấp");
+        // The same words elsewhere in the text are still found
+        assertThat(ContentFilter.findKeyword("Bạn gái gọi điện. Gái gọi Shinjuku", list)).contains("gái gọi");
     }
 
     @Test
@@ -391,9 +469,8 @@ class ContentFilterTest {
     void longInputNeitherOverflowsTheStackNorTakesLong() throws Exception {
         // About 20,000 characters each (4 × the content limit), checked on a 1 MB stack like a request thread: no
         // pattern may recurse once per repetition (StackOverflowError → 500) or backtrack its way through them.
-        // Against every keyword the database starts with (V1 and V5), as the server checks a post
-        List<ContentFilter.Keyword> keywords = new ArrayList<>(SEEDED);
-        keywords.addAll(ContentFilter.prepare(v5Keywords()));
+        // Against every keyword the database starts with (V1, V5, V6), as the server checks a post
+        List<ContentFilter.Keyword> keywords = allSeeded();
         List<String> inputs = List.of("a.".repeat(10_000), "1 ".repeat(10_000), "0 9 ".repeat(5_000),
                 "a-".repeat(10_000), "0.".repeat(10_000), "a . ".repeat(5_000), "zalo ".repeat(4_000),
                 "zalo " + "1 ".repeat(10_000), "line: " + "0 9 ".repeat(5_000), "tele @" + "a.".repeat(10_000),
