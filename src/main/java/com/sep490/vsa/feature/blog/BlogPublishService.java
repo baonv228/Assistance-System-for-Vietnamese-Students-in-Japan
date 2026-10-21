@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.blog;
 import com.sep490.vsa.feature.blog.BlogWriteRepository.MediaState;
 import com.sep490.vsa.feature.blog.BlogWriteRepository.PendingBlog;
 import com.sep490.vsa.feature.media.MediaService;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.moderation.MediaScanService;
 import com.sep490.vsa.feature.notification.NotificationService;
 import com.sep490.vsa.feature.user.PointService;
@@ -17,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,6 +30,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>a file failed → the post becomes REJECTED, the failed files are deleted and the author is notified;</li>
  *   <li>the scanner could not answer → the post stays PROCESSING and the retry job tries again.</li>
  * </ul>
+ * Before the files are scanned and again right before the post is published, its title and text are checked against
+ * the banned keywords as they are now (prostitution, gambling…: an Admin may have added one, or a new release a whole
+ * list, since the post was sent). A post holding one becomes REJECTED without scanning its files, and the author is
+ * told which keyword.
  * The scan starts right after the post is saved ({@link #scanSoon}); {@link #retryPending} picks up anything
  * left over (scanner down, server restarted in the middle).
  */
@@ -40,6 +46,7 @@ public class BlogPublishService {
     private final BlogWriteRepository repository;
     private final MediaScanService scanner;
     private final MediaService media;
+    private final ContentFilter filter;
     private final PointService points;
     private final NotificationService notifications;
     private final TransactionTemplate tx;
@@ -50,11 +57,12 @@ public class BlogPublishService {
     private volatile long retryAfter;
 
     public BlogPublishService(BlogWriteRepository repository, MediaScanService scanner, MediaService media,
-                              PointService points, NotificationService notifications,
+                              ContentFilter filter, PointService points, NotificationService notifications,
                               PlatformTransactionManager transactionManager, Clock clock) {
         this.repository = repository;
         this.scanner = scanner;
         this.media = media;
+        this.filter = filter;
         this.points = points;
         this.notifications = notifications;
         this.tx = new TransactionTemplate(transactionManager);
@@ -87,18 +95,24 @@ public class BlogPublishService {
         }
     }
 
-    /** Scans the post's files that still wait, then publishes or rejects the post when all have an answer. */
+    /**
+     * Scans the post's files that still wait, then publishes or rejects the post when all have an answer. A post
+     * holding a banned keyword is rejected without scanning its files.
+     */
     public void process(long blogId) {
         if (!inFlight.add(blogId)) {
             return;
         }
         try {
-            if (!"PROCESSING".equals(repository.status(blogId))) {
+            PendingBlog blog = repository.pendingBlog(blogId).orElse(null);
+            if (blog == null || !"PROCESSING".equals(blog.status())) {
                 return;
             }
-            for (MediaState m : repository.mediaStates(blogId)) {
-                if ("PROCESSING".equals(m.scanStatus())) {
-                    scanner.scan(m.id());
+            if (bannedKeyword(blog).isEmpty()) {
+                for (MediaState m : repository.mediaStates(blogId)) {
+                    if ("PROCESSING".equals(m.scanStatus())) {
+                        scanner.scan(m.id());
+                    }
                 }
             }
             tx.executeWithoutResult(s -> decide(blogId));
@@ -112,21 +126,37 @@ public class BlogPublishService {
         if (blog == null || !"PROCESSING".equals(blog.status())) {
             return;
         }
+        // The text once more under the lock: a keyword the Admin added during the scan still keeps the post back
+        Optional<String> keyword = bannedKeyword(blog);
+        if (keyword.isPresent()) {
+            repository.setStatus(blogId, "PROCESSING", "REJECTED");
+            tellRejected(blog, "có từ khóa không được phép “" + keyword.get() + "”");
+            return;
+        }
         List<MediaState> files = repository.mediaStates(blogId);
         List<Long> rejected = files.stream().filter(m -> "REJECTED".equals(m.scanStatus())).map(MediaState::id).toList();
         if (!rejected.isEmpty()) {
             repository.setStatus(blogId, "PROCESSING", "REJECTED");
             media.discard(rejected);
-            String what = "QA".equals(blog.type()) ? "Câu hỏi" : "Bài viết";
-            notifications.send(blog.authorId(), NotificationService.CONTENT_REJECTED,
-                    what + " “" + blog.title() + "” chưa được đăng vì ảnh hoặc video vi phạm Quy tắc cộng đồng. "
-                            + "Bạn có thể sửa bài rồi gửi lại.", "QA".equals(blog.type()) ? "QUESTION" : "BLOG", blogId);
+            tellRejected(blog, "ảnh hoặc video vi phạm Quy tắc cộng đồng");
             return;
         }
         boolean allPassed = files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()));
         if (allPassed && repository.setStatus(blogId, "PROCESSING", "PUBLISHED")) {
             awardOnce(blog.authorId(), blogId);
         }
+    }
+
+    /** The first banned keyword in the post's title or text (title first, like a new post). */
+    private Optional<String> bannedKeyword(PendingBlog blog) {
+        return filter.bannedKeyword(blog.title()).or(() -> filter.bannedKeyword(blog.content()));
+    }
+
+    private void tellRejected(PendingBlog blog, String reason) {
+        String what = "QA".equals(blog.type()) ? "Câu hỏi" : "Bài viết";
+        notifications.send(blog.authorId(), NotificationService.CONTENT_REJECTED,
+                what + " “" + blog.title() + "” chưa được đăng vì " + reason + ". Bạn có thể sửa bài rồi gửi lại.",
+                "QA".equals(blog.type()) ? "QUESTION" : "BLOG", blog.id());
     }
 
     /**

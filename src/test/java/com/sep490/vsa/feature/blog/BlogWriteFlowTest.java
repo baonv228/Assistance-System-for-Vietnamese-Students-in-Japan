@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.blog;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.media.MediaStorage;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.moderation.ImageModerator;
 import com.sep490.vsa.feature.moderation.ImageModerator.Verdict;
 import com.sep490.vsa.feature.moderation.MediaScanService;
@@ -89,6 +90,8 @@ class BlogWriteFlowTest {
     private MediaService mediaService;
     @Autowired
     private MediaStorage storage;
+    @Autowired
+    private ContentFilter contentFilter;
     @Autowired
     private PointService pointService;
     @Autowired
@@ -301,6 +304,70 @@ class BlogWriteFlowTest {
     }
 
     @Test
+    void prostitutionAndGamblingPhrasesAreRefusedButWarningsAndQuestionsPass() throws Exception {
+        // The list seeded by V5
+        send(veteran, post("POST", "Link mới", "Link vào FB88 mới nhất, nạp lần đầu tặng 100%", List.of(experience),
+                List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“fb88”")));
+        send(veteran, post("QA", "Ai biết chỗ tìm sugar daddy ở Tokyo không?", "", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“sugar daddy”")));
+        send(veteran, post("POST", "Nhận bao nuôi", "パパ活募集中", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“nhận bao nuôi”")));
+        assertThat(postsBy(veteran)).isZero();
+
+        // Only phrases that solicit or advertise are banned: a warning or a question about the topic goes through
+        created(send(veteran, post("QA", "Pachinko có phải là cờ bạc không?",
+                "Mình bị rủ đánh bạc và có người gạ tình trong nhóm, co bac nao biet nen bao ai khong?",
+                List.of(experience), List.of())));
+        assertThat(postsBy(veteran)).isEqualTo(1);
+    }
+
+    @Test
+    void aWaitingPostIsCheckedForKeywordsAgainBeforeItIsPublished() throws Exception {
+        // The scanner is down: the post waits in PROCESSING
+        when(moderator.check(any(byte[].class))).thenReturn(new Verdict("ERROR", "{\"error\":\"down\"}"));
+        String keyword = "từ khóa chờ " + UUID.randomUUID().toString().replace("-", "").chars()
+                .map(c -> Character.isDigit(c) ? 'g' + (c - '0') : c)
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).substring(0, 12);
+        long id = created(send(veteran, post("POST", "Ảnh và chữ", "Bài có " + keyword + " nhé", List.of(experience),
+                List.of()), photo()));
+        try {
+            await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM moderation_scans WHERE target_type = 'MEDIA'
+                    AND target_id = (SELECT media_id FROM blog_media WHERE blog_id = ?)""", Integer.class, id) > 0);
+
+            // Meanwhile the keyword is banned, and the scanner works again
+            jdbc.update("INSERT INTO banned_keywords (keyword) VALUES (?)", keyword);
+            contentFilter.keywordsChanged();
+            when(moderator.check(any(byte[].class))).thenReturn(new Verdict("PASS", "{}"));
+            jdbc.update("""
+                    UPDATE moderation_scans SET created_at = created_at - INTERVAL 2 MINUTE
+                    WHERE target_type = 'MEDIA' AND target_id = (SELECT media_id FROM blog_media WHERE blog_id = ?)""", id);
+            await().atMost(Duration.ofSeconds(10)).until(() -> {
+                publisher.process(id);
+                return "REJECTED".equals(blogStatus(id));
+            });
+
+            // Rejected without scanning the photo again, no points, and the author is told which keyword
+            assertThat(jdbc.queryForObject("""
+                    SELECT m.scan_status FROM blog_media bm JOIN media m ON m.id = bm.media_id WHERE bm.blog_id = ?""",
+                    String.class, id)).isEqualTo("PROCESSING");
+            assertThat(points(veteran)).isZero();
+            assertThat(jdbc.queryForObject("""
+                    SELECT content FROM notifications WHERE user_id = ? AND type = 'CONTENT_REJECTED' AND ref_id = ?""",
+                    String.class, veteran, id))
+                    .isEqualTo("Bài viết “Ảnh và chữ” chưa được đăng vì có từ khóa không được phép “" + keyword
+                            + "”. Bạn có thể sửa bài rồi gửi lại.");
+        } finally {
+            jdbc.update("DELETE FROM banned_keywords WHERE keyword = ?", keyword);
+            contentFilter.keywordsChanged();
+        }
+    }
+
+    @Test
     void checksRunInTheAgreedOrder() throws Exception {
         // Link (step 2) is reported before the keyword (step 4)
         send(veteran, post("POST", "vay nóng", "https://www.example.com", List.of(experience), List.of()))
@@ -392,8 +459,8 @@ class BlogWriteFlowTest {
     @Test
     void theRetryJobReachesANewerPostAlthoughOlderOnesStayStuck() throws Exception {
         // A job of its own, which starts at the oldest waiting post like the application's after a restart
-        BlogPublishService job = new BlogPublishService(writeRepository, scanner, mediaService, pointService,
-                notifications, transactionManager, Clock.systemUTC());
+        BlogPublishService job = new BlogPublishService(writeRepository, scanner, mediaService, contentFilter,
+                pointService, notifications, transactionManager, Clock.systemUTC());
         Instant sent = Instant.now().minus(Duration.ofMinutes(30));
         List<Long> posts = new ArrayList<>();
         try {

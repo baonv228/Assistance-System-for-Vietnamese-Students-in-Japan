@@ -247,19 +247,23 @@ public class BlogWriteRepository {
 
     // ---------------------------------------------------------------- publishing after the scan
 
-    public record PendingBlog(Long id, Long authorId, String type, String title, String status) {
+    public record PendingBlog(Long id, Long authorId, String type, String title, String content, String status) {
     }
 
     /** Locks the post row so the scan job and the after-commit scan cannot publish it twice. */
     public Optional<PendingBlog> lockBlog(long blogId) {
-        return jdbc.query("SELECT id, author_id, blog_type, title, status FROM blogs WHERE id = ? FOR UPDATE",
-                (rs, i) -> new PendingBlog(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5)), blogId).stream().findFirst();
+        return pendingBlog(blogId, " FOR UPDATE");
     }
 
-    public String status(long blogId) {
-        return jdbc.query("SELECT status FROM blogs WHERE id = ?", (rs, i) -> rs.getString(1), blogId)
-                .stream().findFirst().orElse(null);
+    /** The post as it is now, without a lock. */
+    public Optional<PendingBlog> pendingBlog(long blogId) {
+        return pendingBlog(blogId, "");
+    }
+
+    private Optional<PendingBlog> pendingBlog(long blogId, String lock) {
+        return jdbc.query("SELECT id, author_id, blog_type, title, content, status FROM blogs WHERE id = ?" + lock,
+                (rs, i) -> new PendingBlog(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6)), blogId).stream().findFirst();
     }
 
     public record MediaState(Long id, String scanStatus) {

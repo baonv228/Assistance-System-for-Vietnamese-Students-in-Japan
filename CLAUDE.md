@@ -31,6 +31,13 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   one-time tokens stored as SHA-256 hashes. 5 wrong passwords → lock 30 minutes (Admin settings `lock_attempts` /
   `lock_minutes`).
 - Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation.
+  The banned keywords include about 90 prostitution and gambling phrases seeded by `V5__prostitution_gambling_keywords.sql`
+  (agreed: only phrases that solicit or advertise, e.g. "kèo nhà cái", "fb88", "nhận bao nuôi", "パパ活"; general words
+  such as "cờ bạc", "mại dâm", "cá cược", 賭博, 風俗 stay allowed so warnings and questions can be posted; phrases whose
+  unaccented form is an everyday phrase are left out, see the file header; `ContentFilterTest` checks the list against
+  ordinary sentences). A post or question waiting for its media scan is checked against the list as it is now before
+  its files are scanned and again right before it is published (`BlogPublishService`): a hit → REJECTED without
+  scanning, author notified with the keyword.
   Reports: 1–5 → "Cần xử lý"; more than 5 → auto-hidden and "Khẩn". More than 5 false reports → reporting
   locked 7 days. Removed content is kept 30 days for appeals, then purged.
 - Posts, questions, comments and answers of LOCKED or DELETED accounts are hidden everywhere Members and Guests read

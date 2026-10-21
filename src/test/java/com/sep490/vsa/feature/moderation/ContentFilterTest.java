@@ -11,10 +11,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -123,6 +127,93 @@ class ContentFilterTest {
         assertThat(VietnameseText.foldKeepingKanaMarks("Việc BÀN パン")).isEqualTo("viec ban パン");
         // fold (search) is unchanged
         assertThat(VietnameseText.fold("バイト")).isEqualTo(VietnameseText.fold("ハイト"));
+    }
+
+    // ---------------------------------------------------------------- prostitution and gambling list (V5)
+
+    /** The keywords V5__prostitution_gambling_keywords.sql adds, as written there. */
+    private static List<String> v5Keywords() throws Exception {
+        try (var in = ContentFilterTest.class.getResourceAsStream(
+                "/db/migration/V5__prostitution_gambling_keywords.sql")) {
+            assertThat(in).as("V5 migration on the classpath").isNotNull();
+            String sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).lines()
+                    .filter(line -> !line.strip().startsWith("--"))
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            Matcher m = Pattern.compile("\\('([^']+)'\\)").matcher(sql.substring(sql.indexOf("VALUES")));
+            List<String> keywords = new ArrayList<>();
+            while (m.find()) {
+                keywords.add(m.group(1));
+            }
+            return keywords;
+        }
+    }
+
+    @Test
+    void theProstitutionAndGamblingListIsUsableAsAdminKeywords() throws Exception {
+        List<String> keywords = v5Keywords();
+        assertThat(keywords).hasSizeGreaterThan(80);
+        List<ContentFilter.Keyword> prepared = ContentFilter.prepare(keywords);
+        assertThat(prepared).hasSameSizeAs(keywords);
+        for (String keyword : keywords) {
+            // Written the way the Admin page stores keywords, and each one finds itself
+            assertThat(keyword).isEqualTo(keyword.strip().toLowerCase(java.util.Locale.ROOT));
+            assertThat(keyword.length()).isLessThanOrEqualTo(100);
+            assertThat(ContentFilter.findKeyword(keyword, prepared)).as(keyword).isPresent();
+        }
+        // No two are the same keyword for the filter (the Admin page refuses such a pair too)
+        assertThat(keywords.stream().map(VietnameseText::squashKeepingMarks).distinct()).hasSameSizeAs(keywords);
+    }
+
+    @Test
+    void prostitutionAndGamblingAdsAreFoundHoweverTheyAreWritten() throws Exception {
+        List<ContentFilter.Keyword> list = ContentFilter.prepare(v5Keywords());
+        Map<String, String> ads = new java.util.LinkedHashMap<>();
+        ads.put("Nhà cái uy tín số 1, nạp lần đầu tặng 100%", "nhà cái uy tín");
+        ads.put("nha cai uy tin nhat 2026", "nhà cái uy tín");
+        ads.put("Soi kèo Ngoại hạng Anh tối nay", "soi kèo");
+        ads.put("Link vào FB88 mới nhất", "fb88");
+        ads.put("Đăng ký tại 188BET.com", "188bet");
+        ads.put("f.b.8.8 nạp rút nhanh", "fb88");
+        ads.put("Chơi taixiu online kiếm tiền", "tài xỉu");
+        ads.put("Game bài đổi thưởng uy tín", "game bài đổi thưởng");
+        ads.put("ban ca doi thuong", "bắn cá đổi thưởng");
+        ads.put("Chơi lô đề online tỷ lệ 1 ăn 99", "lô đề online");
+        ads.put("Xem đá gà trực tiếp", "đá gà trực tiếp");
+        ads.put("c4sino online", "casino online");
+        ads.put("オンライン カジノで稼ぐ", "オンラインカジノ");
+        ads.put("Nhận bao nuôi sinh viên", "nhận bao nuôi");
+        ads.put("Tìm sugar daddy ở Tokyo", "sugar daddy");
+        ads.put("Gái gọi cao cấp khu Shinjuku", "gái gọi cao cấp");
+        ads.put("Massage kích dục tại nhà", "kích dục");
+        ads.put("パパ活募集中", "パパ活");
+        ads.put("Làm papakatsu kiếm tiền nhanh", "papa katsu");
+        ads.put("ﾃﾞﾘﾍﾙ求人", "デリヘル");
+        ads.put("JKビジネス", "jkビジネス");
+        ads.forEach((text, keyword) -> assertThat(ContentFilter.findKeyword(text, list)).as(text).contains(keyword));
+    }
+
+    @Test
+    void warningsQuestionsAndEverydayPhrasesAreNotTakenForProstitutionOrGambling() throws Exception {
+        List<ContentFilter.Keyword> list = ContentFilter.prepare(v5Keywords());
+        List<String> ordinary = List.of(
+                // warnings and questions about the topic (general words are not banned)
+                "Pachinko có phải là cờ bạc không?", "Cảnh báo: có người gạ tình trong nhóm",
+                "Du học sinh không được làm thêm ở quán 風俗", "Ở Nhật đánh bạc bị phạt thế nào?",
+                // everyday phrases that look like a banned phrase once accents are left out or words run together
+                "Có bác nào biết chỗ đổi bằng lái không?", "Co bac nao biet cho doi bang lai khong",
+                "Bạn gái gọi điện mãi mà mình không nghe", "Con gái bao nhiêu tuổi thì được đi du học?",
+                "Bạn trai bao nhiêu tuổi rồi?", "Mình xem 3 căn nhà, cái nào cũng xa ga",
+                "Phải lo để dành tiền đóng học phí", "phai lo de danh tien dong hoc phi",
+                "Cái máy giặt nó hư rồi", "may giat no hu roi", "Da gà chiên giòn ở quán này ngon", "da ga chien",
+                "Mình là con gái, dịch vụ cắt tóc ở đâu rẻ?", "Cuối tuần có kèo bóng đá ở công viên Yoyogi",
+                "Cả cuộc đời mình chưa thấy tuyết", "ca cuoc doi", "Mưa dầm cả tuần", "mua dam ca tuan",
+                "Bản trình bày của mình", "Bạn thân mình mới sang Nhật", "Tài xế xe buýt rất lịch sự",
+                "Lần nạp đầu tiên vào thẻ Suica", "Tiền cước điện thoại được hoàn trả", "Mình ngủ khách sạn qua đêm",
+                "Massage ở Nhật giá bao nhiêu?", "Mình làm thêm ở quán pachinko được không?",
+                "留学生支援交流会に参加しました", "Kích thước vali bao nhiêu thì mang lên máy bay?");
+        for (String text : ordinary) {
+            assertThat(ContentFilter.findKeyword(text, list)).as(text).isEmpty();
+        }
     }
 
     @Test
@@ -297,26 +388,31 @@ class ContentFilterTest {
     // ---------------------------------------------------------------- long input
 
     @Test
-    void longInputNeitherOverflowsTheStackNorTakesLong() {
+    void longInputNeitherOverflowsTheStackNorTakesLong() throws Exception {
         // About 20,000 characters each (4 × the content limit), checked on a 1 MB stack like a request thread: no
-        // pattern may recurse once per repetition (StackOverflowError → 500) or backtrack its way through them
+        // pattern may recurse once per repetition (StackOverflowError → 500) or backtrack its way through them.
+        // Against every keyword the database starts with (V1 and V5), as the server checks a post
+        List<ContentFilter.Keyword> keywords = new ArrayList<>(SEEDED);
+        keywords.addAll(ContentFilter.prepare(v5Keywords()));
         List<String> inputs = List.of("a.".repeat(10_000), "1 ".repeat(10_000), "0 9 ".repeat(5_000),
                 "a-".repeat(10_000), "0.".repeat(10_000), "a . ".repeat(5_000), "zalo ".repeat(4_000),
                 "zalo " + "1 ".repeat(10_000), "line: " + "0 9 ".repeat(5_000), "tele @" + "a.".repeat(10_000),
                 "v.a.y ".repeat(3_334), "@a".repeat(10_000), "www.".repeat(5_000), "a chấm ".repeat(2_858),
-                "09 ".repeat(6_667), "a".repeat(20_000));
+                "09 ".repeat(6_667), "a".repeat(20_000), "Mình mới sang Nhật, cần tìm nhà gần ga ".repeat(500),
+                "nha cai uy tin ".repeat(1_400), "パパ活".repeat(6_000));
         for (String input : inputs) {
             assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
                 long nanos = onOneMegabyteStack(() -> {
                     for (int i = 0; i < 3; i++) {
-                        runAllChecks(input);                           // warm up first (JIT)
+                        runAllChecks(input, keywords);                 // warm up first (JIT)
                     }
                     long start = System.nanoTime();
-                    runAllChecks(input);
+                    runAllChecks(input, keywords);
                     return System.nanoTime() - start;
                 });
+                // Backtracking or recursion would take seconds; well under that is fine on a busy test machine too
                 assertThat(Duration.ofNanos(nanos)).as("time on " + input.substring(0, 12) + "…")
-                        .isLessThan(Duration.ofMillis(100));
+                        .isLessThan(Duration.ofMillis(300));
             });
         }
     }
@@ -328,10 +424,10 @@ class ContentFilterTest {
         assertThat(onOneMegabyteStack(() -> ContentFilter.contacts("zalo " + "1 ".repeat(2_500)))).hasSize(1);
     }
 
-    private static void runAllChecks(String text) {
+    private static void runAllChecks(String text, List<ContentFilter.Keyword> keywords) {
         ContentFilter.links(text);
         ContentFilter.contacts(text);
-        ContentFilter.findKeyword(text, SEEDED);
+        ContentFilter.findKeyword(text, keywords);
     }
 
     /** Runs {@code work} on a thread with a 1 MB stack (a server request thread) and returns its result. */
