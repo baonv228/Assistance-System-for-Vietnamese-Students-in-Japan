@@ -192,6 +192,30 @@ class MediaServiceImageTest {
     }
 
     @Test
+    void aVideoIsStoredWithoutWhereItWasFilmed() {
+        // An iPhone-like MOV of 12 s whose moov/udta holds ©xyz with the home's coordinates
+        byte[] location = "+35.7289+139.7713/".getBytes(StandardCharsets.ISO_8859_1);
+        byte[] mvhd = ByteBuffer.allocate(108).putInt(108).put("mvhd".getBytes(StandardCharsets.ISO_8859_1))
+                .putInt(0).putInt(0).putInt(0).putInt(600).putInt(600 * 12).array();
+        byte[] xyz = ByteBuffer.allocate(8 + location.length).putInt(8 + location.length)
+                .put("©xyz".getBytes(StandardCharsets.ISO_8859_1)).put(location).array();
+        byte[] udta = ByteBuffer.allocate(8 + xyz.length).putInt(8 + xyz.length)
+                .put("udta".getBytes(StandardCharsets.ISO_8859_1)).put(xyz).array();
+        byte[] moov = ByteBuffer.allocate(8 + mvhd.length + udta.length).putInt(8 + mvhd.length + udta.length)
+                .put("moov".getBytes(StandardCharsets.ISO_8859_1)).put(mvhd).put(udta).array();
+        byte[] ftyp = ByteBuffer.allocate(16).putInt(16).put("ftypqt  ".getBytes(StandardCharsets.ISO_8859_1)).putInt(0)
+                .array();
+        byte[] mov = ByteBuffer.allocate(ftyp.length + moov.length).put(ftyp).put(moov).array();
+
+        MediaService.Prepared video = service.prepareVideo(new MockMultipartFile("video", "v.mov", "video/quicktime", mov));
+
+        assertThat(video.mimeType()).isEqualTo("video/quicktime");
+        assertThat(video.durationSec()).isEqualTo(12);
+        assertThat(video.bytes()).hasSameSizeAs(mov);
+        assertThat(new String(video.bytes(), StandardCharsets.ISO_8859_1)).doesNotContain("+35.7289", "udta", "xyz");
+    }
+
+    @Test
     void aCraftedVideoGetsTheVideoMessageQuickly() {
         // ftyp + a box whose 64-bit size overflows the reader's position (see Mp4DurationTest)
         byte[] crafted = ByteBuffer.allocate(32).putInt(16).put("ftypisom".getBytes(StandardCharsets.ISO_8859_1)).putInt(0)

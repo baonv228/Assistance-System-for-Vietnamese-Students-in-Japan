@@ -238,7 +238,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (bytes per pixel counted, e.g. 8 for 16-bit RGBA) stay ≤ 48 MB; all "cần chốt"), checks MP4/MOV length ≤ 30 s from the file itself
   (`Mp4Duration`, no ffprobe; fragmented MP4 refused; a box size past the end of the file counts as "to the end", so
   crafted 64-bit sizes cannot loop or reach a negative offset, and any parser error is the normal "Không đọc được video"
-  message, never a 500). Files are stored by `LocalMediaStorage` in
+  message, never a 500). Videos are stored without their metadata, like photos without EXIF: the `udta`, `meta` and
+  `uuid` boxes of the file, of `moov` and of each track become zero-filled `free` boxes of the same size
+  (`Mp4Duration.stripMetadata`: no location such as iPhone ISO6709 / `©xyz`, no phone model; offsets unchanged, so the
+  video plays as before). Files are stored by `LocalMediaStorage` in
   `app.media.local-dir` (default `uploads/`, git-ignored); implement `MediaStorage` for
   Cloudflare R2 later. Deleting a post (UC-13) also deletes its files.
 - `/media/<storage_key>` is `MediaController`, checked per file by `MediaAccess` (the folder is never published): to

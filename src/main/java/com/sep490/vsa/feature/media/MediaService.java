@@ -170,7 +170,10 @@ public class MediaService {
         }
     }
 
-    /** Checks type, size and length (≤ 30 s) of one video. The file is stored as uploaded. */
+    /**
+     * Checks type, size and length (≤ 30 s) of one video. The file is stored as uploaded, without its metadata: where
+     * it was filmed, the phone model… ({@link Mp4Duration#stripMetadata}), as photos lose their EXIF.
+     */
     public Prepared prepareVideo(MultipartFile file) {
         String rule = "Video phải là MP4 hoặc MOV, dài tối đa " + VIDEO_MAX_SECONDS + " giây và không quá "
                 + videoMaxMb + " MB.";
@@ -198,6 +201,13 @@ public class MediaService {
                     + VIDEO_MAX_SECONDS + " giây.");
         }
         int seconds = (int) Math.min(VIDEO_MAX_SECONDS, Math.round(info.seconds()));
+        try {
+            Mp4Duration.stripMetadata(bytes);
+        } catch (RuntimeException e) {
+            // The length was read, so the boxes are sound; a file the walk still trips on is refused, never kept as is
+            log.warn("Could not remove the metadata of an uploaded video: {}", e.toString());
+            throw new InvalidMediaException("Không đọc được video. Hãy dùng video MP4 hoặc MOV.");
+        }
         return info.quickTime()
                 ? new Prepared("VIDEO", bytes, "video/quicktime", "mov", null, null, seconds)
                 : new Prepared("VIDEO", bytes, "video/mp4", "mp4", null, null, seconds);
