@@ -221,7 +221,7 @@ function questionCard(q) {
     const badges = [
         q.pinned ? `<span class="badge">${ic("keep")}Đã ghim</span>` : "",
         q.solved ? `<span class="badge ok">${ic("check_circle")}Đã giải quyết</span>`
-            : answers === 0 ? `<span class="badge lan">${ic("hourglass_empty")}Chưa ai trả lời</span>` : "",
+            : q.unanswered ? `<span class="badge lan">${ic("hourglass_empty")}Chưa ai trả lời</span>` : "",
         q.status === "PROCESSING" ? `<span class="badge warn" title="Chỉ bạn thấy câu hỏi này cho đến khi quét xong">${ic("hourglass_top")}Đang quét ảnh/video</span>` : ""
     ].join("");
     const topicsHtml = q.topics.map((t) =>

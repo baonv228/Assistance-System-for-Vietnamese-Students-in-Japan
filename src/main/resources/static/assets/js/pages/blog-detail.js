@@ -562,7 +562,11 @@ content.addEventListener("click", async (event) => {
             if (state) {
                 post.viewer.liked = state.active;
                 post.likeCount = state.count;
-                button.outerHTML = actionButton({ act: "like-post", pressed: state.active, icon: "favorite", label: `Thích · ${state.count}` });
+                if (button.isConnected) {
+                    button.outerHTML = actionButton({ act: "like-post", pressed: state.active, icon: "favorite", label: `Thích · ${state.count}` });
+                } else {
+                    render(post);                       // redrawn meanwhile (map, reply box…) from the old state
+                }
             }
             break;
         }
@@ -571,8 +575,12 @@ content.addEventListener("click", async (event) => {
             const state = await busy(button, () => guarded(() => API.save(blogId, on)));
             if (state) {
                 post.viewer.saved = state.saved;
-                button.outerHTML = actionButton({ act: "save-post", pressed: state.saved,
-                    icon: state.saved ? "bookmark_added" : "bookmark", label: state.saved ? "Đã lưu" : "Lưu" });
+                if (button.isConnected) {
+                    button.outerHTML = actionButton({ act: "save-post", pressed: state.saved,
+                        icon: state.saved ? "bookmark_added" : "bookmark", label: state.saved ? "Đã lưu" : "Lưu" });
+                } else {
+                    render(post);
+                }
                 toast(state.saved ? `Đã lưu ${WORD}. Xem lại ở Tôi → Đã lưu.` : `Đã bỏ lưu ${WORD}.`);
             }
             break;

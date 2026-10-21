@@ -51,10 +51,10 @@ public class QaRepository {
              AND NOT %s)""".formatted(ActiveAuthors.of("a"), SOLVED_SQL);
 
     private static final String SELECT_ROW = """
-            SELECT b.id, b.status, b.is_pinned, %s AS solved, b.title,
+            SELECT b.id, b.status, b.is_pinned, %s AS solved, %s AS unanswered, b.title,
                    LEFT(b.content, 400) AS content_start, u.id AS author_id, u.display_name, u.avatar_url,
                    b.like_count, b.comment_count, b.created_at
-            FROM blogs b JOIN users u ON u.id = b.author_id""".formatted(SOLVED_SQL);
+            FROM blogs b JOIN users u ON u.id = b.author_id""".formatted(SOLVED_SQL, UNANSWERED_SQL);
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -62,9 +62,9 @@ public class QaRepository {
         this.jdbc = jdbc;
     }
 
-    public record Row(Long id, String status, boolean pinned, boolean solved, String title, String contentStart,
-                      Long authorId, String authorName, String avatarUrl, int likeCount, int answerCount,
-                      Instant createdAt) {
+    public record Row(Long id, String status, boolean pinned, boolean solved, boolean unanswered, String title,
+                      String contentStart, Long authorId, String authorName, String avatarUrl, int likeCount,
+                      int answerCount, Instant createdAt) {
     }
 
     // ---------------------------------------------------------------- list
@@ -92,7 +92,7 @@ public class QaRepository {
 
     private static Row row(ResultSet rs, int i) throws SQLException {
         return new Row(rs.getLong("id"), rs.getString("status"), rs.getBoolean("is_pinned"), rs.getBoolean("solved"),
-                rs.getString("title"), rs.getString("content_start"), rs.getLong("author_id"),
+                rs.getBoolean("unanswered"), rs.getString("title"), rs.getString("content_start"), rs.getLong("author_id"),
                 rs.getString("display_name"), rs.getString("avatar_url"), rs.getInt("like_count"),
                 rs.getInt("comment_count"), instant(rs.getTimestamp("created_at")));
     }

@@ -279,7 +279,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   if changed).
 - Solved = the best answer is still PUBLISHED and its writer's account ACTIVE (`QaRepository.SOLVED_SQL`, also used
   by "Đã lưu"), so a best answer hidden by reports, removed or written by a locked/deleted account stops counting, as on
-  the question page. Unanswered = no published answer by an active account and not solved.
+  the question page. Unanswered = no published answer by an active account and not solved; the list card's
+  "Chưa ai trả lời" badge reads the same rule (`unanswered`), not `answerCount` (which counts replies too).
 - Pages: `pages/qa.html` + `assets/js/pages/qa.js` + `assets/css/qa.css` (list, filters in the URL), `qa-ask.html`
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
