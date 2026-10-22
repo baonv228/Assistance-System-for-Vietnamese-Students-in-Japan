@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.review;
 
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.moderation.ImageModerator;
+import com.sep490.vsa.feature.moderation.ImageModerator.Verdict;
 import com.sep490.vsa.feature.place.ExternalPlaces;
 import com.sep490.vsa.feature.place.ExternalPlaces.Hit;
 import jakarta.servlet.http.Cookie;
@@ -14,6 +15,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextImpl;
@@ -22,6 +24,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,13 +37,17 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -161,7 +171,45 @@ class ReviewFlowTest {
         assertThat(jdbc.queryForObject("SELECT category_id FROM places WHERE id = ?", String.class, placeId)).isEqualTo("food");
     }
 
+    @Test
+    void aReviewPhotoIsServedToEveryoneOnceTheReviewIsPublished() throws Exception {
+        when(moderator.engine()).thenReturn("OPENAI");
+        when(moderator.check(any(byte[].class))).thenReturn(new Verdict("PASS", "{}"));
+        MockMultipartFile json = new MockMultipartFile("review", "", "application/json",
+                ("{\"placeId\":" + place + ",\"rating\":5,\"content\":\"Quán sạch, có ảnh thực đơn.\"}")
+                        .getBytes(StandardCharsets.UTF_8));
+        long id = created(mvc.perform(withCsrf(multipart("/api/reviews").file(json).file(photo()))
+                .session(session(author))).andExpect(jsonPath("$.data.status").value("PROCESSING")));
+        await().atMost(Duration.ofSeconds(15)).until(() -> "PUBLISHED".equals(
+                jdbc.queryForObject("SELECT status FROM reviews WHERE id = ?", String.class, id)));
+        String key = jdbc.queryForObject("""
+                SELECT m.storage_key FROM review_media rm JOIN media m ON m.id = rm.media_id WHERE rm.review_id = ?""",
+                String.class, id);
+        assertThat(key).startsWith("review/");
+
+        // The Map gives everyone the photo's URL, and guests and other members get the photo there
+        mvc.perform(get("/api/map/places/" + place + "/reviews"))
+                .andExpect(jsonPath("$.data.items[0].media[0].url").value("/media/" + key));
+        mvc.perform(get("/media/" + key)).andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/jpeg"))
+                .andExpect(header().string("Cache-Control", "max-age=86400, public"));
+        mvc.perform(get("/media/" + key).session(session(user("USER", 30)))).andExpect(status().isOk());
+
+        // Hidden by reports: only its author still sees it
+        jdbc.update("UPDATE reviews SET status = 'HIDDEN' WHERE id = ?", id);
+        mvc.perform(get("/media/" + key)).andExpect(status().isNotFound());
+        mvc.perform(get("/media/" + key).session(session(author))).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store, private"));
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private static MockMultipartFile photo() throws Exception {
+        BufferedImage img = new BufferedImage(64, 48, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", out);
+        return new MockMultipartFile("images", "anh.png", "image/png", out.toByteArray());
+    }
 
     private ResultActions send(MockHttpServletRequestBuilder request, long userId, String json) throws Exception {
         return mvc.perform(withCsrf(request).session(session(userId)).contentType(MediaType.APPLICATION_JSON).content(json));
