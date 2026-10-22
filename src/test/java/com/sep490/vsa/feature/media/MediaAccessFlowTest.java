@@ -70,6 +70,11 @@ class MediaAccessFlowTest {
         for (long id : users) {
             jdbc.update("DELETE FROM tag_requests WHERE user_id = ?", id);
             jdbc.update("DELETE FROM blogs WHERE author_id = ?", id);           // blog_media goes with them
+            jdbc.update("DELETE FROM reviews WHERE author_id = ?", id);         // review_media goes with them
+        }
+        for (long id : users) {
+            // Merged places first: they point at the place they were merged into
+            jdbc.update("DELETE FROM places WHERE created_by = ? ORDER BY merged_into_id IS NULL", id);
         }
         for (String key : keys) {
             jdbc.update("DELETE FROM media WHERE storage_key = ?", key);
@@ -195,6 +200,72 @@ class MediaAccessFlowTest {
         assertThat(fetch(key, other).getHeader("Cache-Control")).isEqualTo(PUBLIC);
     }
 
+    // ---------------------------------------------------------------- review photos (Map)
+
+    @Test
+    void aPassedFileOfAPublishedReviewIsPublicLikeAPostPhoto() throws Exception {
+        String photo = file("review", owner, "PASSED", "jpg", "image/jpeg");
+        String video = file("review", owner, "PASSED", "mp4", "video/mp4");
+        long place = place(other, "ACTIVE");
+        long review = review(owner, place, "PUBLISHED");
+        attachToReview(review, photo);
+        attachToReview(review, video);
+
+        for (Long viewer : new Long[]{null, other, owner}) {
+            MockHttpServletResponse answer = fetch(photo, viewer);
+            assertThat(answer.getStatus()).isEqualTo(200);
+            assertThat(answer.getContentType()).isEqualTo("image/jpeg");
+            assertThat(answer.getHeader("Cache-Control")).isEqualTo(PUBLIC);
+            assertThat(answer.getHeaderValues("X-Content-Type-Options")).containsExactly("nosniff");
+        }
+        MockHttpServletResponse movie = fetch(video, null);
+        assertThat(movie.getStatus()).isEqualTo(200);
+        assertThat(movie.getContentType()).isEqualTo("video/mp4");
+
+        // A place labelled "đã đóng cửa" is still on the Map with its reviews
+        jdbc.update("UPDATE places SET is_closed = TRUE WHERE id = ?", place);
+        assertThat(fetch(photo, null).getHeader("Cache-Control")).isEqualTo(PUBLIC);
+    }
+
+    @Test
+    void aFileOfAReviewTheMapDoesNotShowToEveryoneIsShownOnlyToItsOwner() throws Exception {
+        // The review is being scanned (also after an edit with new files), hidden by reports, rejected or removed
+        for (String status : List.of("PROCESSING", "HIDDEN", "REJECTED", "REMOVED")) {
+            String key = file("review", owner, "PASSED", "jpg", "image/jpeg");
+            attachToReview(review(owner, place(other, "ACTIVE"), status), key);
+            assertOwnerOnly(key, "review " + status);
+        }
+        // A published review of a place not on the Map for everyone: the first review of a pending pin, a removed or
+        // rejected place, a place merged into another one (the Map shows the reviews of the place it went into)
+        for (String status : List.of("PENDING", "REMOVED", "REJECTED", "MERGED")) {
+            String key = file("review", owner, "PASSED", "jpg", "image/jpeg");
+            attachToReview(review(owner, place(owner, status), "PUBLISHED"), key);
+            assertOwnerOnly(key, "place " + status);
+        }
+        // The file itself still being scanned or rejected, on a published review
+        for (String scan : List.of("PROCESSING", "REJECTED")) {
+            String key = file("review", owner, scan, "jpg", "image/jpeg");
+            attachToReview(review(owner, place(other, "ACTIVE"), "PUBLISHED"), key);
+            assertOwnerOnly(key, "scan " + scan);
+        }
+    }
+
+    @Test
+    void aReviewFileOfALockedOrDeletedAuthorIsShownToNobody() throws Exception {
+        String key = file("review", owner, "PASSED", "jpg", "image/jpeg");
+        attachToReview(review(owner, place(other, "ACTIVE"), "PUBLISHED"), key);
+        assertThat(fetch(key, null).getStatus()).isEqualTo(200);
+
+        for (String status : List.of("LOCKED", "DELETED")) {
+            jdbc.update("UPDATE users SET status = ? WHERE id = ?", status, owner);
+            assertNotFound(key, null);
+            assertNotFound(key, other);
+            assertNotFound(key, owner);
+        }
+        jdbc.update("UPDATE users SET status = 'ACTIVE' WHERE id = ?", owner);
+        assertThat(fetch(key, other).getHeader("Cache-Control")).isEqualTo(PUBLIC);
+    }
+
     @Test
     void filesAttachedToNothingAndTagProofsAreShownOnlyToTheirOwner() throws Exception {
         String loose = file(owner, "PASSED", "jpg", "image/jpeg");
@@ -252,6 +323,14 @@ class MediaAccessFlowTest {
         assertThat(String.valueOf(answer.getHeader("Cache-Control"))).doesNotContain("public");
     }
 
+    private void assertOwnerOnly(String key, String what) throws Exception {
+        assertNotFound(key, null);
+        assertNotFound(key, other);
+        MockHttpServletResponse mine = fetch(key, owner);
+        assertThat(mine.getStatus()).as(what).isEqualTo(200);
+        assertThat(mine.getHeader("Cache-Control")).as(what).isEqualTo(OWNER_ONLY);
+    }
+
     private MockHttpServletResponse fetch(String key, Long viewer) throws Exception {
         var request = get("/media/" + key);
         if (viewer != null) {
@@ -260,9 +339,13 @@ class MediaAccessFlowTest {
         return mvc.perform(request).andReturn().getResponse();
     }
 
-    /** A stored file and its media row, in the form MediaService makes ("blog/yyyy/MM/uuid.ext"). */
     private String file(long ownerId, String scanStatus, String extension, String mimeType) {
-        String key = "blog/2026/10/" + UUID.randomUUID() + "." + extension;
+        return file("blog", ownerId, scanStatus, extension, mimeType);
+    }
+
+    /** A stored file and its media row, in the form MediaService makes ("blog/yyyy/MM/uuid.ext"). */
+    private String file(String folder, long ownerId, String scanStatus, String extension, String mimeType) {
+        String key = folder + "/2026/10/" + UUID.randomUUID() + "." + extension;
         byte[] bytes = ("bytes of " + key).getBytes(StandardCharsets.UTF_8);
         storage.put(key, bytes);
         keys.add(key);
@@ -284,6 +367,29 @@ class MediaAccessFlowTest {
     private void attach(long blogId, String key) {
         jdbc.update("INSERT INTO blog_media (blog_id, media_id) SELECT ?, id FROM media WHERE storage_key = ?",
                 blogId, key);
+    }
+
+    /** A place in this status; a MERGED one points at a new ACTIVE place (the schema requires it). */
+    private long place(long createdBy, String status) {
+        Long mergedInto = "MERGED".equals(status) ? place(createdBy, "ACTIVE") : null;
+        String name = "Media place " + UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO places (name_vi, category_id, lat, lng, source, status, merged_into_id, created_by)
+                VALUES (?, 'food', 35.7, 139.7, 'TEAM', ?, ?, ?)""", name, status, mergedInto, createdBy);
+        return jdbc.queryForObject("SELECT id FROM places WHERE name_vi = ?", Long.class, name);
+    }
+
+    private long review(long authorId, long placeId, String status) {
+        jdbc.update("""
+                INSERT INTO reviews (author_id, place_id, rating, content, status)
+                VALUES (?, ?, 5, 'Quán ngon, có ảnh thực đơn.', ?)""", authorId, placeId, status);
+        return jdbc.queryForObject("SELECT id FROM reviews WHERE author_id = ? AND place_id = ?", Long.class,
+                authorId, placeId);
+    }
+
+    private void attachToReview(long reviewId, String key) {
+        jdbc.update("INSERT INTO review_media (review_id, media_id) SELECT ?, id FROM media WHERE storage_key = ?",
+                reviewId, key);
     }
 
     private long user(String status) {

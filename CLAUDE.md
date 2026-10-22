@@ -257,14 +257,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Cloudflare R2 later. Deleting a post (UC-13) also deletes its files.
 - `/media/<storage_key>` is `MediaController`, checked per file by `MediaAccess` (the folder is never published): to
   anyone only when the file is not deleted, its scan PASSED and it is attached to at least one PUBLISHED post or
-  question of an ACTIVE author (`Cache-Control: max-age=86400, public`, 1 day "cần chốt"); its owner (signed in,
+  question of an ACTIVE author, or to at least one PUBLISHED review (`review_media`) of an ACTIVE place by an ACTIVE
+  author (`Cache-Control: max-age=86400, public`, 1 day "cần chốt"); its owner (signed in,
   account ACTIVE, read with the file because `/media/` skips the session check) always sees their own non-deleted file
-  (`no-store, private`): edit page, a post being scanned, rejected or hidden. Everything else is 404: other people's
-  files being scanned or rejected, hidden/removed posts, locked/deleted authors, tag proofs, files attached to nothing,
-  keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
+  (`no-store, private`): edit page, a post or review being scanned, rejected or hidden, the first review of their
+  pending pin. Everything else is 404: other people's files being scanned or rejected, hidden/removed posts and
+  reviews, reviews of pending/removed/rejected/merged places, locked/deleted authors, tag proofs, files attached to
+  nothing, keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
   Security's firewall). Content type from `media.mime_type`, `nosniff`, Range requests and 304 work. Only registered
-  while `app.media.public-base-url=/media/`; a new kind of attachment (reviews, events) or a Moderator queue adds its
-  rule in `MediaAccess`.
+  while `app.media.public-base-url=/media/`; a new kind of attachment (events) or a Moderator queue adds its rule in
+  `MediaAccess`.
 - `feature/moderation`: `MediaScanService` + `ImageModerator`. With `app.moderation.openai.api-key` (or env
   `OPENAI_API_KEY`) photos go to OpenAI Moderation `omni-moderation-latest` (free); without a key
   `DevImageModerator` answers `app.moderation.dev-result` (PASS, or FLAG to try the rejected flow). Scanner errors
