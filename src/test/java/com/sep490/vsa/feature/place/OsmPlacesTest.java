@@ -247,18 +247,18 @@ class OsmPlacesTest {
         places.lookup(List.of("N1"));
         assertThat(counted).containsExactly(search, search, lookup);
 
-        // Failed requests count too: a refusal, an error answer
+        // Failed requests count too: a refusal (Photon, then the Nominatim search it falls back to), an error answer
         status = 429;
         assertThat(reasonOf(() -> places.search("ueno"))).isEqualTo("LIMITED");
         status = 500;
         assertThat(reasonOf(() -> places.lookup(List.of("N2")))).isEqualTo("OSM_ERROR");
-        assertThat(counted).containsExactly(search, search, lookup, search, lookup);
-        assertThat(calls.get()).isEqualTo(5);
+        assertThat(counted).containsExactly(search, search, lookup, search, lookup, lookup);
+        assertThat(calls.get()).isEqualTo(6);
 
         // Nothing sent, nothing counted: only made-up or malformed ids
         status = 200;
         assertThat(places.lookup(List.of("DEV-tokyo-tower", "bad"))).isEmpty();
-        assertThat(counted).hasSize(5);
+        assertThat(counted).hasSize(6);
 
         // Nominatim cannot be reached: the attempt counts; during the pause after it the fallback sends nothing
         int closed;
@@ -272,7 +272,7 @@ class OsmPlacesTest {
         cut.search("nippori");
         assertThat(cut.lookup(List.of("N772389775"))).containsOnlyKeys("N772389775");
         assertThat(cut.lookup(List.of("N772389775"))).containsOnlyKeys("N772389775");
-        assertThat(counted.subList(5, counted.size())).containsExactly(search, lookup);
+        assertThat(counted.subList(6, counted.size())).containsExactly(search, lookup);
 
         // A counter that fails never breaks the search
         OsmPlaces broken = new OsmPlaces(base + "/api/", base + "/lookup", "SenpaiOi-test/1.0", List.of("jp"), 0,

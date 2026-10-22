@@ -180,6 +180,80 @@ public class PlaceService {
 
     private List<Hit> ask(long userId, String text, boolean stations) {
         String key = (stations ? "station:" : "text:") + searchKey(text);
+        return ask(userId, key, () -> stations ? external.searchStations(text) : external.search(text));
+    }
+
+    /**
+     * "công viên Ueno": "Ueno" among parks first, then "Ueno park" as English text (Photon does not know Vietnamese
+     * words). Only the kind typed ("công viên") asks for the English word among those places.
+     */
+    private List<Hit> kindSearch(long userId, PlaceWords.Kind kind) {
+        String name = kind.rest().isBlank() ? kind.english() : kind.rest();
+        List<Hit> tagged = ask(userId, "tag:" + String.join(",", kind.tags()) + ":" + searchKey(name),
+                () -> external.searchTagged(name, kind.tags()));
+        if (tagged == null) {
+            return null;
+        }
+        List<Hit> both = new ArrayList<>(tagged);
+        if (!kind.rest().isBlank()) {
+            List<Hit> typed = ask(userId, kind.rest() + " " + kind.english(), false);
+            if (typed != null) {
+                both.addAll(typed);
+            }
+        }
+        return both;
+    }
+
+    // ---------------------------------------------------------------- around a point (Map click)
+
+    static final double NEARBY_M = 150;
+    static final int NEARBY_LIMIT = 12;
+
+    /**
+     * The places around a point the user clicked on the Map, nearest first: Senpai ơi places within
+     * {@value #NEARBY_M} m and the OpenStreetMap places there (Photon reverse), each place once, as in {@link #search}.
+     * Counted like a search for the per-user limit.
+     */
+    public PlaceSearch nearby(long userId, double lat, double lng) {
+        List<PlaceOption> items = new ArrayList<>();
+        Set<Long> shown = new HashSet<>();
+        for (Nearby n : repository.activeNear(List.<double[]>of(new double[]{lat, lng}), NEARBY_M)) {
+            if (metres(lat, lng, n.lat(), n.lng()) <= NEARBY_M && shown.add(n.option().id())) {
+                items.add(n.option());
+            }
+        }
+        String external = "ON";
+        String reason = null;
+        if (!this.external.enabled()) {
+            external = "OFF";
+        } else {
+            String key = String.format(Locale.ROOT, "near:%.4f,%.4f", lat, lng);
+            try {
+                List<Hit> hits = ask(userId, key, () -> this.external.nearby(lat, lng));
+                if (hits == null) {
+                    external = "BUSY";
+                } else {
+                    items.addAll(fromMap(hits, items, NEARBY_LIMIT));
+                }
+            } catch (ExternalPlacesException e) {
+                external = "UNAVAILABLE";
+                reason = e.reason();
+            }
+        }
+        List<PlaceOption> unique = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        for (PlaceOption o : items) {
+            if (keys.add(o.id() != null ? "id:" + o.id() : "osm:" + o.externalId())) {
+                unique.add(o);
+            }
+        }
+        unique.sort(Comparator.comparingDouble(o -> o.lat() == null ? Double.MAX_VALUE
+                : metres(lat, lng, o.lat(), o.lng())));
+        return new PlaceSearch(unique.size() > NEARBY_LIMIT ? unique.subList(0, NEARBY_LIMIT) : unique, external, reason);
+    }
+
+    /** One map call, answered from memory when the same question was asked lately; null when the user is too fast. */
+    private List<Hit> ask(long userId, String key, Supplier<List<Hit>> call) {
         long now = clock.millis();
         Memo<List<Hit>> memo = searches.get(key);
         if (memo != null && memo.until() >= now) {
@@ -188,7 +262,7 @@ public class PlaceService {
         if (real() && !allowSearch(userId)) {
             return null;
         }
-        List<Hit> hits = stations ? external.searchStations(text) : external.search(text);
+        List<Hit> hits = call.get();
         keep(searches, key, List.copyOf(hits), now + SEARCH_MEMORY_MS);
         return hits;
     }
