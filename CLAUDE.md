@@ -349,6 +349,68 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Dev sample places: Ga Nippori is the real OSM station N772389775, the other made-up places are TEAM places;
   `DevDataSeeder` moves rows of older checkouts (made-up "ChIJ-dev-…" Google ids) the same way.
 
+## Map page (feature/place: MapController, MapService, MapRepository, MapDtos) – Tiến owns the Map
+- UC ids are those of Tiến's spec (UC-U14 Browse Locations on Map, UC-U15 View Location Details, …). Page `/map`
+  (`pages/map.html`, `assets/js/pages/map.js`, `assets/css/map.css`); `/map?place={id}` opens a place, `/map?q=` searches.
+  Leaflet 1.9.4 + leaflet.markercluster 1.5.3 from unpkg with SRI. Map style "Gọn" (default) = OpenFreeMap "Liberty"
+  vector map through MapLibre GL 4.7.1 + @maplibre/maplibre-gl-leaflet 0.1.4 (free, no key; loaded only for it; falls back
+  to "Chi tiết" = OSM raster tiles when WebGL/CDN fails); the layers button switches, the choice is kept in localStorage.
+  CARTO basemaps were tried and need an API key in browsers. Declare module-level `let`s above `await start()` (TDZ).
+- APIs (GET public): `GET /api/map` (categories with counts, every ACTIVE place with a position plus the viewer's own
+  PENDING pins, review count and average, scam "!" flag, map centre = middle of the places of the user's area, else
+  Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
+  get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.search`),
+  `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
+  PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
+  PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases`. Signed-in Users only: POST/DELETE
+  `/api/map/places/{id}/save`, POST/DELETE `/api/reviews/{id}/like` (not one's own; like_count recounted),
+  POST `/api/reviews/{id}/report` (ContentReportService target REVIEW; over the threshold the review becomes HIDDEN).
+- Tools as in the prototype: one card (search "Tìm địa điểm" + "Danh mục" dropdown with "Tất cả danh mục" and
+  counts), then "Sự kiện: Tắt / 15 ngày tới / 30 ngày tới" (lantern pins labelled "Còn N ngày" / "Đang diễn ra").
+  Legend open on desktop, folded while the panel is open and on phones.
+- Shops drawn by the "Gọn" style are clickable (MapLibre layers poi_r1/poi_r7/poi_r20/poi_transit, bus stops
+  ignored): OpenFreeMap is built by Planetiler, feature id = OSM id × 10 + 1 node / 2 way / 3 relation (checked against
+  Nominatim). A shop Senpai ơi already has (same `osmId` in `/api/map` pins, or same name within 80 m / 600 m between
+  stations) opens that place; others open the "chưa có trên Senpai ơi" panel with "Viết review đầu tiên".
+- Click anywhere at zoom ≥ 15 → "Địa điểm quanh đây": in "Gọn", the POIs the map draws within ~120 px plus Senpai ơi
+  places within 150 m (client only, guests too); in "Chi tiết", `GET /api/map/nearby?lat=&lng=` (signed-in;
+  `PlaceService.nearby`, counted like a search) = Senpai ơi places within 150 m + Photon reverse, else Nominatim reverse.
+- OSM search robustness (`OsmPlaces`): Photon is waited for 4 s only; on failure or slowness Nominatim search/reverse
+  answers and Photon is skipped for 2 minutes (the public Photon server is sometimes overloaded, 10–20 s). Kind words
+  (`PlaceWords`: "công viên", "chùa", "bệnh viện", "siêu thị", "quán ăn", "trường"…, also English "park"…) turn
+  "công viên Ueno" into "Ueno" among `leisure:park` (Photon `osm_tag`, results filtered by tag on the Nominatim
+  fallback) plus the English text "Ueno park". `ExternalPlaces` gained `searchTagged` and `nearby` (default methods).
+- Pins: bright (round, big, review count) when ACTIVE with ≥ 1 published review and not closed; faded otherwise;
+  community pins (source USER) square; pending dashed; closed grey; lantern pins for events. OSM results of a search
+  get temporary dark pins and a details panel without an id ("chưa có trên Senpai ơi"); such a place is stored only when
+  someone reviews, saves or links it. "Viết review", "Báo đã đóng cửa" and "Cắm ghim" are disabled until those steps
+  are built. `PlaceOption` (search result) now also carries lat/lng.
+- Login accepts `?next=/path` (same-site paths only, Users only) so the Map can send guests to sign in and back.
+- Reviews (feature/review, UC-U16..18): `GET /api/reviews/compose?placeId=` (limits, new-account quota, `myReviewId`),
+  `POST /api/reviews` (multipart part "review" `{placeId | externalPlaceId, rating, content}` + ≤ 5 "images" + 1
+  "video", or plain JSON), `GET /api/reviews/{id}/edit`, `PUT /api/reviews/{id}` (`{rating, content, keepMediaIds}`),
+  `DELETE /api/reviews/{id}`. One review per user per place (409), stars 1–5, text 10–2,000, same checks and order as
+  Write Post (links, new-account limit shared with posts in `user_daily_usage`, banned keywords). An
+  `externalPlaceId` goes through `PlaceService.resolve/save` (the OSM place is added). Without media → PUBLISHED and
+  +10 (`PointService.REVIEW`, reason REVIEW_CREATED, paid once); with media → PROCESSING until
+  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it; an edit with new media
+  hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
+  The form is a panel mode ("write") of map.js; pins are reloaded after a save.
+- "Cắm ghim" (UC-U19, feature/review PinService/PinController): `GET /api/map/pins/compose`, `GET
+  /api/map/pins/duplicates?lat=&lng=&names=a|b` (ACTIVE places within 200 m whose squashed name contains / is contained
+  in a pin name), `POST /api/map/pins` (part "pin" `{lat,lng,nameJa,nameEn,nameVi,categoryId,address,rating,content,
+  confirmDuplicate}` + ≤ 5 "images"). ≥ 1 of nameJa/nameEn; the first review follows the review rules (+10 when
+  published); duplicates without `confirmDuplicate` → 409; new accounts `pins_per_day` (2) in `user_daily_usage.pins`.
+  Saved as places source USER, status PENDING (+ place_history CREATED via PIN); only its author sees it; its first
+  review can be edited but not deleted while PENDING. UI: "Cắm ghim" → pick mode → panel "pin" with a draggable pin (a
+  map click moves it), "Có phải là một trong các nơi này?" (OSM/Senpai ơi places within 60 m → write a review there
+  instead, text carried over) and the "Có thể trùng" box ("Viết review cho nơi này" / "Vẫn gửi ghim mới").
+- "Báo đã đóng cửa" (UC-U20): `POST /api/map/places/{id}/closed-report` → `{count, threshold, queued}`; one row per
+  user and place (`place_closed_reports`, 409 on a second), ACTIVE and not closed places only; at
+  `closed_report_threshold` (5) the place waits for a Moderator, the label is never set automatically.
+- `app.map.dev-location=lat,lng,label` (application-local only) makes "Vị trí của tôi" return a fixed point, for testing
+  from outside Japan; `/api/map` sends it as `devLocation`.
+
 ## Working notes
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag

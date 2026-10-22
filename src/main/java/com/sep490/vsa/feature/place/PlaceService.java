@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -162,7 +163,8 @@ public class PlaceService {
     private List<Hit> mapSearch(long userId, String q) {
         String station = stationName(q);
         if (station == null || VietnameseText.squash(station).length() < MIN_CHARS) {
-            return ask(userId, q, false);
+            Optional<PlaceWords.Kind> kind = PlaceWords.parse(q);
+            return kind.isPresent() ? kindSearch(userId, kind.get()) : ask(userId, q, false);
         }
         List<Hit> stations = ask(userId, station, true);
         if (stations == null) {
@@ -218,6 +220,10 @@ public class PlaceService {
      * match its ASVSJ name, e.g. typed in Japanese); one removed by a Moderator is left out.
      */
     private List<PlaceOption> fromMap(List<Hit> hits, List<PlaceOption> asvsj) {
+        return fromMap(hits, asvsj, EXTERNAL_LIMIT);
+    }
+
+    private List<PlaceOption> fromMap(List<Hit> hits, List<PlaceOption> asvsj, int limit) {
         // Known ids first: when the map has a place twice (a point and its building), the copy ASVSJ knows stands for
         // both, so a place a Moderator removed does not come back through its twin
         Map<String, Known> known = repository.byOsmIds(hits.stream().map(Hit::id).distinct().toList());
@@ -255,7 +261,7 @@ public class PlaceService {
                 }
                 continue;
             }
-            if (fresh.size() == EXTERNAL_LIMIT) {
+            if (fresh.size() == limit) {
                 continue;
             }
             Category category = mapped.get(h.tag());
@@ -263,7 +269,8 @@ public class PlaceService {
                 other = other == null ? repository.otherCategory() : other;
                 category = other;
             }
-            fresh.add(new PlaceOption(null, h.id(), h.name(), h.nameJa(), category.name(), h.address(), "OSM"));
+            fresh.add(new PlaceOption(null, h.id(), h.name(), h.nameJa(), category.name(), h.address(), "OSM",
+                    h.lat(), h.lng()));
         }
         return fresh;
     }

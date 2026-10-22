@@ -36,7 +36,7 @@ public class PlaceRepository {
     private static final double METRES_PER_DEGREE = 111_320;
 
     private static final String OPTION_COLUMNS = """
-            p.id, p.osm_id, p.name_vi, p.name_ja, c.name_vi AS category, p.address, p.source""";
+            p.id, p.osm_id, p.name_vi, p.name_ja, c.name_vi AS category, p.address, p.source, p.lat, p.lng""";
 
     private final JdbcTemplate jdbc;
     private final NamedParameterJdbcTemplate named;
@@ -48,7 +48,13 @@ public class PlaceRepository {
 
     private static PlaceOption option(ResultSet rs, int i) throws SQLException {
         return new PlaceOption(rs.getLong("id"), rs.getString("osm_id"), rs.getString("name_vi"),
-                rs.getString("name_ja"), rs.getString("category"), rs.getString("address"), rs.getString("source"));
+                rs.getString("name_ja"), rs.getString("category"), rs.getString("address"), rs.getString("source"),
+                decimal(rs, "lat"), decimal(rs, "lng"));
+    }
+
+    private static Double decimal(ResultSet rs, String column) throws SQLException {
+        BigDecimal value = rs.getBigDecimal(column);
+        return value == null ? null : value.doubleValue();
     }
 
     // ---------------------------------------------------------------- search
@@ -124,7 +130,7 @@ public class PlaceRepository {
             params.addValue("s" + i, lat - dLat).addValue("n" + i, lat + dLat)
                     .addValue("w" + i, lng - dLng).addValue("e" + i, lng + dLng);
         }
-        return named.query("SELECT " + OPTION_COLUMNS + ", p.category_id, p.name_en, p.lat, p.lng" + """
+        return named.query("SELECT " + OPTION_COLUMNS + ", p.category_id, p.name_en" + """
 
                 FROM places p JOIN place_categories c ON c.id = p.category_id
                 WHERE p.status = 'ACTIVE' AND p.lat IS NOT NULL AND p.lng IS NOT NULL AND (""" + String.join(" OR ", boxes)
