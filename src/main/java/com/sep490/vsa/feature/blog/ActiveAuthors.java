@@ -8,7 +8,7 @@ package com.sep490.vsa.feature.blog;
  * Every read of {@code blogs} or {@code comments} for display adds {@link #of}, so the rule is written once.
  * {@code blogs.comment_count} and "Bài nổi bật" follow the same rule; {@link AuthorStatusSync} keeps them right when
  * an account's status changes. Home also applies it to {@code reviews} (its numbers, quotes and "Review mới"), and
- * {@code /media/} serves a photo publicly only from a post of an active author
+ * {@code /media/} serves a photo publicly only from a post or review of an active author
  * ({@link com.sep490.vsa.feature.media.MediaAccess}).
  */
 public final class ActiveAuthors {
