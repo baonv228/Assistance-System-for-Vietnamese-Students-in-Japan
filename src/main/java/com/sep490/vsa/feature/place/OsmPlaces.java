@@ -241,14 +241,14 @@ public class OsmPlaces implements ExternalPlaces {
             try {
                 Map<String, Object> vars = Map.of("lat", lat, "lon", lng, "limit", SEARCH_ASKED,
                         "radius", NEARBY_RADIUS_KM);
-                return hits(call("Photon reverse",
+                return hits(call("Photon reverse", SEARCH_USAGE,
                         () -> photon.get().uri(reverseTemplate, vars).retrieve().body(JsonNode.class)));
             } catch (ExternalPlacesException e) {
                 photonFailed(e);
             }
         }
         Map<String, Object> vars = Map.of("lat", lat, "lon", lng);
-        JsonNode place = paced(() -> call("Nominatim reverse",
+        JsonNode place = paced(() -> call("Nominatim reverse", LOOKUP_USAGE,
                 () -> client.get().uri(nominatimReverseTemplate, vars).retrieve().body(JsonNode.class)));
         Hit hit = place == null ? null : nominatimHit(place);
         return hit == null || !inRegions(hit.countryCode()) || noise(hit.tag()) ? List.of() : List.of(hit);
@@ -268,7 +268,8 @@ public class OsmPlaces implements ExternalPlaces {
         if (System.currentTimeMillis() >= photonDownUntil) {
             try {
                 Map<String, Object> vars = Map.of("q", text, "limit", SEARCH_ASKED, "lat", BIAS_LAT, "lon", BIAS_LON);
-                return hits(call("Photon search", () -> photon.get().uri(template, vars).retrieve().body(JsonNode.class)));
+                return hits(call("Photon search", SEARCH_USAGE,
+                        () -> photon.get().uri(template, vars).retrieve().body(JsonNode.class)));
             } catch (ExternalPlacesException e) {
                 photonFailed(e);
             }
@@ -285,7 +286,7 @@ public class OsmPlaces implements ExternalPlaces {
     /** Nominatim's search (1 request a second for the whole server, like the lookups), map noise left out. */
     private List<Hit> nominatimSearch(String text) {
         Map<String, Object> vars = Map.of("q", text);
-        JsonNode response = paced(() -> call("Nominatim search",
+        JsonNode response = paced(() -> call("Nominatim search", LOOKUP_USAGE,
                 () -> client.get().uri(nominatimSearchTemplate, vars).retrieve().body(JsonNode.class)));
         List<Hit> hits = new ArrayList<>();
         Set<String> ids = new HashSet<>();
@@ -307,10 +308,8 @@ public class OsmPlaces implements ExternalPlaces {
         return eq < 0 || noise(tag.substring(0, eq), tag.substring(eq + 1));
     }
 
-    private List<Hit> search(String template, String text) {
-        Map<String, Object> vars = Map.of("q", text, "limit", SEARCH_ASKED, "lat", BIAS_LAT, "lon", BIAS_LON);
-        JsonNode response = call("Photon search", SEARCH_USAGE,
-                () -> client.get().uri(template, vars).retrieve().body(JsonNode.class));
+    /** Photon's answer (search or reverse) as places in the configured countries, each once. */
+    private List<Hit> hits(JsonNode response) {
         List<Hit> hits = new ArrayList<>();
         Set<String> ids = new HashSet<>();
         if (response == null) {

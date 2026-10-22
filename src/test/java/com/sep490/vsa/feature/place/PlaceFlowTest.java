@@ -503,10 +503,11 @@ class PlaceFlowTest {
             osm.search("ueno " + word);
             osm.lookup(List.of("N1", "DEV-tokyo-tower"));
             answerStatus.set(500);
+            // Photon fails, then the Nominatim search it falls back to: both requests count
             assertThatThrownBy(() -> osm.searchStations("Ueno")).isInstanceOf(ExternalPlacesException.class);
             osm.lookup(List.of("DEV-tokyo-tower"));                     // nothing to send, nothing counted
             assertThat(usage(OsmPlaces.SEARCH_USAGE)).isEqualTo(searches + 2);
-            assertThat(usage(OsmPlaces.LOOKUP_USAGE)).isEqualTo(lookups + 1);
+            assertThat(usage(OsmPlaces.LOOKUP_USAGE)).isEqualTo(lookups + 2);
         } finally {
             server.stop(0);
         }
