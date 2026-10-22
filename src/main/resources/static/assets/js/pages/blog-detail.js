@@ -2,6 +2,7 @@
 // viewer may take. Guests can read; every action that writes data sends them to sign in first.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
+import { loadLeaflet, OSM_CREDIT, OSM_TILES } from "../lib/map.js";
 import { avatar, esc, fullDate, googleDirectionsUrl, ic, loginUrl, osmUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
@@ -214,15 +215,6 @@ function mediaHtml(media) {
 // the map is first shown. The map lives in its own element, moved into each new render, so liking or commenting does
 // not rebuild it.
 
-const LEAFLET = {
-    css: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
-    cssHash: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=",
-    js: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-    jsHash: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-};
-const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const OSM_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
-let leafletLoading = null;
 const placeMap = { el: null, map: null, key: "", ticket: 0, open: false };
 
 const mappable = (places) => places.filter((p) => p.lat != null && p.lng != null);
@@ -251,25 +243,6 @@ function placePopup(p) {
     return `<b>${esc(p.name)}</b>${line ? `<br><small>${esc(line)}</small>` : ""}
         <br><a href="${esc(osmUrl(p))}" target="_blank" rel="noopener">Xem trên OpenStreetMap</a>
         <br><a href="${esc(googleDirectionsUrl(p))}" target="_blank" rel="noopener">Chỉ đường bằng Google Maps</a>`;
-}
-
-function loadLeaflet() {
-    if (!leafletLoading) {
-        leafletLoading = new Promise((resolve, reject) => {
-            const css = Object.assign(document.createElement("link"),
-                { rel: "stylesheet", href: LEAFLET.css, integrity: LEAFLET.cssHash, crossOrigin: "" });
-            const js = Object.assign(document.createElement("script"),
-                { src: LEAFLET.js, integrity: LEAFLET.jsHash, crossOrigin: "", async: true });
-            js.onload = () => (window.L ? resolve(window.L) : reject(new Error("Leaflet")));
-            js.onerror = () => {
-                leafletLoading = null;                  // try again on the next render
-                js.remove();
-                reject(new Error("Leaflet"));
-            };
-            document.head.append(css, js);
-        });
-    }
-    return leafletLoading;
 }
 
 async function mountPlaceMap(places) {

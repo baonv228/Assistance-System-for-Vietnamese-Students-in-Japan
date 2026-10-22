@@ -81,7 +81,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         // Pages of each role: the clean address and the file it forwards to (see CleanUrls)
-                        .requestMatchers("/moderator", "/pages/moderator/**").hasRole("MODERATOR")
+                        .requestMatchers("/moderator", "/moderator/**", "/pages/moderator/**").hasRole("MODERATOR")
                         .requestMatchers("/academic", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
                         .requestMatchers("/admin", "/admin/**", "/pages/admin/**").hasRole("ADMIN")
                         .requestMatchers("/profile", "/pages/profile.html", "/saved", "/pages/saved.html").authenticated()

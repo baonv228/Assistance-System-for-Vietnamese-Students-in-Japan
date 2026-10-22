@@ -53,6 +53,13 @@ INSERT INTO events (title, start_date, end_date, location_name, lat, lng, cost_n
  ('Lễ hội mùa thu đền Suwa', CURDATE() + INTERVAL 14 DAY, CURDATE() + INTERVAL 15 DAY, 'Đền Suwa, Nishi-Nippori', 35.730300, 139.768200, 'Miễn phí', 'Có quầy đồ ăn và biểu diễn trống taiko buổi tối.', @mod),
  ('Ngắm hoa anh đào ở công viên Ueno', CURDATE() + INTERVAL 160 DAY, CURDATE() + INTERVAL 171 DAY, 'Công viên Ueno, cách Nippori hai ga', NULL, NULL, 'Miễn phí', 'Đi trước 9 giờ sáng để có chỗ ngồi.', @mod);
 
+-- Event reviews: one per user per year the event is held (event_year = year of its start date)
+SET @e_obon   = (SELECT id FROM events WHERE title = 'Lễ hội Obon công viên Yanaka');
+SET @e_market = (SELECT id FROM events WHERE title = 'Chợ phiên cuối tuần phố Yanaka Ginza');
+INSERT INTO reviews (author_id, event_id, event_year, rating, content, status, like_count, created_at) VALUES
+ (@hoang,  @e_market, YEAR(CURDATE() - INTERVAL 1 DAY), 5, 'Chiều thứ bảy đông nhưng vui. Croquette 100 yên ở đầu phố rất ngon.', 'PUBLISHED', 4, NOW() - INTERVAL 1 DAY),
+ (@lananh, @e_obon,   YEAR(CURDATE() - INTERVAL 60 DAY), 4, 'Múa Bon Odori bắt đầu khoảng 7 giờ tối, ai cũng được vào nhảy cùng. Nhớ mang quạt và khăn.', 'PUBLISHED', 7, NOW() - INTERVAL 58 DAY);
+
 -- ---------------------------------------------------------------- blog
 INSERT INTO blogs (author_id, blog_type, title, content, status, is_pinned, like_count, comment_count, created_at) VALUES
  (@lananh, 'POST', 'Năm điều mình ước biết trước tuần đầu ở Tokyo',

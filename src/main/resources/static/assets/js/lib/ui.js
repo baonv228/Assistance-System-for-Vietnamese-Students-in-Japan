@@ -62,6 +62,23 @@ export function eventWhen(event) {
     return `Còn ${event.daysUntil} ngày`;
 }
 
+/** "2026-10-03" → "03/10/2026". */
+export const dmy = (isoDate) => isoDate.split("-").reverse().join("/");
+
+/** "03/10/2026 – 05/10/2026", or one date for a one-day event. */
+export const eventRange = (event) => (event.startDate === event.endDate
+    ? dmy(event.startDate) : `${dmy(event.startDate)} – ${dmy(event.endDate)}`);
+
+/** Label of an event card from the API (state NOW | UPCOMING | PAST): "Đang diễn ra", "Còn 12 ngày", "Đã qua". */
+export function eventStateLabel(event) {
+    if (event.state === "NOW") return "Đang diễn ra";
+    if (event.state === "PAST") return "Đã qua";
+    return `Còn ${event.daysUntil} ngày`;
+}
+
+/** Badge class for that label: green while happening, lantern-yellow before, plain after. */
+export const eventStateClass = (event) => ({ NOW: "ok", UPCOMING: "lan" })[event.state] || "";
+
 export function formatDay(isoDate) {
     const [, m, d] = isoDate.split("-");
     return { day: Number(d), month: `Th${Number(m)}` };

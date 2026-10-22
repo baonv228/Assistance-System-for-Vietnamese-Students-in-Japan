@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lễ hội và sự kiện – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/blog.css">
+    <link rel="stylesheet" href="/assets/css/events.css">
+</head>
+<body class="app">
+<main class="page events-page" id="events">
+    <form class="blog-search" id="search" role="search">
+        <span class="ic" aria-hidden="true">search</span>
+        <label class="sr-only" for="q">Tìm sự kiện</label>
+        <input id="q" name="q" type="search" maxlength="100" autocomplete="off"
+               placeholder="Tìm sự kiện hoặc nơi tổ chức">
+    </form>
+    <header>
+        <h1>Lễ hội và sự kiện</h1>
+        <p class="note">Do Moderator đăng. Sự kiện đang hoặc sắp diễn ra cũng hiện trên bản đồ. Ai đã đi có thể viết review và đăng ảnh cho năm đó.</p>
+    </header>
+    <div id="list" aria-live="polite"><p class="note">Đang tải…</p></div>
+</main>
+<script type="module" src="/assets/js/pages/events.js"></script>
+</body>
+</html>

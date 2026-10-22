@@ -10,7 +10,7 @@ const TABS = [
     ["home", "Trang chủ", "home", "/"],
     ["map", "Bản đồ", "map", soon("map")],
     ["learn", "Học", "school", soon("learn")],
-    ["fest", "Sự kiện", "celebration", soon("fest")],
+    ["fest", "Sự kiện", "celebration", "/events"],
     ["blog", "Blog", "forum", "/blog"],
     ["qa", "Hỏi-Đáp", "contact_support", "/qa"],
     ["guide", "Cẩm nang", "menu_book", soon("guide")],

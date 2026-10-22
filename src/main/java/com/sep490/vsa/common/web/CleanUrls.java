@@ -42,7 +42,9 @@ public final class CleanUrls {
         PAGES.put("/blog/new", "/pages/blog-write.html");
         PAGES.put("/qa", "/pages/qa.html");
         PAGES.put("/qa/ask", "/pages/qa-ask.html");
+        PAGES.put("/events", "/pages/events.html");
         PAGES.put("/moderator", "/pages/moderator/index.html");
+        PAGES.put("/moderator/events", "/pages/moderator/events.html");
         PAGES.put("/academic", "/pages/academic/index.html");
         PAGES.put("/admin", "/pages/admin/index.html");
         PAGES.put("/admin/users", "/pages/admin/users.html");
@@ -52,12 +54,16 @@ public final class CleanUrls {
 
     private static final Map<String, String> DETAIL_PAGES = Map.of(
             "/blog", "/pages/blog-detail.html",
-            "/qa", "/pages/qa-detail.html");
+            "/qa", "/pages/qa-detail.html",
+            "/events", "/pages/event-detail.html");
 
     /** Edit forms (/blog/{id}/edit, /qa/{id}/edit) reuse the write pages; the script reads the id from the path. */
     private static final Map<String, String> EDIT_PAGES = Map.of(
             "/blog", "/pages/blog-write.html",
             "/qa", "/pages/qa-ask.html");
+
+    /** "Viết review" for an event (/events/{id}/review): writes the viewer's review of this year, or edits it. */
+    static final String EVENT_REVIEW_PAGE = "/pages/event-review.html";
 
     private static final Pattern ID_PARAM = Pattern.compile("(?:^|&)id=(\\d+)(?:&|$)");
 
@@ -73,6 +79,7 @@ public final class CleanUrls {
                     registry.addViewController(path + "/{id:\\d+}").setViewName("forward:" + file));
             EDIT_PAGES.forEach((path, file) ->
                     registry.addViewController(path + "/{id:\\d+}/edit").setViewName("forward:" + file));
+            registry.addViewController("/events/{id:\\d+}/review").setViewName("forward:" + EVENT_REVIEW_PAGE);
         }
     }
 
