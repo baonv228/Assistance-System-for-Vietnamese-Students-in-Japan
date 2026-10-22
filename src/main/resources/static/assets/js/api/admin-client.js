@@ -46,6 +46,14 @@ async function adminRequest(endpoint, options = {}, retried = false) {
         return adminRequest(endpoint, options, true);
     }
 
+    // Phiên đăng nhập đã hết (hoặc tài khoản vừa bị khóa): về trang đăng nhập
+    if (response.status === 401) {
+        window.location.replace("/login");
+        const error = new Error("Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.");
+        error.status = 401;
+        throw error;
+    }
+
     if (response.status === 204) {
         return null;
     }

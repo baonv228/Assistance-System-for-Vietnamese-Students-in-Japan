@@ -13,6 +13,11 @@ public final class AuthDtos {
     private AuthDtos() {
     }
 
+    /** Leading and trailing spaces off (Unicode ones too, e.g. the full-width space of a Japanese keyboard). */
+    private static String strip(String value) {
+        return value == null ? null : value.strip();
+    }
+
     public record SendCodeRequest(
             @NotBlank(message = "Vui lòng nhập email")
             @Email(message = "Email không hợp lệ")
@@ -30,21 +35,32 @@ public final class AuthDtos {
             String code) {
     }
 
-    /** One-time ticket that proves the email was verified; sent back with the password step. */
-    public record VerifyCodeResponse(String ticket, long expiresInMinutes) {
+    /**
+     * One-time ticket that proves the email was verified; sent back with the password step. {@code passwordMinLength}
+     * is the Admin setting password_min_length, shown in the password rules of that step.
+     */
+    public record VerifyCodeResponse(String ticket, long expiresInMinutes, int passwordMinLength) {
     }
 
+    /**
+     * The minimum password length is an Admin setting, so RegistrationService checks it (and BCrypt's 72 bytes); the
+     * display name is stripped before it is validated, so " a" is too short.
+     */
     public record CompleteRegistrationRequest(
             @NotBlank(message = "Phiên đăng ký đã hết hạn, vui lòng bắt đầu lại") String ticket,
             @NotBlank(message = "Vui lòng nhập tên hiển thị")
             @Size(min = 2, max = 60, message = "Tên hiển thị dài từ 2 đến 60 ký tự")
             String displayName,
             @NotBlank(message = "Vui lòng nhập mật khẩu")
-            @Size(min = 8, max = 72, message = "Mật khẩu dài từ 8 đến 72 ký tự")
+            @Size(max = 72, message = "Mật khẩu dài tối đa 72 ký tự")
             @Pattern(regexp = "^(?=.*\\p{L})(?=.*\\d).+$", message = "Mật khẩu phải có cả chữ và số")
             String password,
             @AssertTrue(message = "Bạn phải từ đủ 18 tuổi để đăng ký") boolean adultConfirmed,
             @AssertTrue(message = "Bạn cần đồng ý Điều khoản, Chính sách bảo mật và Quy tắc cộng đồng") boolean acceptTerms) {
+
+        public CompleteRegistrationRequest {
+            displayName = strip(displayName);
+        }
     }
 
     public record LoginRequest(
@@ -52,12 +68,17 @@ public final class AuthDtos {
             @NotBlank(message = "Vui lòng nhập mật khẩu") String password) {
     }
 
+    /** The display name is stripped before it is validated, as in {@link CompleteRegistrationRequest}. */
     public record CompleteSocialSignupRequest(
             @NotBlank(message = "Vui lòng nhập tên hiển thị")
             @Size(min = 2, max = 60, message = "Tên hiển thị dài từ 2 đến 60 ký tự")
             String displayName,
             @AssertTrue(message = "Bạn phải từ đủ 18 tuổi để đăng ký") boolean adultConfirmed,
             @AssertTrue(message = "Bạn cần đồng ý Điều khoản, Chính sách bảo mật và Quy tắc cộng đồng") boolean acceptTerms) {
+
+        public CompleteSocialSignupRequest {
+            displayName = strip(displayName);
+        }
     }
 
     public record PendingSocialResponse(String provider, String email, String displayName) {

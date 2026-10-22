@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +23,8 @@ class OsmPlacesTest {
 
     private final Map<String, String> last = new ConcurrentHashMap<>();
     private final AtomicInteger calls = new AtomicInteger();
+    /** What the client counted in api_usage, in order. */
+    private final List<String> counted = new CopyOnWriteArrayList<>();
     private HttpServer server;
     private OsmPlaces places;
     private String base;
@@ -34,7 +37,8 @@ class OsmPlacesTest {
         server.createContext("/", this::handle);
         server.start();
         base = "http://127.0.0.1:" + server.getAddress().getPort();
-        places = new OsmPlaces(base + "/api/", base + "/lookup", "SenpaiOi-test/1.0", List.of("jp", " VN "), 0);
+        places = new OsmPlaces(base + "/api/", base + "/lookup", "SenpaiOi-test/1.0", List.of("jp", " VN "), 0,
+                counted::add);
     }
 
     @AfterEach
@@ -178,7 +182,7 @@ class OsmPlacesTest {
             closed = probe.getLocalPort();                 // nothing listens there once the probe is closed
         }
         OsmPlaces cut = new OsmPlaces(base + "/api/", "http://127.0.0.1:" + closed + "/lookup", "SenpaiOi-test/1.0",
-                List.of("jp"), 0);
+                List.of("jp"), 0, counted::add);
         answer = "{\"features\": [" + feature("N", 772389775, "railway", "station", "Nippori", "JP", 139.7713635,
                 35.7289204, ", \"city\": \"Tokyo\"") + "]}";
         cut.search("nippori");
@@ -193,13 +197,89 @@ class OsmPlacesTest {
     @Test
     void nominatimIsAskedAtMostOnceASecond() {
         answer = "[]";
-        OsmPlaces paced = new OsmPlaces(base + "/api/", base + "/lookup", "SenpaiOi-test/1.0", List.of(), 400);
+        OsmPlaces paced = new OsmPlaces(base + "/api/", base + "/lookup", "SenpaiOi-test/1.0", List.of(), 400,
+                counted::add);
         long start = System.nanoTime();
         paced.lookup(List.of("N1"));
         paced.lookup(List.of("N2"));
         paced.lookup(List.of("N3"));
         assertThat((System.nanoTime() - start) / 1_000_000).isGreaterThanOrEqualTo(800);
         assertThat(calls.get()).isEqualTo(3);
+    }
+
+    @Test
+    void lookupLeavesOutMapNoiseUnlessTheSearchOfferedIt() {
+        String station = """
+                {"osm_type": "node", "osm_id": 772389775, "lat": "35.7289204", "lon": "139.7713635",
+                 "category": "railway", "type": "station", "name": "Nippori",
+                 "address": {"country_code": "jp"}, "namedetails": {"name": "日暮里"}}""";
+        String boundary = """
+                {"osm_type": "relation", "osm_id": 1758858, "lat": "35.7126", "lon": "139.78",
+                 "category": "boundary", "type": "administrative", "name": "Taito",
+                 "address": {"country_code": "jp"}, "namedetails": {"name": "台東区"}}""";
+        String street = """
+                {"osm_type": "way", "osm_id": 25485829, "lat": "35.6717", "lon": "139.7036",
+                 "category": "highway", "type": "pedestrian", "name": "Takeshita Street",
+                 "address": {"country_code": "jp"}, "namedetails": {"name": "竹下通り"}}""";
+        String lookupAnswer = "[" + station + "," + boundary + "," + street + "]";
+        List<String> ids = List.of("N772389775", "R1758858", "W25485829");
+
+        // Ids sent by hand: a district boundary and a street are not places to link
+        answer = lookupAnswer;
+        assertThat(places.lookup(ids)).containsOnlyKeys("N772389775");
+
+        // The search offered the street (Photon lists it as a tourist attraction): picked there, it can be linked
+        answer = "{\"features\": [" + feature("W", 25485829, "tourism", "attraction", "Takeshita Street", "JP", 139.7036,
+                35.6717, "") + "]}";
+        assertThat(places.search("takeshita")).extracting(Hit::id).containsExactly("W25485829");
+        answer = lookupAnswer;
+        assertThat(places.lookup(ids)).containsOnlyKeys("N772389775", "W25485829");
+    }
+
+    @Test
+    void everyRequestSentIsCountedOnceAnsweredOrNot() throws IOException {
+        String search = OsmPlaces.SEARCH_USAGE;
+        String lookup = OsmPlaces.LOOKUP_USAGE;
+        answer = "{\"features\": []}";
+        places.search("ueno");
+        places.searchStations("Ueno");
+        answer = "[]";
+        places.lookup(List.of("N1"));
+        assertThat(counted).containsExactly(search, search, lookup);
+
+        // Failed requests count too: a refusal, an error answer
+        status = 429;
+        assertThat(reasonOf(() -> places.search("ueno"))).isEqualTo("LIMITED");
+        status = 500;
+        assertThat(reasonOf(() -> places.lookup(List.of("N2")))).isEqualTo("OSM_ERROR");
+        assertThat(counted).containsExactly(search, search, lookup, search, lookup);
+        assertThat(calls.get()).isEqualTo(5);
+
+        // Nothing sent, nothing counted: only made-up or malformed ids
+        status = 200;
+        assertThat(places.lookup(List.of("DEV-tokyo-tower", "bad"))).isEmpty();
+        assertThat(counted).hasSize(5);
+
+        // Nominatim cannot be reached: the attempt counts; during the pause after it the fallback sends nothing
+        int closed;
+        try (java.net.ServerSocket probe = new java.net.ServerSocket(0)) {
+            closed = probe.getLocalPort();
+        }
+        OsmPlaces cut = new OsmPlaces(base + "/api/", "http://127.0.0.1:" + closed + "/lookup", "SenpaiOi-test/1.0",
+                List.of("jp"), 0, counted::add);
+        answer = "{\"features\": [" + feature("N", 772389775, "railway", "station", "Nippori", "JP", 139.7713635,
+                35.7289204, "") + "]}";
+        cut.search("nippori");
+        assertThat(cut.lookup(List.of("N772389775"))).containsOnlyKeys("N772389775");
+        assertThat(cut.lookup(List.of("N772389775"))).containsOnlyKeys("N772389775");
+        assertThat(counted.subList(5, counted.size())).containsExactly(search, lookup);
+
+        // A counter that fails never breaks the search
+        OsmPlaces broken = new OsmPlaces(base + "/api/", base + "/lookup", "SenpaiOi-test/1.0", List.of("jp"), 0,
+                service -> {
+                    throw new IllegalStateException("database down");
+                });
+        assertThat(broken.search("nippori")).extracting(Hit::id).containsExactly("N772389775");
     }
 
     private static String reasonOf(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {

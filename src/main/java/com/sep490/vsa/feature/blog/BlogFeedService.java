@@ -32,10 +32,12 @@ public class BlogFeedService {
     static final int TOP_WRITER_DAYS = 30;
 
     private final BlogFeedRepository repository;
+    private final FeaturedSnapshotService featuredPosts;
     private final Clock clock;
 
-    public BlogFeedService(BlogFeedRepository repository, Clock clock) {
+    public BlogFeedService(BlogFeedRepository repository, FeaturedSnapshotService featuredPosts, Clock clock) {
         this.repository = repository;
+        this.featuredPosts = featuredPosts;
         this.clock = clock;
     }
 
@@ -61,13 +63,18 @@ public class BlogFeedService {
                 TOP_WRITER_DAYS);
     }
 
-    /** Latest weekly snapshot; the monthly one when the week has no qualifying post. One post per author. */
+    /**
+     * Latest weekly snapshot; the monthly one when the week has no qualifying post. One post per author, at most
+     * featured_top_n posts, each still reaching featured_min_score (Admin settings, read on every call).
+     */
     Featured featured() {
+        int topN = featuredPosts.topN();
+        int minScore = featuredPosts.minScore();
         for (String period : List.of(FeaturedSnapshotService.WEEK, FeaturedSnapshotService.MONTH)) {
-            List<Row> rows = repository.findPublished(repository.latestFeatured(period));
+            List<Row> rows = repository.findPublished(repository.latestFeatured(period, minScore));
             Set<Long> authors = new HashSet<>();
             List<Row> onePerAuthor = rows.stream().filter(r -> authors.add(r.authorId()))
-                    .limit(FeaturedSnapshotService.TOP_N).toList();
+                    .limit(topN).toList();
             if (!onePerAuthor.isEmpty()) {
                 return new Featured(period, cards(onePerAuthor, FEATURED_EXCERPT_LENGTH));
             }

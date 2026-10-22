@@ -20,6 +20,21 @@ public class SystemSettings {
     public static final String POSTS_PER_DAY = "posts_per_day";
     public static final String PINS_PER_DAY = "pins_per_day";
     public static final String VIDEOS_PER_DAY = "videos_per_day";
+    /** "Bài nổi bật": how many posts are featured and the minimum score (feature/blog FeaturedSnapshotService). */
+    public static final String FEATURED_TOP_N = "featured_top_n";
+    public static final String FEATURED_MIN_SCORE = "featured_min_score";
+    /** Login lock-out (feature/auth AuthService): wrong passwords in a row, then minutes locked. */
+    public static final String LOCK_ATTEMPTS = "lock_attempts";
+    public static final String LOCK_MINUTES = "lock_minutes";
+    /** Email sign-up (feature/auth RegistrationService). */
+    public static final String PASSWORD_MIN_LENGTH = "password_min_length";
+    public static final String EMAIL_CODE_MINUTES = "email_code_minutes";
+    public static final String EMAIL_CODE_ATTEMPTS = "email_code_attempts";
+    public static final String EMAIL_CODE_RESEND_SECONDS = "email_code_resend_seconds";
+    public static final String REGISTER_TICKET_MINUTES = "register_ticket_minutes";
+    /** Admin (feature/admin): active Moderators at most, and days the activity log is kept. */
+    public static final String MAX_MODERATORS = "max_moderators";
+    public static final String LOG_KEEP_DAYS = "log_keep_days";
 
     private final JdbcTemplate jdbc;
 

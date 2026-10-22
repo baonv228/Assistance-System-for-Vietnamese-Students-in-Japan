@@ -528,6 +528,11 @@ Bài "Cảnh báo lừa đảo" gắn địa điểm thì ghim đó hiện dấu
 | created_by | BIGINT | FK → users | NULL với từ khóa có sẵn khi khởi tạo |
 | created_at | DATETIME | NN | |
 
+V5 thêm sẵn khoảng 90 cụm từ mời chào mại dâm và cờ bạc ("kèo nhà cái", "game bài đổi thưởng", "fb88", "nhận bao nuôi",
+"sugar daddy", "パパ活", "オンラインカジノ"…). V6 thêm các từ chung chung ("mại dâm", "cờ bạc", "cá cược", "nhà cái",
+"casino", "pachinko", 賭博, 風俗…): bài, câu hỏi, bình luận và tên hiển thị có các từ này đều không đăng được. Admin xóa
+hoặc thêm như từ khóa khác.
+
 ### `moderation_scans` – Kết quả kiểm duyệt tự động
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|

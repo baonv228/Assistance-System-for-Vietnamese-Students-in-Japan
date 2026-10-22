@@ -5,18 +5,8 @@ const form = document.querySelector("#complete-form");
 const alertBox = document.querySelector("#alert");
 const providerNames = { GOOGLE: "Google", FACEBOOK: "Facebook" };
 
-try {
-    const pending = await apiClient.pendingSocial();
-    document.querySelector("#subtitle").textContent =
-        `Bạn đang đăng ký bằng tài khoản ${providerNames[pending.provider] || pending.provider}.`;
-    document.querySelector("#email").value = pending.email;
-    form.displayName.value = pending.displayName || "";
-    form.hidden = false;
-    form.displayName.focus();
-} catch (error) {
-    showAlert(alertBox, error.message);
-}
-
+// The submit handler comes before any await, like on the login page: pressing Enter early must never send the form
+// itself. The form is method="post" too, so a native submit never puts what was typed in the address bar.
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
     hideAlert(alertBox);
@@ -42,3 +32,15 @@ form.addEventListener("submit", async (event) => {
         showAlert(alertBox, error.message);
     }
 });
+
+try {
+    const pending = await apiClient.pendingSocial();
+    document.querySelector("#subtitle").textContent =
+        `Bạn đang đăng ký bằng tài khoản ${providerNames[pending.provider] || pending.provider}.`;
+    document.querySelector("#email").value = pending.email;
+    form.displayName.value = pending.displayName || "";
+    form.hidden = false;
+    form.displayName.focus();
+} catch (error) {
+    showAlert(alertBox, error.message);
+}

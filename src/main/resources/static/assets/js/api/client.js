@@ -11,11 +11,25 @@ export class ApiError extends Error {
 
 let csrf = null;
 
+const OFFLINE = "Không kết nối được máy chủ. Hãy kiểm tra mạng rồi thử lại.";
+
+/** fetch, with a lost connection (offline, server down) turned into an ApiError the pages show like any other. */
+async function send(url, options) {
+    try {
+        return await fetch(url, options);
+    } catch {
+        throw new ApiError(OFFLINE, 0);
+    }
+}
+
 /** Spring Security needs the CSRF token in a header for every POST/PUT/PATCH/DELETE. */
 async function csrfHeader(force = false) {
     if (!csrf || force) {
-        const response = await fetch(`${API_BASE}/auth/csrf`, { credentials: "same-origin" });
-        const payload = await response.json();
+        const response = await send(`${API_BASE}/auth/csrf`, { credentials: "same-origin" });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.data?.headerName) {
+            throw new ApiError("Có lỗi xảy ra, vui lòng thử lại.", response.status);
+        }
         csrf = payload.data;
     }
     return { [csrf.headerName]: csrf.token };
@@ -30,13 +44,7 @@ async function request(path, options = {}, retried = false) {
     if (method !== "GET") {
         Object.assign(headers, await csrfHeader());
     }
-    const response = await fetch(`${API_BASE}${path}`, { ...options, method, headers, credentials: "same-origin" });
-
-    // The CSRF token changes after login; fetch a fresh one and retry once
-    if (response.status === 403 && method !== "GET" && !retried) {
-        await csrfHeader(true);
-        return request(path, options, true);
-    }
+    const response = await send(`${API_BASE}${path}`, { ...options, method, headers, credentials: "same-origin" });
     if (response.status === 204) {
         return null;
     }
@@ -45,6 +53,15 @@ async function request(path, options = {}, retried = false) {
         payload = await response.json();
     } catch {
         payload = null;
+    }
+
+    // The CSRF token changes after login (also in another tab): Spring Security then refuses the call before the
+    // application runs it, with Spring's own error body ({ status, error, path }, no "success"). Fetch a fresh token
+    // and send it once more. A 403 of the application itself (MSG18, reporting locked…) is an ApiResponse with
+    // "success": it is final and never sent twice.
+    if (response.status === 403 && method !== "GET" && !retried && payload?.success === undefined) {
+        await csrfHeader(true);
+        return request(path, options, true);
     }
     if (!response.ok || payload?.success === false) {
         const message = payload?.message

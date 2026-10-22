@@ -2,7 +2,7 @@
 // viewer may take. Guests can read; every action that writes data sends them to sign in first.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { avatar, esc, fullDate, googleDirectionsUrl, ic, osmUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
+import { avatar, esc, fullDate, googleDirectionsUrl, ic, loginUrl, osmUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
 // pages/qa-detail.html (QA, Hỏi-Đáp). Each kind has its own endpoints; comment actions are shared.
@@ -14,7 +14,7 @@ const ROUTES = {
     topic: (id) => `${QUESTION ? "/qa" : "/blog"}?topics=${id}`,
     profile: (id) => soon("public-profile", { id }),
     edit: (id) => `${QUESTION ? "/qa" : "/blog"}/${id}/edit`,
-    login: "/login"
+    login: loginUrl                     // back to this post after signing in
 };
 const API = QUESTION ? {
     get: apiClient.question, like: apiClient.likeQuestion, save: apiClient.saveQuestion,
@@ -42,6 +42,8 @@ const STATUS_NOTE = {
 };
 const COMMENT_MAX = 2000;
 const MAX_INDENT = 3;
+/** Statuses the author can still edit (BlogWriteService.EDITABLE); a HIDDEN post cannot be opened in the editor. */
+const EDITABLE = ["PUBLISHED", "PROCESSING", "REJECTED"];
 
 const content = document.querySelector("#content");
 const toastBox = document.querySelector("#toast");
@@ -53,6 +55,60 @@ let post = null;            // last BlogDetail from the API
 let replyTo = null;         // comment id whose reply box is open
 let editing = null;         // { id, draft }: the one comment being edited in place (Update Comment / Answer)
 let reportTarget = null;    // { kind: "blog" | "comment", id }
+
+// ---------------------------------------------------------------- drafts
+// What the user is typing in the comment box and in each reply box, so that redrawing the page (a like, the map, a
+// reply box, an edit…) never throws it away. Once a call has answered 401 (session ended, or signed out in another
+// tab) they are also kept in this tab's sessionStorage, so the trip to the sign-in page and back (?next=) brings them
+// back, together with the open reply or edit box.
+
+const drafts = new Map();   // "new" (the comment / answer box) or the parent comment id → text
+let signedOut = false;
+const DRAFT_STORE = `asvsj.commentDrafts.${blogId}`;
+const draftKey = (parentId) => (parentId ? String(parentId) : "new");
+
+function stashDrafts() {
+    signedOut = true;
+    try {
+        sessionStorage.setItem(DRAFT_STORE, JSON.stringify({ drafts: [...drafts], replyTo, editing }));
+    } catch {
+        // storage blocked: the text stays on this page only
+    }
+}
+
+function forgetStash() {
+    signedOut = false;
+    try {
+        sessionStorage.removeItem(DRAFT_STORE);
+    } catch {
+        // storage blocked
+    }
+}
+
+/** Signed in again: the drafts kept for this post (once). */
+function restoreDrafts() {
+    let saved = null;
+    try {
+        saved = JSON.parse(sessionStorage.getItem(DRAFT_STORE) || "null");
+        sessionStorage.removeItem(DRAFT_STORE);
+    } catch {
+        saved = null;
+    }
+    if (!saved || typeof saved !== "object") return;
+    (Array.isArray(saved.drafts) ? saved.drafts : []).forEach((entry) => {
+        if (Array.isArray(entry) && typeof entry[1] === "string" && entry[1]) drafts.set(String(entry[0]), entry[1]);
+    });
+    if (Number.isInteger(saved.replyTo)) replyTo = saved.replyTo;
+    if (saved.editing && Number.isInteger(saved.editing.id)) {
+        editing = { id: saved.editing.id, draft: typeof saved.editing.draft === "string" ? saved.editing.draft : null };
+    }
+}
+
+/** The 401 message under a form: a link to sign in that comes back here; what was typed in the comment boxes stays. */
+function signedOutHtml(report = false) {
+    return `Phiên đăng nhập đã hết. <a class="link" href="${esc(ROUTES.login())}">Đăng nhập</a> lại rồi gửi `
+        + (report ? "báo cáo lần nữa." : "lần nữa; nội dung bạn đang viết vẫn được giữ.");
+}
 
 // ---------------------------------------------------------------- loading
 
@@ -242,7 +298,10 @@ async function mountPlaceMap(places) {
         }
         return;
     }
-    if (ticket !== placeMap.ticket) return;             // a newer render is drawing the map
+    // A newer render is drawing the map, or the map was hidden while Leaflet loaded: never build it on an element that
+    // is not on the page. It has no size there, so the view fits nothing (zoom 16, the places off screen) and the next
+    // "Hiện bản đồ" would only reuse that map; the next render builds it on the shown element instead.
+    if (ticket !== placeMap.ticket || !placeMap.el.isConnected) return;
     if (placeMap.map) placeMap.map.remove();
     placeMap.el.innerHTML = "";
     const map = L.map(placeMap.el, { scrollWheelZoom: false });
@@ -286,7 +345,9 @@ function postActions(data) {
     }
     parts.push(`<span class="grow"></span>`);
     if (v.author) {
-        parts.push(`<a class="btn sm" href="${ROUTES.edit(data.id)}">${ic("edit")}Sửa</a>`);
+        if (EDITABLE.includes(data.status)) {
+            parts.push(`<a class="btn sm" href="${ROUTES.edit(data.id)}">${ic("edit")}Sửa</a>`);
+        }
         parts.push(`<button class="btn sm dan" type="button" data-act="delete-post">${ic("delete")}Xóa</button>`);
     } else if (published) {
         parts.push(actionButton({ act: "report-post", icon: "flag", label: "Báo cáo", disabled: v.signedIn && !v.canInteract }));
@@ -297,7 +358,7 @@ function postActions(data) {
 /** A guest gets a link to sign in instead of the button. */
 function actionButton({ act, pressed, icon, label, disabled = false, small = true }) {
     if (!user) {
-        return `<a class="btn ${small ? "sm" : ""}" href="${ROUTES.login}">${ic(icon)}${esc(label)}</a>`;
+        return `<a class="btn ${small ? "sm" : ""}" href="${esc(ROUTES.login())}">${ic(icon)}${esc(label)}</a>`;
     }
     const aria = pressed === undefined ? "" : `aria-pressed="${pressed}"`;
     return `<button class="btn ${small ? "sm" : ""}${pressed ? " on" : ""}" type="button" data-act="${act}" ${aria}
@@ -313,7 +374,7 @@ function commentForm(parentId) {
     }
     if (!user) {
         return parentId ? "" : `<div class="login-box"><span>Đăng nhập để ${question ? "trả lời" : "bình luận"} và thích ${WORD}.</span>
-            <a class="btn pri sm" href="${ROUTES.login}">${ic("login")}Đăng nhập</a></div>`;
+            <a class="btn pri sm" href="${esc(ROUTES.login())}">${ic("login")}Đăng nhập</a></div>`;
     }
     if (!post.viewer.canInteract) {
         return parentId ? "" : `<p class="note">Tài khoản của bạn chỉ xem được, không bình luận được.</p>`;
@@ -321,12 +382,13 @@ function commentForm(parentId) {
     const id = parentId ? `reply-${parentId}` : "comment-new";
     const placeholder = parentId ? "Viết câu trả lời cho bình luận này"
         : question ? "Viết câu trả lời của bạn" : "Chia sẻ thêm kinh nghiệm hoặc góp ý";
+    const draft = drafts.get(draftKey(parentId)) || "";
     return `<form class="comment-form" data-parent="${parentId ?? ""}">
         <label class="sr-only" for="${id}">${placeholder}</label>
-        <textarea id="${id}" name="content" rows="${parentId ? 2 : 3}" maxlength="${COMMENT_MAX}" placeholder="${placeholder}" required></textarea>
+        <textarea id="${id}" name="content" rows="${parentId ? 2 : 3}" maxlength="${COMMENT_MAX}" placeholder="${placeholder}" required>${esc(draft)}</textarea>
         <p class="field-error" role="alert" hidden></p>
         <div class="row">
-            <span class="note counter" aria-live="polite">0/${COMMENT_MAX}</span><span class="grow"></span>
+            <span class="note counter" aria-live="polite">${draft.length}/${COMMENT_MAX}</span><span class="grow"></span>
             ${parentId ? `<button class="btn sm" type="button" data-act="cancel-reply">Hủy</button>` : ""}
             <button class="btn pri sm" type="submit">${ic("send")}Gửi</button>
         </div>
@@ -352,10 +414,11 @@ function commentHtml(c, depth) {
     if (post.status === "PUBLISHED") {
         actions.push(user
             ? `<button class="btn sm ghost" type="button" data-act="reply" ${canAct ? "" : "disabled"}>${ic("reply")}Trả lời</button>`
-            : `<a class="btn sm ghost" href="${ROUTES.login}">${ic("reply")}Trả lời</a>`);
+            : `<a class="btn sm ghost" href="${esc(ROUTES.login())}">${ic("reply")}Trả lời</a>`);
     }
+    const editable = c.mine && canAct && post.status === "PUBLISHED";
     if (c.mine) {
-        if (canAct && post.status === "PUBLISHED") {
+        if (editable) {
             actions.push(`<button class="btn sm ghost" type="button" data-act="edit-comment">${ic("edit")}Sửa</button>`);
         }
         actions.push(`<button class="btn sm ghost dan" type="button" data-act="delete-comment">${ic("delete")}Xóa</button>`);
@@ -371,7 +434,7 @@ function commentHtml(c, depth) {
         <div class="row byline">${authorHtml(c.author)}<span class="note">·</span>
             <time class="note" datetime="${esc(c.createdAt)}" title="${esc(fullDate(c.createdAt))}">${timeAgo(c.createdAt)}</time>
             ${c.edited ? `<span class="note">· đã sửa</span>` : ""}</div>
-        ${editing?.id === c.id ? editForm(c) : `<div class="comment-body">${richText(c.content)}</div>
+        ${editing?.id === c.id && editable ? editForm(c) : `<div class="comment-body">${richText(c.content)}</div>
         <div class="row comment-actions">${actions.join("")}</div>`}
         <div class="reply-slot">${replyTo === c.id ? commentForm(c.id) : ""}</div>
         ${replies}
@@ -426,12 +489,17 @@ async function saveEdit(form) {
     try {
         const data = await busy(form.querySelector('[type="submit"]'), () => apiClient.updateComment(commentId, text));
         editing = null;
+        if (signedOut) forgetStash();                      // signed in again (in another tab): nothing to bring back
         render(data);
         toast(QUESTION && !findComment(data.comments, commentId)?.parentId ? "Đã lưu câu trả lời." : "Đã lưu bình luận.");
         content.querySelector(`#c-${commentId}`)?.classList.add("flash");
     } catch (err) {
         if (err.status === 401) {
-            location.href = ROUTES.login;
+            // Stay here with the text; after signing in, the edit opens again with it
+            if (editing?.id === commentId) editing.draft = form.content.value;
+            stashDrafts();
+            error.innerHTML = signedOutHtml();
+            error.hidden = false;
             return;
         }
         // The edit stays open with the text so the user can fix it (keyword, link, length)
@@ -459,7 +527,8 @@ async function guarded(action, { onNotFound = true } = {}) {
         return await action();
     } catch (error) {
         if (error.status === 401) {
-            location.href = ROUTES.login;
+            stashDrafts();                              // what is typed comes back after signing in
+            location.href = ROUTES.login();
         } else if (error.status === 404 && onNotFound) {
             toast(error.message || MSG.MSG19, "error");
             await load();
@@ -482,6 +551,7 @@ content.addEventListener("click", async (event) => {
     switch (button.dataset.act) {
         case "toggle-map": {
             placeMap.open = !placeMap.open;
+            if (!placeMap.open) placeMap.ticket++;      // a map still waiting for Leaflet is not drawn any more
             render(post);
             content.querySelector('[data-act="toggle-map"]')?.focus();
             break;
@@ -492,7 +562,11 @@ content.addEventListener("click", async (event) => {
             if (state) {
                 post.viewer.liked = state.active;
                 post.likeCount = state.count;
-                button.outerHTML = actionButton({ act: "like-post", pressed: state.active, icon: "favorite", label: `Thích · ${state.count}` });
+                if (button.isConnected) {
+                    button.outerHTML = actionButton({ act: "like-post", pressed: state.active, icon: "favorite", label: `Thích · ${state.count}` });
+                } else {
+                    render(post);                       // redrawn meanwhile (map, reply box…) from the old state
+                }
             }
             break;
         }
@@ -501,8 +575,12 @@ content.addEventListener("click", async (event) => {
             const state = await busy(button, () => guarded(() => API.save(blogId, on)));
             if (state) {
                 post.viewer.saved = state.saved;
-                button.outerHTML = actionButton({ act: "save-post", pressed: state.saved,
-                    icon: state.saved ? "bookmark_added" : "bookmark", label: state.saved ? "Đã lưu" : "Lưu" });
+                if (button.isConnected) {
+                    button.outerHTML = actionButton({ act: "save-post", pressed: state.saved,
+                        icon: state.saved ? "bookmark_added" : "bookmark", label: state.saved ? "Đã lưu" : "Lưu" });
+                } else {
+                    render(post);
+                }
                 toast(state.saved ? `Đã lưu ${WORD}. Xem lại ở Tôi → Đã lưu.` : `Đã bỏ lưu ${WORD}.`);
             }
             break;
@@ -527,8 +605,18 @@ content.addEventListener("click", async (event) => {
             const on = button.getAttribute("aria-pressed") !== "true";
             const state = await busy(button, () => guarded(() => apiClient.likeComment(commentId, on)));
             if (state) {
-                button.outerHTML = actionButton({ act: "like-comment", pressed: state.active, icon: "favorite",
-                    label: state.count ? `Thích · ${state.count}` : "Thích" });
+                // Kept in the post too, so the next redraw (a reply box, the map…) shows it
+                const liked = findComment(post.comments, commentId);
+                if (liked) {
+                    liked.liked = state.active;
+                    liked.likeCount = state.count;
+                }
+                if (button.isConnected) {
+                    button.outerHTML = actionButton({ act: "like-comment", pressed: state.active, icon: "favorite",
+                        label: state.count ? `Thích · ${state.count}` : "Thích" });
+                } else if (liked && content.querySelector(`#c-${commentId}`)) {
+                    render(post);                       // redrawn meanwhile from the old state
+                }
             }
             break;
         }
@@ -538,6 +626,7 @@ content.addEventListener("click", async (event) => {
             content.querySelector(`#reply-${commentId}`)?.focus();
             break;
         case "cancel-reply":
+            drafts.delete(draftKey(replyTo));           // "Hủy" drops this reply only; the other boxes keep their text
             replyTo = null;
             render(post);
             break;
@@ -556,6 +645,10 @@ content.addEventListener("click", async (event) => {
                 if (data) {
                     render(data);
                     toast("Đã xóa bình luận.");
+                } else if (data === null) {
+                    // Deleted, but the post can no longer be shown (hidden or being scanned meanwhile): reload it
+                    toast("Đã xóa bình luận.");
+                    await load();
                 }
             }
             break;
@@ -579,7 +672,13 @@ content.addEventListener("input", (event) => {
         const form = event.target.closest("form");
         form.querySelector(".counter").textContent = `${event.target.value.length}/${COMMENT_MAX}`;
         form.querySelector(".field-error").hidden = true;
-        if (form.dataset.edit) editing.draft = event.target.value;   // kept if another action redraws the page
+        // Kept if another action redraws the page
+        if (form.dataset.edit) {
+            editing.draft = event.target.value;
+        } else {
+            drafts.set(draftKey(form.dataset.parent), event.target.value);
+        }
+        if (signedOut) stashDrafts();                   // also what is typed after the 401 survives signing in
     }
 });
 
@@ -613,10 +712,14 @@ content.addEventListener("submit", async (event) => {
     }
     const submit = form.querySelector('[type="submit"]');
     const parentId = form.dataset.parent ? Number(form.dataset.parent) : null;
+    drafts.set(draftKey(parentId), form.content.value);
     try {
         const data = await busy(submit, () => API.comment(blogId, { content: text, parentId }));
         const before = new Set(allIds(post.comments));
-        replyTo = null;
+        // This box is sent: empty it (a reply box closes); any other open box keeps its text
+        drafts.delete(draftKey(parentId));
+        if (parentId !== null && replyTo === parentId) replyTo = null;
+        if (signedOut) forgetStash();                   // signed in again (in another tab): nothing to bring back
         render(data);
         toast(QUESTION && !parentId ? "Đã đăng câu trả lời." : "Đã đăng bình luận.");
         const added = allIds(data.comments).find((id) => !before.has(id));
@@ -627,7 +730,10 @@ content.addEventListener("submit", async (event) => {
         }
     } catch (err) {
         if (err.status === 401) {
-            location.href = ROUTES.login;
+            // Stay here with the text: the link signs in and comes back, and the text is filled in again
+            stashDrafts();
+            error.innerHTML = signedOutHtml();
+            error.hidden = false;
             return;
         }
         // Keep the text so the user can fix it (keyword, link, length)
@@ -683,7 +789,9 @@ reportForm.addEventListener("submit", async (event) => {
         if (result && reportTarget.kind === "comment") render(result);
     } catch (err) {
         if (err.status === 401) {
-            location.href = ROUTES.login;
+            stashDrafts();                                             // comment boxes come back after signing in
+            reportError.innerHTML = signedOutHtml(true);
+            reportError.hidden = false;
             return;
         }
         reportError.textContent = err.message || MSG.MSG14;           // e.g. MSG39 already reported
@@ -730,6 +838,7 @@ function toast(message, kind = "ok") {
 // ---------------------------------------------------------------- start
 
 user = await mountSiteHeader(QUESTION ? "qa" : "blog");
+if (user) restoreDrafts();      // back from signing in after a 401: the boxes are filled in again
 await load();
 announceCreated();
 

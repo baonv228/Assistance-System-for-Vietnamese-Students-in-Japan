@@ -1,8 +1,14 @@
 package com.sep490.vsa.feature.blog;
 
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.media.MediaService;
+import com.sep490.vsa.feature.media.MediaStorage;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.moderation.ImageModerator;
 import com.sep490.vsa.feature.moderation.ImageModerator.Verdict;
+import com.sep490.vsa.feature.moderation.MediaScanService;
+import com.sep490.vsa.feature.notification.NotificationService;
+import com.sep490.vsa.feature.user.PointService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -30,10 +37,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -73,6 +82,22 @@ class BlogWriteFlowTest {
     private JdbcTemplate jdbc;
     @Autowired
     private BlogPublishService publisher;
+    @Autowired
+    private BlogWriteRepository writeRepository;
+    @Autowired
+    private MediaScanService scanner;
+    @Autowired
+    private MediaService mediaService;
+    @Autowired
+    private MediaStorage storage;
+    @Autowired
+    private ContentFilter contentFilter;
+    @Autowired
+    private PointService pointService;
+    @Autowired
+    private NotificationService notifications;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
     @MockBean
     private ImageModerator moderator;
     @Value("${app.media.local-dir}")
@@ -177,6 +202,33 @@ class BlogWriteFlowTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void onlyTaggedAccountsPostPhoneNumbersOrChatIds() throws Exception {
+        send(veteran, post("POST", "Tuyển gấp", "ib zalo 0901 234 567", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram."));
+        send(veteran, post("QA", "Hỏi LINE ID: scam123", "", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("số điện thoại")));
+        assertThat(postsBy(veteran)).isZero();
+        assertThat(usage(veteran)).containsEntry("posts", 0);
+
+        long id = created(send(tagged, post("POST", "Liên hệ", "ib zalo 0901 234 567", List.of(experience), List.of()))
+                .andExpect(jsonPath("$.data.status").value("PUBLISHED")));
+        assertThat(jdbc.queryForObject("SELECT content FROM blogs WHERE id = ?", String.class, id))
+                .isEqualTo("ib zalo 0901 234 567");
+    }
+
+    @Test
+    void ordinaryTextIsNotMistakenForKeywordsOrContactDetails() throws Exception {
+        long id = created(send(veteran, post("POST", "Mua cá đông lạnh",
+                "Mua cá đông lạnh ở Gyomu rẻ lắm. Hôm nay ăn cá, đồ uống thì mua ở konbini. "
+                        + "Văn phòng quận: 03-3802-3111, giá 1.200.000 đồng, đi tuyến Yamanote line.",
+                List.of(experience), List.of())));
+        assertThat(blogStatus(id)).isEqualTo("PUBLISHED");
+    }
+
     // ---------------------------------------------------------------- step 3: new-account limit (MSG44)
 
     @Test
@@ -216,6 +268,147 @@ class BlogWriteFlowTest {
                 .andExpect(jsonPath("$.message").value(containsString("“việc nhẹ lương cao”")));
         assertThat(postsBy(veteran)).isZero();
         assertThat(usage(veteran)).containsEntry("posts", 0);
+    }
+
+    @Test
+    void aKeywordTheAdminAddsBlocksTheVeryNextPost() throws Exception {
+        long admin = user("ADMIN", 30);
+        // A keyword no other test writes: "từ khóa thử" and 12 random letters
+        String keyword = "từ khóa thử " + UUID.randomUUID().toString().replace("-", "").chars()
+                .map(c -> Character.isDigit(c) ? 'g' + (c - '0') : c)
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).substring(0, 12);
+        Body text = post("POST", "Thử từ khóa", "Bài có " + keyword + " nhé", List.of(experience), List.of());
+        try {
+            // Posted before the keyword exists: the filter has just read (and cached) the list without it
+            created(send(veteran, text));
+
+            long keywordId = created(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                    .post("/api/admin/keywords").session(session(admin, "ADMIN"))
+                    .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .content("{\"keyword\":\"" + keyword + "\"}")));
+            send(veteran, text)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value(containsString("“" + keyword + "”")));
+
+            // Deleted again: the next post goes through at once
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .delete("/api/admin/keywords/" + keywordId).session(session(admin, "ADMIN"))
+                            .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF))
+                    .andExpect(status().isOk());
+            created(send(veteran, text));
+            assertThat(postsBy(veteran)).isEqualTo(2);
+        } finally {
+            jdbc.update("DELETE FROM banned_keywords WHERE keyword = ?", keyword);
+        }
+    }
+
+    @Test
+    void prostitutionAndGamblingPhrasesAreRefusedButWarningsAndQuestionsPass() throws Exception {
+        // The list seeded by V5
+        send(veteran, post("POST", "Link mới", "Link vào FB88 mới nhất, nạp lần đầu tặng 100%", List.of(experience),
+                List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“fb88”")));
+        send(veteran, post("QA", "Ai biết chỗ tìm sugar daddy ở Tokyo không?", "", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“sugar daddy”")));
+        send(veteran, post("POST", "Nhận bao nuôi", "パパ活募集中", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“nhận bao nuôi”")));
+        assertThat(postsBy(veteran)).isZero();
+    }
+
+    @Test
+    void generalProstitutionAndGamblingWordsAreRefusedButEverydayPhrasesPass() throws Exception {
+        // The post that went through before V6: title and text "mại dâm"
+        send(veteran, post("POST", "mại dâm", "mại dâm", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Chưa đăng được: nội dung chứa từ khóa không được phép “mại dâm”. Hãy sửa rồi gửi lại."));
+        send(veteran, post("QA", "Pachinko có phải là cờ bạc không?", "", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“cờ bạc”")));
+        send(veteran, post("POST", "Kinh nghiệm", "Tối nay rủ nhau chơi co bac online", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“cờ bạc”")));
+        send(veteran, post("POST", "Làm thêm", "Du học sinh làm ở quán 風俗 được không", List.of(experience), List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“風俗”")));
+        assertThat(postsBy(veteran)).isZero();
+
+        // Everyday phrases that look like those words are not refused
+        long id = created(send(veteran, post("QA", "Co bac nao biet cho doi bang lai khong?",
+                "Bạn gái gọi điện bảo con gái bao nhiêu tuổi thì được đi du học. Mình đi khách sạn ở Osaka.",
+                List.of(experience), List.of())));
+        assertThat(postsBy(veteran)).isEqualTo(1);
+
+        // A comment or answer holding such a word is refused the same way, a new one and an edit alike
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/questions/" + id + "/answers").session(session(tagged, "USER"))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Ra sòng bạc mà hỏi\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“sòng bạc”")));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/questions/" + id + "/answers").session(session(tagged, "USER"))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Ra trung tâm sát hạch nhé\"}"))
+                .andExpect(status().isOk());
+        long answer = jdbc.queryForObject("SELECT id FROM comments WHERE blog_id = ?", Long.class, id);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/comments/" + answer).session(session(tagged, "USER"))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Ra trung tâm hoặc đi mua dâm\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("“mua dâm”")));
+        assertThat(jdbc.queryForObject("SELECT content FROM comments WHERE id = ?", String.class, answer))
+                .isEqualTo("Ra trung tâm sát hạch nhé");
+    }
+
+    @Test
+    void aWaitingPostIsCheckedForKeywordsAgainBeforeItIsPublished() throws Exception {
+        // The scanner is down: the post waits in PROCESSING
+        when(moderator.check(any(byte[].class))).thenReturn(new Verdict("ERROR", "{\"error\":\"down\"}"));
+        String keyword = "từ khóa chờ " + UUID.randomUUID().toString().replace("-", "").chars()
+                .map(c -> Character.isDigit(c) ? 'g' + (c - '0') : c)
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).substring(0, 12);
+        long id = created(send(veteran, post("POST", "Ảnh và chữ", "Bài có " + keyword + " nhé", List.of(experience),
+                List.of()), photo()));
+        try {
+            await().atMost(Duration.ofSeconds(15)).until(() -> jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM moderation_scans WHERE target_type = 'MEDIA'
+                    AND target_id = (SELECT media_id FROM blog_media WHERE blog_id = ?)""", Integer.class, id) > 0);
+
+            // Meanwhile the keyword is banned, and the scanner works again
+            jdbc.update("INSERT INTO banned_keywords (keyword) VALUES (?)", keyword);
+            contentFilter.keywordsChanged();
+            when(moderator.check(any(byte[].class))).thenReturn(new Verdict("PASS", "{}"));
+            jdbc.update("""
+                    UPDATE moderation_scans SET created_at = created_at - INTERVAL 2 MINUTE
+                    WHERE target_type = 'MEDIA' AND target_id = (SELECT media_id FROM blog_media WHERE blog_id = ?)""", id);
+            await().atMost(Duration.ofSeconds(10)).until(() -> {
+                publisher.process(id);
+                return "REJECTED".equals(blogStatus(id));
+            });
+
+            // Rejected without scanning the photo again, no points, and the author is told which keyword
+            assertThat(jdbc.queryForObject("""
+                    SELECT m.scan_status FROM blog_media bm JOIN media m ON m.id = bm.media_id WHERE bm.blog_id = ?""",
+                    String.class, id)).isEqualTo("PROCESSING");
+            assertThat(points(veteran)).isZero();
+            assertThat(jdbc.queryForObject("""
+                    SELECT content FROM notifications WHERE user_id = ? AND type = 'CONTENT_REJECTED' AND ref_id = ?""",
+                    String.class, veteran, id))
+                    .isEqualTo("Bài viết “Ảnh và chữ” chưa được đăng vì có từ khóa không được phép “" + keyword
+                            + "”. Bạn có thể sửa bài rồi gửi lại.");
+        } finally {
+            jdbc.update("DELETE FROM banned_keywords WHERE keyword = ?", keyword);
+            contentFilter.keywordsChanged();
+        }
     }
 
     @Test
@@ -305,6 +498,83 @@ class BlogWriteFlowTest {
                 String.class, veteran)).startsWith("Câu hỏi “Câu hỏi có ảnh” chưa được đăng");
         assertThat(jdbc.queryForObject("SELECT ref_type FROM notifications WHERE user_id = ? AND type = 'CONTENT_REJECTED'",
                 String.class, veteran)).isEqualTo("QUESTION");
+    }
+
+    @Test
+    void theRetryJobReachesANewerPostAlthoughOlderOnesStayStuck() throws Exception {
+        // A job of its own, which starts at the oldest waiting post like the application's after a restart
+        BlogPublishService job = new BlogPublishService(writeRepository, scanner, mediaService, contentFilter,
+                pointService, notifications, transactionManager, Clock.systemUTC());
+        Instant sent = Instant.now().minus(Duration.ofMinutes(30));
+        List<Long> posts = new ArrayList<>();
+        try {
+            // 21 posts whose photo file is missing: every scan fails and they stay PROCESSING
+            for (int i = 0; i < 21; i++) {
+                posts.add(waitingPost(sent.plusSeconds(i), false));
+            }
+            // A newer post whose first scan failed five minutes ago (scanner down); the scanner works again now
+            long newer = waitingPost(sent.plus(Duration.ofMinutes(10)), true);
+            posts.add(newer);
+            jdbc.update("""
+                    INSERT INTO moderation_scans (target_type, target_id, engine, result, detail, created_at)
+                    SELECT 'MEDIA', media_id, 'OPENAI', 'ERROR', '{}', ? FROM blog_media WHERE blog_id = ?""",
+                    Timestamp.from(Instant.now().minus(Duration.ofMinutes(5))), newer);
+            // Waiting posts before it in the job's order (21 here, unless other runs left some): one page of 20 each
+            long before = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM blogs WHERE status = 'PROCESSING' AND id < ?
+                      AND created_at < UTC_TIMESTAMP() - INTERVAL 1 MINUTE""", Long.class, newer);
+            int runsNeeded = (int) (before / 20) + 1;
+
+            int runs = 0;
+            while (!"PUBLISHED".equals(blogStatus(newer)) && runs < runsNeeded) {
+                job.retryPending();
+                runs++;
+            }
+            assertThat(before).isGreaterThanOrEqualTo(21);
+            assertThat(blogStatus(newer)).isEqualTo("PUBLISHED");
+            assertThat(runs).isEqualTo(runsNeeded);                     // 2 when only these 21 were waiting
+            assertThat(posts.subList(0, 21)).allSatisfy(id -> assertThat(blogStatus(id)).isEqualTo("PROCESSING"));
+            // The stuck ones were tried too (one failed scan each), and the next run starts again from the oldest
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(DISTINCT bm.blog_id) FROM moderation_scans s JOIN blog_media bm ON bm.media_id = s.target_id
+                    WHERE s.target_type = 'MEDIA' AND s.result = 'ERROR' AND bm.blog_id IN (%s)"""
+                    .formatted(String.join(",", posts.subList(0, 21).stream().map(String::valueOf).toList())),
+                    Integer.class)).isEqualTo(21);
+        } finally {
+            for (long id : posts) {
+                List<String> keys = jdbc.queryForList("""
+                        SELECT m.storage_key FROM blog_media bm JOIN media m ON m.id = bm.media_id WHERE bm.blog_id = ?""",
+                        String.class, id);
+                jdbc.update("""
+                        DELETE FROM moderation_scans WHERE target_type = 'MEDIA'
+                          AND target_id IN (SELECT media_id FROM blog_media WHERE blog_id = ?)""", id);
+                jdbc.update("DELETE FROM point_transactions WHERE ref_type = 'BLOG' AND ref_id = ?", id);
+                jdbc.update("DELETE FROM blogs WHERE id = ?", id);
+                for (String key : keys) {
+                    jdbc.update("DELETE FROM media WHERE storage_key = ?", key);
+                    storage.delete(key);
+                }
+            }
+        }
+    }
+
+    /** A post of {@code veteran} waiting for the scan of one photo, sent at {@code sentAt}; the file only if asked. */
+    private long waitingPost(Instant sentAt, boolean withFile) {
+        String key = "blog/2026/10/" + UUID.randomUUID() + ".jpg";
+        if (withFile) {
+            storage.put(key, new byte[]{1, 2, 3});
+        }
+        String title = "Chờ quét " + UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO blogs (author_id, blog_type, title, content, status, created_at, updated_at)
+                VALUES (?, 'POST', ?, 'Ảnh', 'PROCESSING', ?, ?)""",
+                veteran, title, Timestamp.from(sentAt), Timestamp.from(sentAt));
+        long id = jdbc.queryForObject("SELECT id FROM blogs WHERE title = ?", Long.class, title);
+        jdbc.update("""
+                INSERT INTO media (owner_id, media_type, storage_key, mime_type, size_bytes, scan_status)
+                VALUES (?, 'IMAGE', ?, 'image/jpeg', 3, 'PROCESSING')""", veteran, key);
+        jdbc.update("INSERT INTO blog_media (blog_id, media_id) SELECT ?, id FROM media WHERE storage_key = ?", id, key);
+        return id;
     }
 
     @Test

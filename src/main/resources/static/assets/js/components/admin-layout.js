@@ -5,11 +5,12 @@ import { currentUser } from "../api/client.js";
 import { logout } from "./site-header.js";
 import { esc, ic, LOGO_SVG } from "../lib/ui.js";
 
+// Địa chỉ gọn, không ".html" (common/web/CleanUrls)
 const NAV_ITEMS = [
-    { key: "dashboard", label: "Tổng quan", icon: "space_dashboard", path: "/pages/admin/index.html" },
-    { key: "users", label: "Người dùng & Vai trò", icon: "group", path: "/pages/admin/users.html" },
-    { key: "config", label: "Cấu hình & Từ khóa", icon: "tune", path: "/pages/admin/system-config.html" },
-    { key: "logs", label: "Nhật ký hoạt động", icon: "history", path: "/pages/admin/activity-log.html" }
+    { key: "dashboard", label: "Tổng quan", icon: "space_dashboard", path: "/admin" },
+    { key: "users", label: "Người dùng & Vai trò", icon: "group", path: "/admin/users" },
+    { key: "config", label: "Cấu hình & Từ khóa", icon: "tune", path: "/admin/system-config" },
+    { key: "logs", label: "Nhật ký hoạt động", icon: "history", path: "/admin/activity-log" }
 ];
 
 let currentUserData = null;
@@ -22,7 +23,7 @@ let currentUserData = null;
 export async function initAdminPage(activeKey) {
     const user = await currentUser();
     if (!user) {
-        window.location.replace("/pages/login.html");
+        window.location.replace("/login");
         return null;
     }
     if (user.role !== "ADMIN") {
@@ -33,12 +34,12 @@ export async function initAdminPage(activeKey) {
 
     document.body.innerHTML = `
         <header class="site-top">
-            <a class="logo" href="/pages/admin/index.html">${LOGO_SVG}Senpai ơi</a>
+            <a class="logo" href="/admin">${LOGO_SVG}Senpai ơi</a>
             <span class="badge br">${esc(user.roleLabel || "Quản trị viên")}</span>
             <span class="grow"></span>
             <div class="site-account">
                 <a class="btn sm" href="/">${ic("home")}<span class="who">Trang người dùng</span></a>
-                <a class="btn sm" href="/pages/profile.html">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
+                <a class="btn sm" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
                 <button class="btn sm" type="button" id="adminLogoutBtn" title="Đăng xuất">${ic("logout")}<span class="sr-only">Đăng xuất</span></button>
             </div>
         </header>

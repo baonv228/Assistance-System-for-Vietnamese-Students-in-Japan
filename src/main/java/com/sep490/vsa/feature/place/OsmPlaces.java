@@ -56,13 +56,20 @@ import java.util.stream.Stream;
  *       per post, and at most one request a second for the whole server, as the Nominatim usage policy asks. The policy
  *       does not allow search-as-you-type, which is why the search uses Photon.</li>
  * </ul>
- * Both services ask every app to name itself in the User-Agent ({@code app.places.osm.user-agent}).
+ * Both services ask every app to name itself in the User-Agent ({@code app.places.osm.user-agent}). Every request sent
+ * to them, answered or not, is counted in {@code api_usage} ({@link #SEARCH_USAGE}, {@link #LOOKUP_USAGE}) through
+ * {@link ApiUsageCounter}.
  * On Windows the client also trusts the Windows certificate store, like browsers do: antivirus software that scans
  * HTTPS (Kaspersky, Avast, ESET…) re-signs the sites' certificates with its own root, which Java alone rejects.
  */
 public class OsmPlaces implements ExternalPlaces {
 
     private static final Logger log = LoggerFactory.getLogger(OsmPlaces.class);
+
+    /** {@code api_usage.service} of a Photon request. */
+    public static final String SEARCH_USAGE = "OSM_PHOTON_SEARCH";
+    /** {@code api_usage.service} of a Nominatim request. */
+    public static final String LOOKUP_USAGE = "OSM_NOMINATIM_LOOKUP";
 
     /** Asked from Photon; places in other countries are dropped afterwards. */
     static final int SEARCH_ASKED = 15;
@@ -111,6 +118,7 @@ public class OsmPlaces implements ExternalPlaces {
     private final String lookupTemplate;
     private final List<String> regions;
     private final long lookupGapMs;
+    private final ApiUsageCounter usage;
     private final ReentrantLock lookupTurn = new ReentrantLock(true);
     private long lastLookup;
     /** Places Photon recently answered, for when Nominatim cannot be reached. */
@@ -124,12 +132,14 @@ public class OsmPlaces implements ExternalPlaces {
      * @param searchUrl Photon's search address, e.g. https://photon.komoot.io/api/
      * @param lookupUrl Nominatim's lookup address, e.g. https://nominatim.openstreetmap.org/lookup
      * @param regions   two-letter country codes the places must be in; empty = the whole world
+     * @param usage     counts every request sent ({@code api_usage})
      */
-    public OsmPlaces(String searchUrl, String lookupUrl, String userAgent, List<String> regions) {
-        this(searchUrl, lookupUrl, userAgent, regions, LOOKUP_GAP_MS);
+    public OsmPlaces(String searchUrl, String lookupUrl, String userAgent, List<String> regions, ApiUsageCounter usage) {
+        this(searchUrl, lookupUrl, userAgent, regions, LOOKUP_GAP_MS, usage);
     }
 
-    OsmPlaces(String searchUrl, String lookupUrl, String userAgent, List<String> regions, long lookupGapMs) {
+    OsmPlaces(String searchUrl, String lookupUrl, String userAgent, List<String> regions, long lookupGapMs,
+              ApiUsageCounter usage) {
         SSLSocketFactory ssl = windowsAwareSsl();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory() {
             @Override
@@ -191,6 +201,7 @@ public class OsmPlaces implements ExternalPlaces {
                 + "?osm_ids={ids}&format=jsonv2&accept-language=en&namedetails=1&addressdetails=1";
         this.regions = regions.stream().map(r -> r.strip().toLowerCase(Locale.ROOT)).filter(r -> !r.isEmpty()).toList();
         this.lookupGapMs = lookupGapMs;
+        this.usage = usage;
     }
 
     @Override
@@ -296,7 +307,10 @@ public class OsmPlaces implements ExternalPlaces {
         return eq < 0 || noise(tag.substring(0, eq), tag.substring(eq + 1));
     }
 
-    private List<Hit> hits(JsonNode response) {
+    private List<Hit> search(String template, String text) {
+        Map<String, Object> vars = Map.of("q", text, "limit", SEARCH_ASKED, "lat", BIAS_LAT, "lon", BIAS_LON);
+        JsonNode response = call("Photon search", SEARCH_USAGE,
+                () -> client.get().uri(template, vars).retrieve().body(JsonNode.class));
         List<Hit> hits = new ArrayList<>();
         Set<String> ids = new HashSet<>();
         if (response == null) {
@@ -402,21 +416,33 @@ public class OsmPlaces implements ExternalPlaces {
         return found;
     }
 
+    /**
+     * The asked places Nominatim knows, in the configured countries. Map noise ({@link #noise}: a street, a boundary, a
+     * bus stop…) is dropped like in the search, unless the search offered that very id a moment ago ({@link #offered}:
+     * Photon may list an object under another of its tags), so ids sent by hand cannot add such features as places.
+     */
     private Map<String, Hit> nominatimLookup(List<String> asked) {
         Map<String, Hit> found = new LinkedHashMap<>();
         Map<String, Object> vars = Map.of("ids", String.join(",", asked));
-        JsonNode response = paced(() -> call("Nominatim lookup",
+        JsonNode response = paced(() -> call("Nominatim lookup", LOOKUP_USAGE,
                 () -> client.get().uri(lookupTemplate, vars).retrieve().body(JsonNode.class)));
         if (response == null) {
             return found;
         }
         for (JsonNode place : response) {
             Hit hit = nominatimHit(place);
-            if (hit != null && asked.contains(hit.id()) && inRegions(hit.countryCode())) {
+            if (hit != null && asked.contains(hit.id()) && inRegions(hit.countryCode())
+                    && (!noise(place.path("category").asText(""), place.path("type").asText("")) || offered(hit.id()))) {
                 found.put(hit.id(), hit);
             }
         }
         return found;
+    }
+
+    /** True when a search answered this id within the last {@link #SEEN_KEEP_MS} ms (the UI offered it). */
+    private boolean offered(String id) {
+        Seen s = seen.get(id);
+        return s != null && s.at() >= System.currentTimeMillis() - SEEN_KEEP_MS;
     }
 
     /**
@@ -559,7 +585,8 @@ public class OsmPlaces implements ExternalPlaces {
         }
     }
 
-    private static JsonNode call(String service, Supplier<JsonNode> request) {
+    /** One HTTP request, counted in {@code api_usage} as {@code counted} whether it is answered or fails. */
+    private JsonNode call(String service, String counted, Supplier<JsonNode> request) {
         try {
             return request.get();
         } catch (RestClientResponseException e) {
@@ -570,6 +597,17 @@ public class OsmPlaces implements ExternalPlaces {
             throw failed(service, reason, status + " " + (body.length() > 200 ? body.substring(0, 200) : body), e);
         } catch (RestClientException e) {
             throw failed(service, networkReason(e), rootMessage(e), e);
+        } finally {
+            count(counted);
+        }
+    }
+
+    /** Counting must never break the search or a post: a failed count is only logged. */
+    private void count(String service) {
+        try {
+            usage.count(service);
+        } catch (RuntimeException e) {
+            log.warn("Could not count a {} request in api_usage: {}", service, e.getMessage());
         }
     }
 

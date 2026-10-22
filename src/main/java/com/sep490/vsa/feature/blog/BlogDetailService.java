@@ -66,7 +66,7 @@ public class BlogDetailService {
         List<RankRow> ranks = repository.ranks();
         int senpaiMin = ranks.isEmpty() ? Integer.MAX_VALUE : ranks.get(0).minPoints();
 
-        // The best answer only counts while it is still visible
+        // The best answer only counts while it is still visible (published, by an active account)
         Long best = rows.stream().filter(r -> r.id().equals(blog.bestCommentId()) && CommentTree.visible(r, viewerId))
                 .findFirst().map(CommentRow::id).orElse(null);
         Set<Long> liked = viewerId == null ? Set.of() : repository.likedComments(blogId, viewerId);
@@ -95,8 +95,12 @@ public class BlogDetailService {
      * Everyone sees a published post. The author also sees their own post while its media is scanned
      * (PROCESSING), after it was hidden by reports (HIDDEN) or rejected by the scan (REJECTED), with a note.
      * A post removed by a Moderator (REMOVED) is not shown here; its author is notified and can appeal.
+     * The post of a locked or deleted account is shown to nobody ({@link ActiveAuthors}), whatever its status.
      */
     static boolean canSee(BlogRow blog, Long viewerId) {
+        if (!blog.authorActive()) {
+            return false;
+        }
         return switch (blog.status()) {
             case "PUBLISHED" -> true;
             case "PROCESSING", "HIDDEN", "REJECTED" -> blog.authorId().equals(viewerId);

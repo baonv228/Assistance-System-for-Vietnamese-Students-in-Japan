@@ -48,10 +48,13 @@ export function setupPasswordToggles(root = document) {
     });
 }
 
-/** Shows which password rules are met; mirrors the server rules (8–72 characters, letters and digits). */
-export function setupPasswordRules(input, list) {
+/**
+ * Shows which password rules are met; mirrors the server rules (minLength()–72 characters, letters and digits).
+ * minLength is a function: the minimum is an Admin setting the page learns when the code is verified.
+ */
+export function setupPasswordRules(input, list, minLength = () => 8) {
     const rules = {
-        length: (v) => v.length >= 8 && v.length <= 72,
+        length: (v) => v.length >= minLength() && v.length <= 72,
         letter: (v) => /\p{L}/u.test(v),
         digit: (v) => /\d/.test(v)
     };

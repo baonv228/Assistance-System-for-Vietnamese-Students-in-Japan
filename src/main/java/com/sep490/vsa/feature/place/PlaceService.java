@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -47,15 +48,12 @@ import java.util.stream.Collectors;
  *   <li><b>Fair use</b> of the free public services: one user may search at most {@value #SEARCHES_PER_MINUTE} times a
  *       minute and add at most {@value #LOOKUPS_PER_USER_DAY} new map places a day. The same text typed again within
  *       10 minutes and a place looked up within the hour are answered from memory (sending a post again after fixing
- *       an error does not ask again). Real calls are counted in {@code api_usage} (OSM_PHOTON_SEARCH,
- *       OSM_NOMINATIM_LOOKUP).</li>
+ *       an error does not ask again). {@link OsmPlaces} counts the requests it really sends in {@code api_usage}.</li>
  * </ul>
  */
 @Service
 public class PlaceService {
 
-    public static final String SEARCH_USAGE = "OSM_PHOTON_SEARCH";
-    public static final String LOOKUP_USAGE = "OSM_NOMINATIM_LOOKUP";
     static final int SEARCHES_PER_MINUTE = 40;
     static final int LOOKUPS_PER_USER_DAY = 25;
     static final long LOOKUP_MEMORY_MS = 60 * 60_000L;
@@ -111,7 +109,7 @@ public class PlaceService {
     private final Map<Long, DayCount> lookups = new ConcurrentHashMap<>();
     /** Lookup answers of the last hour (also "not found"), so a post sent again does not ask again. */
     private final Map<String, Memo<Optional<Hit>>> remembered = new ConcurrentHashMap<>();
-    /** Search answers of the last 10 minutes, keyed by the folded text. */
+    /** Search answers of the last 10 minutes, keyed by the text as typed ({@link #searchKey}). */
     private final Map<String, Memo<List<Hit>>> searches = new ConcurrentHashMap<>();
 
     private record DayCount(LocalDate day, int count) {
@@ -181,96 +179,27 @@ public class PlaceService {
     }
 
     private List<Hit> ask(long userId, String text, boolean stations) {
-        String key = (stations ? "station:" : "text:") + VietnameseText.fold(text);
-        return ask(userId, key, () -> stations ? external.searchStations(text) : external.search(text));
-    }
-
-    /**
-     * "công viên Ueno": "Ueno" among parks first, then "Ueno park" as English text (Photon does not know Vietnamese
-     * words). Only the kind typed ("công viên") asks for the English word among those places.
-     */
-    private List<Hit> kindSearch(long userId, PlaceWords.Kind kind) {
-        String name = kind.rest().isBlank() ? kind.english() : kind.rest();
-        List<Hit> tagged = ask(userId, "tag:" + String.join(",", kind.tags()) + ":" + VietnameseText.fold(name),
-                () -> external.searchTagged(name, kind.tags()));
-        if (tagged == null) {
-            return null;
-        }
-        List<Hit> both = new ArrayList<>(tagged);
-        if (!kind.rest().isBlank()) {
-            List<Hit> typed = ask(userId, kind.rest() + " " + kind.english(), false);
-            if (typed != null) {
-                both.addAll(typed);
-            }
-        }
-        return both;
-    }
-
-    // ---------------------------------------------------------------- around a point (Map click)
-
-    static final double NEARBY_M = 150;
-    static final int NEARBY_LIMIT = 12;
-
-    /**
-     * The places around a point the user clicked on the Map, nearest first: Senpai ơi places within
-     * {@value #NEARBY_M} m and the OpenStreetMap places there (Photon reverse), each place once, as in {@link #search}.
-     * Counted like a search for the per-user limit.
-     */
-    public PlaceSearch nearby(long userId, double lat, double lng) {
-        List<PlaceOption> items = new ArrayList<>();
-        Set<Long> shown = new HashSet<>();
-        for (Nearby n : repository.activeNear(List.<double[]>of(new double[]{lat, lng}), NEARBY_M)) {
-            if (metres(lat, lng, n.lat(), n.lng()) <= NEARBY_M && shown.add(n.option().id())) {
-                items.add(n.option());
-            }
-        }
-        String external = "ON";
-        String reason = null;
-        if (!this.external.enabled()) {
-            external = "OFF";
-        } else {
-            String key = String.format(Locale.ROOT, "near:%.4f,%.4f", lat, lng);
-            try {
-                List<Hit> hits = ask(userId, key, () -> this.external.nearby(lat, lng));
-                if (hits == null) {
-                    external = "BUSY";
-                } else {
-                    items.addAll(fromMap(hits, items, NEARBY_LIMIT));
-                }
-            } catch (ExternalPlacesException e) {
-                external = "UNAVAILABLE";
-                reason = e.reason();
-            }
-        }
-        List<PlaceOption> unique = new ArrayList<>();
-        Set<String> keys = new HashSet<>();
-        for (PlaceOption o : items) {
-            if (keys.add(o.id() != null ? "id:" + o.id() : "osm:" + o.externalId())) {
-                unique.add(o);
-            }
-        }
-        unique.sort(Comparator.comparingDouble(o -> o.lat() == null ? Double.MAX_VALUE
-                : metres(lat, lng, o.lat(), o.lng())));
-        return new PlaceSearch(unique.size() > NEARBY_LIMIT ? unique.subList(0, NEARBY_LIMIT) : unique, external, reason);
-    }
-
-    /** One map call, answered from memory when the same question was asked lately; null when the user is too fast. */
-    private List<Hit> ask(long userId, String key, Supplier<List<Hit>> call) {
+        String key = (stations ? "station:" : "text:") + searchKey(text);
         long now = clock.millis();
         Memo<List<Hit>> memo = searches.get(key);
         if (memo != null && memo.until() >= now) {
             return memo.value();
         }
-        boolean real = real();
-        if (real && !allowSearch(userId)) {
+        if (real() && !allowSearch(userId)) {
             return null;
         }
-        List<Hit> hits = call.get();
-        if (real) {
-            repository.addUsage(SEARCH_USAGE, today());
-        }
+        List<Hit> hits = stations ? external.searchStations(text) : external.search(text);
         keep(searches, key, List.copyOf(hits), now + SEARCH_MEMORY_MS);
         return hits;
+    }
+
+    /**
+     * The text as the map receives it, without differences the map ignores: case and repeated spaces. Accents and
+     * Japanese voicing marks stay, because they change the answer ("パン" bread, "バン" van, "ハン"; "phở", "pho").
+     */
+    static String searchKey(String text) {
+        return Normalizer.normalize(text.strip(), Normalizer.Form.NFC).toLowerCase(Locale.ROOT)
+                .replaceAll("[\\s\\p{Z}]+", " ");
     }
 
     /** "ga Nippori" / "nhà ga Ueno" → "Nippori" / "Ueno"; null for any other text ("gà rán" keeps its accent). */
@@ -298,9 +227,15 @@ public class PlaceService {
         // Known ids first: when the map has a place twice (a point and its building), the copy ASVSJ knows stands for
         // both, so a place a Moderator removed does not come back through its twin
         Map<String, Known> known = repository.byOsmIds(hits.stream().map(Hit::id).distinct().toList());
-        List<Hit> places = distinctPlaces(hits, known.keySet());
-        List<Nearby> near = repository.activeNear(points(places.stream()
-                .filter(h -> !known.containsKey(h.id())).toList()), SAME_STATION_M);
+        // The same goes for a copy that has the name of an ASVSJ place close by (a team place or a pin without the OSM
+        // id): every copy is compared before the repeats are dropped, because only one twin may be close enough
+        List<Hit> unknown = hits.stream().filter(h -> !known.containsKey(h.id())).toList();
+        List<Nearby> near = repository.activeNear(points(unknown), SAME_STATION_M);
+        Map<String, Nearby> twins = new HashMap<>();
+        for (Hit h : unknown) {
+            sameAsvsjPlace(h, near).ifPresent(n -> twins.putIfAbsent(h.id(), n));
+        }
+        List<Hit> places = distinctPlaces(hits, known.keySet(), twins.keySet());
         Map<String, Category> mapped = repository.categoriesOfTags(places.stream().map(Hit::tag)
                 .collect(Collectors.toSet()));
         Category other = null;
@@ -317,7 +252,8 @@ public class PlaceService {
                 }
                 same = k.shown();
             } else {
-                same = sameAsvsjPlace(h, near).map(Nearby::option).orElse(null);
+                Nearby twin = twins.get(h.id());
+                same = twin == null ? null : twin.option();
             }
             if (same != null) {
                 if (shown.add(same.id())) {
@@ -348,6 +284,15 @@ public class PlaceService {
      * first one stays, unless a later copy is in {@code preferred} (ids ASVSJ already has) and the first is not.
      */
     static List<Hit> distinctPlaces(List<Hit> hits, Set<String> preferred) {
+        return distinctPlaces(hits, preferred, Set.of());
+    }
+
+    /**
+     * Like {@link #distinctPlaces(List, Set)} with two kinds of preferred copies: one whose OSM id ASVSJ has
+     * ({@code known}) wins over one that has the name of an ASVSJ place close by ({@code twins}), which wins over the
+     * others; between copies of the same kind the first stays.
+     */
+    static List<Hit> distinctPlaces(List<Hit> hits, Set<String> known, Set<String> twins) {
         List<Hit> kept = new ArrayList<>();
         for (Hit h : hits) {
             int same = -1;
@@ -358,11 +303,15 @@ public class PlaceService {
             }
             if (same < 0) {
                 kept.add(h);
-            } else if (preferred.contains(h.id()) && !preferred.contains(kept.get(same).id())) {
+            } else if (rank(h, known, twins) > rank(kept.get(same), known, twins)) {
                 kept.set(same, h);
             }
         }
         return kept;
+    }
+
+    private static int rank(Hit h, Set<String> known, Set<String> twins) {
+        return known.contains(h.id()) ? 2 : twins.contains(h.id()) ? 1 : 0;
     }
 
     private static boolean samePlace(Hit a, Hit b) {
@@ -515,7 +464,6 @@ public class PlaceService {
                 return PlacePicks.failed(unavailable(e.reason()));
             }
             if (real) {
-                repository.addUsage(LOOKUP_USAGE, today());
                 countLookups(userId, toAsk.size());
             }
             for (String id : toAsk) {
@@ -554,10 +502,17 @@ public class PlaceService {
     /**
      * Saves the new map places of {@link #resolve} and returns the ASVSJ place ids to link, without repeats.
      * Call it inside the transaction that saves the post, so a post that fails its checks adds no place.
+     * <p>
+     * The places are inserted in OSM id order, not in the order the author picked them: each insert locks its
+     * {@code osm_id} until the post is saved, so two posts adding the same new places A and B as [A, B] and [B, A]
+     * would each hold one and wait for the other (deadlock, one post fails). In one order the second post waits for
+     * the first and then links the rows it saved. The places ASVSJ already has are share-locked later by one statement
+     * ({@code BlogWriteRepository.countActivePlaces}), in primary-key order, and share locks do not block each other.
      */
     public List<Long> save(PlacePicks picks, long createdBy) {
         Set<Long> ids = new LinkedHashSet<>(picks.knownIds());
-        for (NewOsmPlace p : picks.fresh()) {
+        List<NewOsmPlace> inOrder = picks.fresh().stream().sorted(Comparator.comparing(NewOsmPlace::osmId)).toList();
+        for (NewOsmPlace p : inOrder) {
             ids.add(repository.insertOsmPlace(p, createdBy).id());
         }
         return List.copyOf(ids);

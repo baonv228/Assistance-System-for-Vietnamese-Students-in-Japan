@@ -118,6 +118,8 @@ textarea.input { min-height: 220px; resize: vertical; line-height: 1.6; }
 .combo-list [role="option"] span { display: grid; gap: 1px; min-width: 0; }
 .combo-list [role="option"] small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .combo-list [role="option"][aria-selected="true"], .combo-list [role="option"]:hover { background: var(--surface-2); }
+/* the text changed: these answers are for the previous text until the new ones arrive */
+.combo-list[aria-busy="true"] [role="option"] { opacity: .5; }
 .combo-empty { padding: 10px; color: var(--muted); font-size: 14px; }
 /* places: "Trên Senpai ơi" / "Từ OpenStreetMap" groups, source tag, notes and the OpenStreetMap attribution */
 .combo-list.places-list { max-height: 360px; }

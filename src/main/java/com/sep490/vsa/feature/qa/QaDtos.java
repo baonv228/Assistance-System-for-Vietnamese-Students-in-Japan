@@ -20,11 +20,13 @@ public final class QaDtos {
      *
      * @param status      PUBLISHED, or PROCESSING when the asker views their own question while its media is scanned
      * @param solved      the asker chose a best answer ("Đã giải quyết")
-     * @param answerCount published answers and replies
+     * @param unanswered  "Chưa ai trả lời", the rule of the filter and the statistics: no published answer by an active
+     *                    account and not solved (a reply or a hidden answer does not count)
+     * @param answerCount published answers and replies of active accounts
      */
-    public record QuestionCard(Long id, String status, boolean pinned, boolean solved, String title, String excerpt,
-                               Author author, List<TopicRef> topics, List<PlaceRef> places, int likeCount,
-                               int answerCount, Instant createdAt) {
+    public record QuestionCard(Long id, String status, boolean pinned, boolean solved, boolean unanswered, String title,
+                               String excerpt, Author author, List<TopicRef> topics, List<PlaceRef> places,
+                               int likeCount, int answerCount, Instant createdAt) {
     }
 
     /**

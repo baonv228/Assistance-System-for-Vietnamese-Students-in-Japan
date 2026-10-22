@@ -25,7 +25,9 @@ import java.util.List;
  *   <li>1 to {@code report_hide_threshold} (5) reports: "Cần xử lý" (NORMAL), content stays visible.
  *       More than that: the case becomes URGENT and the caller must hide the content.</li>
  * </ul>
- * The caller checks that the item exists and is visible, and does the hiding (it knows the item's table).
+ * The caller checks that the item exists and is visible, and does the hiding (it knows the item's table). The caller
+ * also locks the reported row first, so reports on one item run one after another (two first reports at the same
+ * moment would otherwise both try to open the case and could deadlock).
  */
 @Service
 @Transactional(propagation = Propagation.MANDATORY)
@@ -49,7 +51,11 @@ public class ContentReportService {
     public record Target(String type, long id, long authorId) {
     }
 
-    /** @param hide true when this report pushed the item over the threshold: hide it now */
+    /**
+     * @param hide true while the item has more reports than the threshold: hide it now. Every report past the
+     *             threshold says so again (hiding only changes published content), so an item that was not
+     *             published when its case turned URGENT is still hidden by a later report.
+     */
     public record Outcome(int reportCount, boolean hide) {
     }
 
@@ -99,9 +105,10 @@ public class ContentReportService {
 
         int threshold = settings.getInt(SystemSettings.REPORT_HIDE_THRESHOLD, 5);
         boolean overThreshold = count > threshold;
-        boolean becameUrgent = overThreshold && jdbc.update(
-                "UPDATE report_cases SET priority = 'URGENT' WHERE id = ? AND priority = 'NORMAL'", caseId) > 0;
-        return new Outcome(count, becameUrgent);
+        if (overThreshold) {
+            jdbc.update("UPDATE report_cases SET priority = 'URGENT' WHERE id = ? AND priority = 'NORMAL'", caseId);
+        }
+        return new Outcome(count, overThreshold);
     }
 
     /** Closes open cases of content that no longer exists (the author deleted it). */

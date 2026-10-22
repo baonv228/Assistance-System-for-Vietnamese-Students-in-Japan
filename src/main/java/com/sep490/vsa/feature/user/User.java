@@ -8,16 +8,21 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
-import java.time.Duration;
 import java.time.Instant;
 
 /**
  * Maps the columns of table {@code users} needed so far. Columns that are not mapped
  * (area_id, stage, points…) keep their database defaults; map them when a feature needs them.
+ * <p>
+ * {@code @DynamicUpdate}: a flush writes only the columns that changed. Admins change role and status with plain SQL
+ * (feature/admin); without it, a login that loaded the row before such a change (BCrypt takes a moment) would write
+ * the old role and status back when it saves last_login_at, undoing a lock or a demotion.
  */
 @Entity
 @Table(name = "users")
+@DynamicUpdate
 public class User {
 
     @Id
@@ -91,7 +96,8 @@ public class User {
 
     /**
      * Account deletion: personal data is removed and the email freed so it can register again.
-     * What happens to the user's posts and reviews is still open (team decision pending).
+     * The user's posts, questions, comments and answers stay in the database but are hidden from everyone
+     * ({@link com.sep490.vsa.feature.blog.ActiveAuthors}); what happens to reviews is still open (team decision pending).
      */
     public void anonymize(Instant now) {
         this.email = "deleted-" + id + "@deleted.invalid";
@@ -119,15 +125,10 @@ public class User {
         return lockedUntil != null && lockedUntil.isAfter(now);
     }
 
-    /** Counts a wrong password; after {@code maxAttempts} the account is locked for {@code lockFor}. */
-    public void recordFailedLogin(Instant now, int maxAttempts, Duration lockFor) {
-        failedLoginCount++;
-        if (failedLoginCount >= maxAttempts) {
-            lockedUntil = now.plus(lockFor);
-            failedLoginCount = 0;
-        }
-    }
-
+    /**
+     * Google/Facebook sign-in (feature/auth SocialLoginService). Password logins count and clear the wrong attempts
+     * with single UPDATE statements instead ({@link UserRepository#countFailedLogin}, {@link UserRepository#recordLogin}).
+     */
     public void recordSuccessfulLogin(Instant now) {
         failedLoginCount = 0;
         lockedUntil = null;

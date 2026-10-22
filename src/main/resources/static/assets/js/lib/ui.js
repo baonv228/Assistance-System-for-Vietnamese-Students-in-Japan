@@ -5,14 +5,20 @@ const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&
 /** Escapes text before putting it into innerHTML. Always use it for data from the API. */
 export const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
-/** Material Symbols icon. */
-export const ic = (name, extra = "") => `<span class="ic ${extra}" aria-hidden="true">${name}</span>`;
+/** Material Symbols icon. Escaped: some icon names come from the database (category icons). */
+export const ic = (name, extra = "") => `<span class="ic ${esc(extra)}" aria-hidden="true">${esc(name)}</span>`;
 
 export const stars = (n) => "★".repeat(n) + "☆".repeat(Math.max(0, 5 - n));
 
 export const LOGO_SVG = `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#C2456E"><circle cx="20" cy="9" r="7"/><circle cx="30.5" cy="16.6" r="7"/><circle cx="26.5" cy="29" r="7"/><circle cx="13.5" cy="29" r="7"/><circle cx="9.5" cy="16.6" r="7"/></g><circle cx="20" cy="20" r="4.5" fill="#E8A33C"/></svg>`;
 
 export const STAGES = { PRE: "Sắp sang Nhật", ARR: "Mới đến", LEAVE: "Sắp về nước", HOME: "Đã về nước" };
+
+/**
+ * The sign-in page, which sends a member back to this page afterwards ("/login?next=%2Fqa%2F7"; login.js only follows
+ * a path of this site). `path` is another page of this site to go to instead, e.g. "Viết bài" → "/blog/new".
+ */
+export const loginUrl = (path = location.pathname + location.search) => `/login?${new URLSearchParams({ next: path })}`;
 
 const OSM_TYPES = { N: "node", W: "way", R: "relation" };
 

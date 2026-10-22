@@ -1,5 +1,8 @@
 package com.sep490.vsa.feature.media;
 
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+
 /**
  * Where uploaded photos and videos are kept. The database only stores the key ({@code media.storage_key});
  * the public URL is {@code app.media.public-base-url} + key.
@@ -15,6 +18,18 @@ public interface MediaStorage {
 
     /** Reads a stored file back (used by the image scan). */
     byte[] get(String key);
+
+    /**
+     * The stored file for {@link MediaController} to send, or null when it is not there. The default reads the whole
+     * file; {@link LocalMediaStorage} streams it from disk.
+     */
+    default Resource resource(String key) {
+        try {
+            return new ByteArrayResource(get(key));
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
 
     /** Deletes the file; does nothing when it is already gone. */
     void delete(String key);

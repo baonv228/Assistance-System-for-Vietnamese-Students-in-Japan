@@ -60,7 +60,8 @@ public interface ExternalPlaces {
 
     /**
      * The places with these ids ({@link Hit#id()}), keyed by id. An id the map does not know (deleted since, or
-     * outside the configured countries) is missing from the answer.
+     * outside the configured countries) is missing from the answer, and so is map noise the search leaves out (a
+     * street, a boundary, a bus stop) unless the search offered that id.
      *
      * @throws ExternalPlacesException when the service cannot be reached or answers with an error
      */

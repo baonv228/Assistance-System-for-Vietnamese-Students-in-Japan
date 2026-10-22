@@ -97,7 +97,8 @@ function renderSettingsTab(container, settings) {
 
     let html = `
         <div class="info" style="margin-bottom: 16px;">
-            ${ic("lightbulb")} Mọi thay đổi cấu hình sẽ có hiệu lực ngay lập tức trên hệ thống và được tự động ghi lại trong nhật ký kiểm toán.
+            ${ic("lightbulb")} Tham số đang áp dụng có hiệu lực ngay từ thao tác kế tiếp trên hệ thống và mỗi lần sửa được ghi lại trong nhật ký kiểm toán.
+            Tham số <b>Chưa áp dụng</b> được giữ sẵn cho các chức năng sẽ làm sau: hiện hệ thống chưa dùng đến nên chưa sửa được.
         </div>
     `;
 
@@ -130,10 +131,14 @@ function renderSettingsTab(container, settings) {
                                     </td>
                                     <td><span class="note">${esc(item.description || "-")}</span></td>
                                     <td>
-                                        <button type="button" class="btn sm" data-edit-setting="${esc(item.settingKey)}"
-                                                data-meta='${JSON.stringify(item)}'>
-                                            ${ic("edit")} Sửa
-                                        </button>
+                                        ${item.wired ? `
+                                            <button type="button" class="btn sm" data-edit-setting="${esc(item.settingKey)}"
+                                                    data-meta="${esc(JSON.stringify(item))}">
+                                                ${ic("edit")} Sửa
+                                            </button>
+                                        ` : `
+                                            <span class="badge" title="Hệ thống chưa dùng tham số này">Chưa áp dụng</span>
+                                        `}
                                     </td>
                                 </tr>
                             `).join("")}
@@ -164,9 +169,10 @@ function openEditSettingModal(item) {
 
         <div class="field">
             <label for="settingValueInput">Giá trị mới:</label>
-            <input type="text" id="settingValueInput" class="admin-search-input" 
+            <input type="text" id="settingValueInput" class="admin-search-input" inputmode="numeric"
                    value="${esc(item.settingValue)}">
             <div class="note" style="margin-top:4px;">${esc(item.description)}</div>
+            <div class="note" style="margin-top:4px;">Giá trị cho phép: số nguyên từ <b>${esc(item.min)}</b> đến <b>${esc(item.max)}</b>.</div>
         </div>
     `;
 
@@ -291,6 +297,7 @@ function openAddKeywordModal() {
             <input type="text" id="newKeywordInput" class="admin-search-input" 
                    placeholder="Ví dụ: vay nóng, cờ bạc, việc nhẹ lương cao…" autofocus>
             <div class="note">Hệ thống sẽ tự động chuyển từ khóa về chữ thường không phân biệt hoa thường khi kiểm duyệt.</div>
+            <div class="note">Từ khóa cần ít nhất 3 chữ cái hoặc chữ số (tiếng Nhật, tiếng Trung: 2 chữ), và không được trùng một từ khóa đã có khi bỏ khoảng trắng và ký hiệu (ví dụ "vay-nóng" trùng "vay nóng").</div>
         </div>
     `;
 
@@ -306,8 +313,8 @@ function openAddKeywordModal() {
                 return true;
             }
 
-            await adminClient.addKeyword(raw);
-            toast(`Đã thêm từ khóa cấm: "${raw.toLowerCase()}"`, "success");
+            const added = await adminClient.addKeyword(raw);
+            toast(`Đã thêm từ khóa cấm: "${added?.keyword ?? raw.toLowerCase()}"`, "success");
             await loadCurrentTab();
             return false;
         }

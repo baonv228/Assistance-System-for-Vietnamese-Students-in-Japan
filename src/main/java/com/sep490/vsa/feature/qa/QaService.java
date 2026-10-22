@@ -83,8 +83,8 @@ public class QaService {
         Map<Long, List<TopicRef>> topics = cards.topicsOf(ids);
         Map<Long, List<PlaceRef>> places = cards.placesOf(ids);
         Map<Long, List<Tag>> tags = cards.tagsOf(authorIds);
-        return rows.stream().map(r -> new QuestionCard(r.id(), r.status(), r.pinned(), r.solved(), r.title(),
-                excerpt(r.contentStart(), EXCERPT_LENGTH),
+        return rows.stream().map(r -> new QuestionCard(r.id(), r.status(), r.pinned(), r.solved(), r.unanswered(),
+                r.title(), excerpt(r.contentStart(), EXCERPT_LENGTH),
                 new Author(r.authorId(), r.authorName(), r.avatarUrl(), tags.getOrDefault(r.authorId(), List.of())),
                 topics.getOrDefault(r.id(), List.of()), places.getOrDefault(r.id(), List.of()),
                 r.likeCount(), r.answerCount(), r.createdAt())).toList();

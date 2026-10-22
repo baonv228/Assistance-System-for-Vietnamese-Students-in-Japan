@@ -95,12 +95,22 @@ public class BlogWriteRepository {
         return n == null ? 0 : n;
     }
 
-    /** Only places that are on the map (approved, not removed or merged) can be linked. The search is PlaceService. */
+    /**
+     * Only places that are on the map (approved, not removed or merged) can be linked. The search is PlaceService.
+     * <p>
+     * A locking read ({@code FOR SHARE}), so it sees the rows as committed now, like
+     * {@link com.sep490.vsa.feature.place.PlaceRepository#insertOsmPlace}: when another post saved the same new
+     * OpenStreetMap place a moment earlier, the save links that row, which a plain SELECT would not find in this
+     * transaction's older snapshot ("Có địa điểm không còn trên bản đồ"). The rows stay share-locked until the post is
+     * saved, so a place cannot be removed in between. Outside a transaction (the first check, before the photos are
+     * decoded) the lock ends with the statement.
+     */
     public int countActivePlaces(List<Long> ids) {
         if (ids.isEmpty()) {
             return 0;
         }
-        Integer n = named.queryForObject("SELECT COUNT(*) FROM places WHERE status = 'ACTIVE' AND id IN (:ids)",
+        Integer n = named.queryForObject(
+                "SELECT COUNT(*) FROM places WHERE status = 'ACTIVE' AND id IN (:ids) FOR SHARE",
                 Map.of("ids", ids), Integer.class);
         return n == null ? 0 : n;
     }
@@ -108,6 +118,7 @@ public class BlogWriteRepository {
     /**
      * Places that have a published "Cảnh báo lừa đảo" post, newest post first. Questions do not count: asking
      * whether a place is a scam is not a warning. A merged place reports the place it was merged into.
+     * A post of a locked or deleted account is hidden ({@link ActiveAuthors}) and marks no place.
      * {@code placeId} narrows the list to one place (Place Details card).
      */
     public List<ScamWarning> scamWarnings(Long placeId) {
@@ -122,9 +133,9 @@ public class BlogWriteRepository {
                 JOIN blog_place_links bpl ON bpl.blog_id = b.id
                 JOIN places p ON p.id = bpl.place_id
                 JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
-                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND shown.status = 'ACTIVE'
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND shown.status = 'ACTIVE' AND %s
                   AND (:placeId IS NULL OR shown.id = :placeId)
-                ORDER BY b.created_at DESC, b.id DESC""", params,
+                ORDER BY b.created_at DESC, b.id DESC""".formatted(ActiveAuthors.of("b")), params,
                 (rs, i) -> new ScamWarning(rs.getLong(1), rs.getLong(2), rs.getString(3)));
     }
 
@@ -236,19 +247,23 @@ public class BlogWriteRepository {
 
     // ---------------------------------------------------------------- publishing after the scan
 
-    public record PendingBlog(Long id, Long authorId, String type, String title, String status) {
+    public record PendingBlog(Long id, Long authorId, String type, String title, String content, String status) {
     }
 
     /** Locks the post row so the scan job and the after-commit scan cannot publish it twice. */
     public Optional<PendingBlog> lockBlog(long blogId) {
-        return jdbc.query("SELECT id, author_id, blog_type, title, status FROM blogs WHERE id = ? FOR UPDATE",
-                (rs, i) -> new PendingBlog(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5)), blogId).stream().findFirst();
+        return pendingBlog(blogId, " FOR UPDATE");
     }
 
-    public String status(long blogId) {
-        return jdbc.query("SELECT status FROM blogs WHERE id = ?", (rs, i) -> rs.getString(1), blogId)
-                .stream().findFirst().orElse(null);
+    /** The post as it is now, without a lock. */
+    public Optional<PendingBlog> pendingBlog(long blogId) {
+        return pendingBlog(blogId, "");
+    }
+
+    private Optional<PendingBlog> pendingBlog(long blogId, String lock) {
+        return jdbc.query("SELECT id, author_id, blog_type, title, content, status FROM blogs WHERE id = ?" + lock,
+                (rs, i) -> new PendingBlog(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6)), blogId).stream().findFirst();
     }
 
     public record MediaState(Long id, String scanStatus) {
@@ -268,10 +283,14 @@ public class BlogWriteRepository {
                 to, blogId, from) > 0;
     }
 
-    /** Posts still waiting for their scan that were sent before {@code before} (for the retry job). */
-    public List<Long> processingBlogIds(Instant before, int limit) {
+    /**
+     * One page of the posts still waiting for their scan that were sent before {@code before} (for the retry job), in
+     * id order after {@code afterId}: the job walks through all of them page by page, so posts that stay stuck (a
+     * missing file, a scanner that keeps failing on them) never keep newer ones from being tried.
+     */
+    public List<Long> processingBlogIds(Instant before, long afterId, int limit) {
         return jdbc.query("""
-                SELECT id FROM blogs WHERE status = 'PROCESSING' AND created_at < ? ORDER BY created_at LIMIT ?""",
-                (rs, i) -> rs.getLong(1), Timestamp.from(before), limit);
+                SELECT id FROM blogs WHERE status = 'PROCESSING' AND created_at < ? AND id > ? ORDER BY id LIMIT ?""",
+                (rs, i) -> rs.getLong(1), Timestamp.from(before), afterId, limit);
     }
 }

@@ -141,6 +141,29 @@ class CommentEditFlowTest {
     }
 
     @Test
+    void onlyTaggedAccountsCommentPhoneNumbersOrChatIds() throws Exception {
+        String contactNeedsTag =
+                "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.";
+        long blog = write(writer);
+        mvc.perform(withCsrf(post("/api/blogs/" + blog + "/comments"), commenter).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"ib zalo 0901 234 567\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(contactNeedsTag));
+        long comment = comment(commenter, blog, null, "Mua cá đông lạnh ở Gyomu rẻ lắm");
+        edit(commenter, comment, "Inbox telegram @scamvn nhé").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(contactNeedsTag));
+        assertUnchanged(comment, "Mua cá đông lạnh ở Gyomu rẻ lắm");
+
+        // An account with an identity tag may write it
+        long mentorTag = jdbc.queryForObject("SELECT id FROM tag_types WHERE name = 'Mentor'", Long.class);
+        jdbc.update("INSERT INTO user_tags (user_id, tag_type_id, granted_by) VALUES (?, ?, ?)",
+                other, mentorTag, user("MODERATOR"));
+        long tagged = comment(other, blog, null, "ib zalo 0901 234 567");
+        assertThat(jdbc.queryForObject("SELECT content FROM comments WHERE id = ?", String.class, tagged))
+                .isEqualTo("ib zalo 0901 234 567");
+    }
+
+    @Test
     void goneCommentsAndPostsCannotBeEdited() throws Exception {
         long blog = write(writer);
         long parent = comment(commenter, blog, null, "Sẽ bị xóa");
@@ -246,8 +269,11 @@ class CommentEditFlowTest {
         mvc.perform(withCsrf(post(path), userId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"" + content + "\",\"parentId\":" + parentId + "}"))
                 .andExpect(status().isOk());
-        return jdbc.queryForObject("SELECT MAX(id) FROM comments WHERE blog_id = ? AND author_id = ?", Long.class,
+        long id = jdbc.queryForObject("SELECT MAX(id) FROM comments WHERE blog_id = ? AND author_id = ?", Long.class,
                 blogId, userId);
+        // Written a minute earlier, so the same user's next comment is not refused by the 15-second rule
+        jdbc.update("UPDATE comments SET created_at = created_at - INTERVAL 1 MINUTE WHERE id = ?", id);
+        return id;
     }
 
     private static long created(ResultActions result) throws Exception {

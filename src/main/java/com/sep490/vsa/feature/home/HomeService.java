@@ -1,5 +1,7 @@
 package com.sep490.vsa.feature.home;
 
+import com.sep490.vsa.feature.blog.ActiveAuthors;
+import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.home.HomeDtos.EventItem;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
@@ -38,8 +40,6 @@ public class HomeService {
 
     private static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
     private static final int EVENT_DAYS = 14;
-    /** Featured posts: score = likes + 2 × comments + rank bonus, at least 10. */
-    private static final int FEATURED_MIN_SCORE = 10;
     /** "Dành cho bạn": up to 5 posts, those of the last 30 days first, older ones fill the rest. */
     private static final int FOR_YOU_SIZE = 5;
     private static final int FOR_YOU_DAYS = 30;
@@ -55,28 +55,34 @@ public class HomeService {
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final FeaturedSnapshotService featuredPosts;
 
-    public HomeService(JdbcTemplate jdbc, Clock clock) {
+    public HomeService(JdbcTemplate jdbc, Clock clock, FeaturedSnapshotService featuredPosts) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.featuredPosts = featuredPosts;
     }
 
+    /**
+     * Numbers, two "Hữu ích" reviews and the phrase of the day. Reviews of a locked or deleted account count nowhere
+     * on Home and are never quoted ({@link ActiveAuthors}, on {@code reviews.author_id}).
+     */
     public GuestHome guest() {
         Stats stats = new Stats(
                 count("""
                         SELECT COUNT(DISTINCT p.id) FROM places p
-                        JOIN reviews r ON r.place_id = p.id AND r.status = 'PUBLISHED'
-                        WHERE p.status = 'ACTIVE'"""),
+                        JOIN reviews r ON r.place_id = p.id AND r.status = 'PUBLISHED' AND %s
+                        WHERE p.status = 'ACTIVE'""".formatted(ActiveAuthors.of("r"))),
                 count("""
                         SELECT COUNT(*) FROM reviews r JOIN places p ON p.id = r.place_id
-                        WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE'"""),
+                        WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND %s""".formatted(ActiveAuthors.of("r"))),
                 count("SELECT COUNT(*) FROM phrases WHERE deleted_at IS NULL"));
         // Reviews with more than 10 likes are marked "Hữu ích"
         List<Quote> quotes = jdbc.query("""
                 SELECT r.content, u.id, u.display_name, p.name_vi FROM reviews r
                 JOIN users u ON u.id = r.author_id JOIN places p ON p.id = r.place_id
-                WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND r.like_count > 10
-                ORDER BY r.like_count DESC, r.created_at DESC LIMIT 2""",
+                WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND r.like_count > 10 AND %s
+                ORDER BY r.like_count DESC, r.created_at DESC LIMIT 2""".formatted(ActiveAuthors.of("r")),
                 (rs, i) -> new Quote(rs.getString(1), rs.getString(3), tagsOf(rs.getLong(2)), rs.getString(4)));
         return new GuestHome(stats, quotes, phraseOfToday());
     }
@@ -97,9 +103,10 @@ public class HomeService {
     }
 
     /**
-     * Published posts (not questions) by other people for "Dành cho bạn". Posts of the last 30 days come first and
-     * older ones only fill the list; within each group: linked to a place in the user's area, then a topic that suits
-     * the user's stage, then likes + 2 × comments, then newest.
+     * Published posts (not questions) by other people for "Dành cho bạn", never those of a locked or deleted account
+     * ({@link ActiveAuthors}). Posts of the last 30 days come first and older ones only fill the list; within each
+     * group: linked to a place in the user's area, then a topic that suits the user's stage, then likes + 2 × comments,
+     * then newest.
      */
     private List<FeedPost> forYou(Long userId, Long areaId, String stage) {
         List<String> topics = stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
@@ -109,7 +116,7 @@ public class HomeService {
                         WHERE bpl.blog_id = b.id AND shown.status = 'ACTIVE' AND shown.area_id = ?)""";
         String fits = topics.isEmpty() ? "FALSE" : """
                 EXISTS (SELECT 1 FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
-                        WHERE btl.blog_id = b.id AND t.name IN (%s))"""
+                        WHERE btl.blog_id = b.id AND t.is_active AND t.name IN (%s))"""
                 .formatted(String.join(", ", Collections.nCopies(topics.size(), "?")));
         List<Object> params = new ArrayList<>();
         if (areaId != null) {
@@ -123,14 +130,14 @@ public class HomeService {
                 SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
                        b.comment_count, b.created_at,
                        (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
-                        WHERE btl.blog_id = b.id ORDER BY t.is_other, t.sort_order, t.name LIMIT 1) AS topic_name,
+                        WHERE btl.blog_id = b.id AND t.is_active ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)
+                         AS topic_name,
                        %s AS near, %s AS fits
                 FROM blogs b JOIN users u ON u.id = b.author_id
-                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> ?
-                  AND u.status <> 'DELETED' AND u.deleted_at IS NULL
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> ? AND %s
                 ORDER BY (b.created_at >= ?) DESC, near DESC, fits DESC, b.like_count + 2 * b.comment_count DESC,
                          b.created_at DESC, b.id DESC
-                LIMIT ?""".formatted(near, fits),
+                LIMIT ?""".formatted(near, fits, ActiveAuthors.of("b")),
                 (rs, i) -> new FeedPost(rs.getLong("id"), rs.getString("title"),
                         excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
                         rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
@@ -171,38 +178,45 @@ public class HomeService {
                 Date.valueOf(today), Date.valueOf(today.plusDays(EVENT_DAYS)));
     }
 
-    /** Newest reviews by other people, those in the user's area first. */
+    /**
+     * "Review mới": newest reviews by other people, those in the user's area first; never those of a locked or deleted
+     * account ({@link ActiveAuthors}).
+     */
     private List<ReviewItem> reviews(Long userId, Long areaId) {
         return jdbc.query("""
                 SELECT p.name_vi, c.icon, r.rating, u.display_name, r.content FROM reviews r
                 JOIN places p ON p.id = r.place_id JOIN place_categories c ON c.id = p.category_id
                 JOIN users u ON u.id = r.author_id
-                WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND r.author_id <> ?
-                ORDER BY CASE WHEN p.area_id = ? THEN 0 ELSE 1 END, r.created_at DESC LIMIT 3""",
+                WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND r.author_id <> ? AND %s
+                ORDER BY CASE WHEN p.area_id = ? THEN 0 ELSE 1 END, r.created_at DESC LIMIT 3"""
+                        .formatted(ActiveAuthors.of("r")),
                 (rs, i) -> new ReviewItem(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getString(4),
                         excerpt(rs.getString(5), 80)),
                 userId, areaId);
     }
 
-    /** Top post (not a question) of the last 7 days, or of the last 30 days if the week has none. */
+    /**
+     * Top post (not a question) of the last 7 days, or of the last 30 days if the week has none. The score, the
+     * minimum (featured_min_score) and the authors counted are those of the Blog's "Bài nổi bật"
+     * ({@link FeaturedSnapshotService#best}: posts and comments of active accounts only), computed now rather than
+     * read from the hourly snapshot.
+     */
     private Featured featured() {
         for (var period : List.of(new Object[]{"WEEK", 7}, new Object[]{"MONTH", 30})) {
-            Timestamp since = Timestamp.from(clock.instant().minus(Duration.ofDays((int) period[1])));
+            var best = featuredPosts.best(clock.instant().minus(Duration.ofDays((int) period[1])));
+            if (best.isEmpty()) {
+                continue;
+            }
             List<Featured> top = jdbc.query("""
-                    SELECT b.id, b.title, b.content, u.id, u.display_name,
-                           b.like_count + 2 * b.comment_count
-                             + COALESCE((SELECT MAX(r.featured_bonus) FROM ranks r WHERE r.min_points <= u.points), 0)
-                             AS score
-                    FROM blogs b JOIN users u ON u.id = b.author_id
-                    WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.created_at >= ?
-                    HAVING score >= ? ORDER BY score DESC, b.created_at DESC LIMIT 1""",
+                    SELECT b.id, b.title, b.content, u.id, u.display_name
+                    FROM blogs b JOIN users u ON u.id = b.author_id WHERE b.id = ?""",
                     (rs, i) -> {
                         String content = rs.getString(3);
                         int words = content.split("\\s+").length;
                         return new Featured(rs.getLong(1), rs.getString(2), excerpt(content, 140), rs.getString(5),
                                 tagsOf(rs.getLong(4)), Math.max(1, words / 200), (String) period[0]);
                     },
-                    since, FEATURED_MIN_SCORE);
+                    best.get().blogId());
             if (!top.isEmpty()) {
                 return top.get(0);
             }
@@ -225,10 +239,11 @@ public class HomeService {
                         rs.getString(5)), offset).stream().findFirst().orElse(null);
     }
 
+    /** Approved, not revoked identity tags whose tag type is still active (like the Blog's tags). */
     private List<Tag> tagsOf(long userId) {
         return new ArrayList<>(jdbc.query("""
                 SELECT t.name, t.color FROM user_tags ut JOIN tag_types t ON t.id = ut.tag_type_id
-                WHERE ut.user_id = ? AND ut.revoked_at IS NULL""",
+                WHERE ut.user_id = ? AND ut.revoked_at IS NULL AND t.is_active""",
                 (rs, i) -> new Tag(rs.getString(1), rs.getString(2)), userId));
     }
 

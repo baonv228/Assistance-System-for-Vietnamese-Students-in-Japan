@@ -2,7 +2,14 @@ package com.sep490.vsa.feature.home;
 
 import com.jayway.jsonpath.JsonPath;
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
+import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
+import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
+import com.sep490.vsa.feature.home.HomeDtos.Quote;
+import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
+import com.sep490.vsa.feature.home.HomeDtos.Stats;
+import com.sep490.vsa.feature.home.HomeDtos.Tag;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +67,10 @@ class HomeFeedFlowTest {
     private MockMvc mvc;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private FeaturedSnapshotService featuredPosts;
+    @Autowired
+    private HomeService home;
 
     private final List<Long> users = new ArrayList<>();
     private long area;
@@ -87,6 +98,7 @@ class HomeFeedFlowTest {
     void cleanUp() {
         for (long id : users) {
             jdbc.update("DELETE FROM blogs WHERE author_id = ?", id);
+            jdbc.update("DELETE FROM reviews WHERE author_id = ?", id);
         }
         jdbc.update("DELETE FROM places WHERE id = ?", place);
         for (long id : users) {
@@ -170,10 +182,46 @@ class HomeFeedFlowTest {
         long fresh = blog(author, "POST", "PUBLISHED", future.instant().minus(Duration.ofDays(1)), 0, 0, false, null);
         long oldNear = blog(author, "POST", "PUBLISHED", Instant.now().minus(Duration.ofDays(60)), 0, 0, true, null);
 
-        List<FeedPost> feed = new HomeService(jdbc, future).member(viewer).forYou();
+        List<FeedPost> feed = new HomeService(jdbc, future, featuredPosts).member(viewer).forYou();
         assertThat(feed).extracting(FeedPost::id).startsWith(fresh, oldNear);
         assertThat(feed.get(0).reason()).isNull();
         assertThat(feed.get(1).reason()).isEqualTo(NEAR);
+    }
+
+    @Test
+    void inactiveTopicsAndTagTypesAreLeftOut() {
+        // Seen from ten years ahead only this test's posts are recent, so they lead the feed and are featured
+        Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
+        HomeService home = new HomeService(jdbc, future, featuredPosts);
+        setProfile(viewer, null, "ARR");
+        long post = blog(author, "POST", "PUBLISHED", future.instant().minus(Duration.ofDays(1)), 50, 0, false, "Nhà ở");
+        long staff = user("ACTIVE");
+        String hiddenTag = "Tag tắt " + word;
+        jdbc.update("INSERT INTO tag_types (name, description, color, is_active) VALUES (?, 'test', 'gray', FALSE)",
+                hiddenTag);
+        jdbc.update("""
+                INSERT INTO user_tags (user_id, tag_type_id, granted_by)
+                SELECT ?, id, ? FROM tag_types WHERE name IN ('Mentor', ?)""", author, staff, hiddenTag);
+        try {
+            FeedPost first = home.member(viewer).forYou().get(0);
+            assertThat(first.id()).isEqualTo(post);
+            assertThat(first.reason()).isEqualTo(FITS);
+            assertThat(first.topicName()).isEqualTo("Nhà ở");
+            Featured featured = home.member(viewer).featured();
+            assertThat(featured.id()).isEqualTo(post);
+            assertThat(featured.authorTags()).extracting(Tag::name).containsExactly("Mentor");
+
+            // "Nhà ở" switched off by the Admin: no stage badge and no topic label any more
+            jdbc.update("UPDATE blog_topics SET is_active = FALSE WHERE name = 'Nhà ở'");
+            first = home.member(viewer).forYou().get(0);
+            assertThat(first.id()).isEqualTo(post);
+            assertThat(first.reason()).isNull();
+            assertThat(first.topicName()).isNull();
+        } finally {
+            jdbc.update("UPDATE blog_topics SET is_active = TRUE WHERE name = 'Nhà ở'");
+            jdbc.update("DELETE FROM user_tags WHERE user_id = ?", author);
+            jdbc.update("DELETE FROM tag_types WHERE name = ?", hiddenTag);
+        }
     }
 
     @Test
@@ -193,6 +241,36 @@ class HomeFeedFlowTest {
     }
 
     @Test
+    void reviewsOfLockedOrDeletedAccountsAreNeitherListedNorCounted() {
+        setProfile(viewer, area, "ARR");
+        Stats before = home.guest().stats();
+        Instant now = Instant.now();
+        // The newest reviews in the viewer's area and the most liked anywhere: they would lead every list
+        long locked = user("LOCKED");
+        review(locked, "Khóa " + word, HUGE, now);
+        review(user("DELETED"), "Đã xóa " + word, HUGE, now.minusSeconds(1));
+
+        assertThat(home.member(viewer).reviews()).extracting(ReviewItem::excerpt).noneMatch(t -> t.contains(word));
+        GuestHome guest = home.guest();
+        assertThat(guest.quotes()).extracting(Quote::text).noneMatch(t -> t.contains(word));
+        assertThat(guest.stats().reviews()).isEqualTo(before.reviews());
+        assertThat(guest.stats().placesWithReviews()).isEqualTo(before.placesWithReviews());
+
+        // An active author's review is listed, quoted and counted
+        review(author, "Hoạt động " + word, HUGE - 1, now.minusSeconds(2));
+        assertThat(home.member(viewer).reviews().get(0).excerpt()).isEqualTo("Hoạt động " + word);
+        guest = home.guest();
+        assertThat(guest.quotes().get(0).text()).isEqualTo("Hoạt động " + word);
+        assertThat(guest.stats().reviews()).isEqualTo(before.reviews() + 1);
+        assertThat(guest.stats().placesWithReviews()).isEqualTo(before.placesWithReviews() + 1);
+
+        // Nothing was deleted: unlocked, the account's review shows again
+        jdbc.update("UPDATE users SET status = 'ACTIVE' WHERE id = ?", locked);
+        assertThat(home.member(viewer).reviews().get(0).excerpt()).isEqualTo("Khóa " + word);
+        assertThat(home.guest().stats().reviews()).isEqualTo(before.reviews() + 2);
+    }
+
+    @Test
     void guestsGetNoPersonalHome() throws Exception {
         mvc.perform(get("/api/me/home")).andExpect(status().isUnauthorized());
     }
@@ -209,6 +287,13 @@ class HomeFeedFlowTest {
         long id = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
         users.add(id);
         return id;
+    }
+
+    /** A published review of this test's place, with its likes and date. */
+    private void review(long authorId, String content, int likes, Instant createdAt) {
+        jdbc.update("""
+                INSERT INTO reviews (author_id, place_id, rating, content, status, like_count, created_at)
+                VALUES (?, ?, 5, ?, 'PUBLISHED', ?, ?)""", authorId, place, content, likes, Timestamp.from(createdAt));
     }
 
     private void setProfile(long userId, Long areaId, String stage) {

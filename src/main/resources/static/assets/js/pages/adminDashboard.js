@@ -36,7 +36,7 @@ function renderDashboard(container, stats, user) {
                 <p>Xin chào <b>${esc(user.displayName)}</b>. Đây là bảng theo dõi tổng quan các chỉ số tài khoản và hoạt động hệ thống.</p>
             </div>
             <div>
-                <a href="/pages/admin/users.html" class="btn sm pri">${ic("person_add")} Quản lý người dùng</a>
+                <a href="/admin/users" class="btn sm pri">${ic("person_add")} Quản lý người dùng</a>
             </div>
         </div>
 
@@ -52,7 +52,7 @@ function renderDashboard(container, stats, user) {
                 <div class="admin-stat-icon blue">${ic("groups")}</div>
                 <div class="admin-stat-info">
                     <span class="num">${stats.totalUsers}</span>
-                    <span class="lbl">Tổng tài khoản</span>
+                    <span class="lbl">Tổng tài khoản (không tính đã xóa)</span>
                 </div>
             </div>
 
@@ -68,7 +68,7 @@ function renderDashboard(container, stats, user) {
                 <div class="admin-stat-icon amber">${ic("verified_user")}</div>
                 <div class="admin-stat-info">
                     <span class="num">${stats.moderatorCount} / ${stats.maxModerators}</span>
-                    <span class="lbl">Moderator (Tối đa ${stats.maxModerators})</span>
+                    <span class="lbl">Moderator đang hoạt động (Tối đa ${stats.maxModerators})</span>
                 </div>
             </div>
 
@@ -108,7 +108,7 @@ function renderDashboard(container, stats, user) {
         <div class="admin-card-table">
             <div class="admin-table-header-bar">
                 <h3>${ic("history")} Nhật ký kiểm toán gần đây (10 hoạt động mới nhất)</h3>
-                <a href="/pages/admin/activity-log.html" class="link">Xem tất cả nhật ký &rarr;</a>
+                <a href="/admin/activity-log" class="link">Xem tất cả nhật ký &rarr;</a>
             </div>
             <div class="admin-table-responsive">
                 <table class="admin-table">

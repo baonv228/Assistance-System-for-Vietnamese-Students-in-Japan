@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.place;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.moderation.ImageModerator;
 import com.sep490.vsa.feature.place.ExternalPlaces.Hit;
+import com.sun.net.httpserver.HttpServer;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
@@ -18,31 +20,45 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -77,6 +93,11 @@ class PlaceFlowTest {
     private ExternalPlaces map;
     @MockBean
     private ImageModerator moderator;
+    @Autowired
+    private ApiUsageCounter usageCounter;
+    /** The real repository; one test holds its inserts to make two posts meet. */
+    @SpyBean
+    private PlaceRepository placeRepository;
 
     private String word;
     private String pinWord;          // in the pin's English name only, so a search for "word" does not find the pin
@@ -156,7 +177,7 @@ class PlaceFlowTest {
 
     @Test
     void searchListsAsvsjPlacesFirstThenNewMapPlaces() throws Exception {
-        long before = usage(PlaceService.SEARCH_USAGE);
+        long before = usage(OsmPlaces.SEARCH_USAGE);
         mvc.perform(get("/api/places/search").param("q", word).session(session(author)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.external").value("ON"))
@@ -171,13 +192,14 @@ class PlaceFlowTest {
                 .andExpect(jsonPath("$.data.items[1].address").value("Shibakōen 4, Minato, Tokyo, Nhật Bản"))
                 .andExpect(jsonPath("$.data.items[1].source").value("OSM"))
                 .andExpect(jsonPath("$.data.items[2].category").value("Quán ăn"));
-        assertThat(usage(PlaceService.SEARCH_USAGE)).isEqualTo(before + 1);
+        // The map client counts the requests it really sends (see theMapClientCountsEveryRequestItSends); the
+        // service counts nothing itself, so the stand-in map adds nothing
+        assertThat(usage(OsmPlaces.SEARCH_USAGE)).isEqualTo(before);
 
         // The same text again within minutes is answered from memory
         mvc.perform(get("/api/places/search").param("q", " " + word.toUpperCase() + " ").session(session(author)))
                 .andExpect(jsonPath("$.data.items", hasSize(3)));
         verify(map, times(1)).search(anyString());
-        assertThat(usage(PlaceService.SEARCH_USAGE)).isEqualTo(before + 1);
 
         // A pin added without its OSM id is recognised by its name close by and shown as the ASVSJ pin
         mvc.perform(get("/api/places/search").param("q", "hanashokudo" + pinWord).session(session(author)))
@@ -353,6 +375,143 @@ class PlaceFlowTest {
         created(send(body("Ga quen " + word, List.of(), List.of(knownId))));
     }
 
+    @Test
+    void twoPostsLinkingTheSameNewMapPlaceAtOnceBothSucceedWithOnePlace() throws Exception {
+        long other = user();
+        for (int round = 0; round < 5; round++) {
+            String id = "N" + (Long.parseLong(knownId.substring(1)) + 20 + round);
+            String name = "Quán mới " + word + " " + round;
+            Hit fresh = new Hit(id, name, name, null, null, "Taito, Tokyo, Nhật Bản", "amenity=restaurant", "jp",
+                    lat + 0.05 + round * 0.01, lng);
+            // Both posts have asked the map before either goes on, so both save the place at the same moment
+            CountDownLatch bothAsked = new CountDownLatch(2);
+            when(map.lookup(argThat(ids -> ids != null && ids.contains(id)))).thenAnswer(call -> {
+                bothAsked.countDown();
+                bothAsked.await(10, TimeUnit.SECONDS);
+                return Map.of(id, fresh);
+            });
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<MvcResult> first = pool.submit(() ->
+                        send(author, body("Lần một " + name, List.of(), List.of(id))).andReturn());
+                Future<MvcResult> second = pool.submit(() ->
+                        send(other, body("Lần hai " + name, List.of(), List.of(id))).andReturn());
+                List<Long> linked = new ArrayList<>();
+                for (Future<MvcResult> result : List.of(first, second)) {
+                    MvcResult done = result.get(30, TimeUnit.SECONDS);
+                    String answer = done.getResponse().getContentAsString(StandardCharsets.UTF_8);
+                    assertThat(done.getResponse().getStatus()).as("round %d: %s", round, answer).isEqualTo(200);
+                    long blog = Long.parseLong(answer.replaceAll(".*\"data\":\\{\"id\":(\\d+).*", "$1"));
+                    linked.add(jdbc.queryForObject("SELECT place_id FROM blog_place_links WHERE blog_id = ?",
+                            Long.class, blog));
+                }
+                Long place = jdbc.queryForObject("SELECT id FROM places WHERE osm_id = ?", Long.class, id);
+                assertThat(linked).as("round %d", round).containsExactly(place, place);
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM place_history WHERE place_id = ?",
+                        Integer.class, place)).isEqualTo(1);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void twoPostsAddingTheSameTwoNewMapPlacesInOppositeOrderBothSucceed() throws Exception {
+        long other = user();
+        long base = Long.parseLong(knownId.substring(1)) + 40;
+        for (int round = 0; round < 3; round++) {
+            String a = "N" + (base + 2 * round);
+            String b = "N" + (base + 2 * round + 1);
+            String title = word + " " + round;
+            lookups.put(a, new Hit(a, "Quán A " + title, "Quán A " + title, null, null, "Taito, Tokyo, Nhật Bản",
+                    "amenity=restaurant", "jp", lat + 0.3, lng + 0.01 * round));
+            lookups.put(b, new Hit(b, "Quán B " + title, "Quán B " + title, null, null, "Taito, Tokyo, Nhật Bản",
+                    "amenity=cafe", "jp", lat + 0.31, lng + 0.01 * round));
+            // Both posts have asked the map before either goes on, so both save their new places at the same time
+            CountDownLatch bothAsked = new CountDownLatch(2);
+            when(map.lookup(argThat(ids -> ids != null && ids.contains(a)))).thenAnswer(call -> {
+                bothAsked.countDown();
+                bothAsked.await(10, TimeUnit.SECONDS);
+                Map<String, Hit> found = new LinkedHashMap<>();
+                for (Object id : (Collection<?>) call.getArgument(0)) {
+                    found.put((String) id, lookups.get(id));
+                }
+                return found;
+            });
+            // Each post holds its first new place until the other post has inserted its first one too (1 s at most).
+            // Inserted in the order the authors picked them ([A, B] and [B, A]) each would then wait for the other's
+            // second place: a deadlock, and InnoDB fails one post. In one order the second post waits for the first.
+            CountDownLatch bothInserted = new CountDownLatch(2);
+            Set<Thread> inserting = ConcurrentHashMap.newKeySet();
+            doAnswer(call -> {
+                Object saved = call.callRealMethod();
+                if (inserting.add(Thread.currentThread())) {
+                    bothInserted.countDown();
+                    bothInserted.await(1, TimeUnit.SECONDS);
+                }
+                return saved;
+            }).when(placeRepository).insertOsmPlace(any(), anyLong());
+
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<MvcResult> first = pool.submit(() ->
+                        send(author, body("Đôi một " + title, List.of(), List.of(a, b))).andReturn());
+                Future<MvcResult> second = pool.submit(() ->
+                        send(other, body("Đôi hai " + title, List.of(), List.of(b, a))).andReturn());
+                Long placeA = null;
+                Long placeB = null;
+                for (Future<MvcResult> result : List.of(first, second)) {
+                    MvcResult done = result.get(30, TimeUnit.SECONDS);
+                    String answer = done.getResponse().getContentAsString(StandardCharsets.UTF_8);
+                    assertThat(done.getResponse().getStatus()).as("round %d: %s", round, answer).isEqualTo(200);
+                    long blog = Long.parseLong(answer.replaceAll(".*\"data\":\\{\"id\":(\\d+).*", "$1"));
+                    placeA = jdbc.queryForObject("SELECT id FROM places WHERE osm_id = ?", Long.class, a);
+                    placeB = jdbc.queryForObject("SELECT id FROM places WHERE osm_id = ?", Long.class, b);
+                    assertThat(jdbc.queryForList("SELECT place_id FROM blog_place_links WHERE blog_id = ?", Long.class, blog))
+                            .as("round %d", round).containsExactlyInAnyOrder(placeA, placeB);
+                }
+                for (Long place : List.of(placeA, placeB)) {
+                    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM place_history WHERE place_id = ?",
+                            Integer.class, place)).isEqualTo(1);
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void theMapClientCountsEveryRequestItSends() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger answerStatus = new java.util.concurrent.atomic.AtomicInteger(200);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            byte[] out = (exchange.getRequestURI().getPath().endsWith("/lookup") ? "[]" : "{\"features\": []}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(answerStatus.get(), out.length);
+            exchange.getResponseBody().write(out);
+            exchange.close();
+        });
+        server.start();
+        try {
+            String base = "http://127.0.0.1:" + server.getAddress().getPort();
+            // Built the way the application builds it, with the application's counter (api_usage, Japan day)
+            ExternalPlaces osm = new ExternalPlacesConfig().externalPlaces(false, true, base + "/api/",
+                    base + "/lookup", "SenpaiOi-test/1.0", List.of("jp"), usageCounter);
+            long searches = usage(OsmPlaces.SEARCH_USAGE);
+            long lookups = usage(OsmPlaces.LOOKUP_USAGE);
+            osm.search("ueno " + word);
+            osm.lookup(List.of("N1", "DEV-tokyo-tower"));
+            answerStatus.set(500);
+            assertThatThrownBy(() -> osm.searchStations("Ueno")).isInstanceOf(ExternalPlacesException.class);
+            osm.lookup(List.of("DEV-tokyo-tower"));                     // nothing to send, nothing counted
+            assertThat(usage(OsmPlaces.SEARCH_USAGE)).isEqualTo(searches + 2);
+            assertThat(usage(OsmPlaces.LOOKUP_USAGE)).isEqualTo(lookups + 1);
+        } finally {
+            server.stop(0);
+        }
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static org.hamcrest.Matcher<Double> closeTo(double value) {
@@ -371,7 +530,11 @@ class PlaceFlowTest {
     }
 
     private ResultActions send(String json) throws Exception {
-        return mvc.perform(post("/api/blogs").session(session(author))
+        return send(author, json);
+    }
+
+    private ResultActions send(long userId, String json) throws Exception {
+        return mvc.perform(post("/api/blogs").session(session(userId))
                 .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
                 .contentType(MediaType.APPLICATION_JSON).content(json));
     }

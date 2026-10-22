@@ -1,5 +1,7 @@
 package com.sep490.vsa.feature.saved;
 
+import com.sep490.vsa.feature.blog.ActiveAuthors;
+import com.sep490.vsa.feature.qa.QaRepository;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedAuthor;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedBlog;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedPlace;
@@ -16,14 +18,11 @@ import java.util.Optional;
  * own the items (POST/DELETE /api/blogs|questions/{id}/save; places once the Map is built).
  * <p>
  * Only items others can still see are listed: ACTIVE places (a merged place shows the place it was merged into) and
- * PUBLISHED posts and questions. The rows of hidden, removed or rejected items stay, so they come back if restored.
+ * PUBLISHED posts and questions of active accounts ({@link ActiveAuthors}). The rows of hidden, removed or rejected
+ * items, and of items whose author was locked or deleted, stay, so they come back if restored or unlocked.
  */
 @Repository
 public class SavedRepository {
-
-    /** Same rule as QaRepository: solved while the best answer is still published. */
-    private static final String SOLVED_SQL =
-            "EXISTS (SELECT 1 FROM comments bc WHERE bc.id = b.best_comment_id AND bc.status = 'PUBLISHED')";
 
     private static final String SHOWN_PLACES = """
             FROM saved_places sp
@@ -31,9 +30,12 @@ public class SavedRepository {
             JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
             WHERE sp.user_id = ? AND shown.status = 'ACTIVE'""";
 
+    /** Saved posts and questions that are shown: published, by an active account. */
+    private static final String SHOWN_BLOG = "b.status = 'PUBLISHED' AND " + ActiveAuthors.of("b");
+
     private static final String SHOWN_BLOGS = """
             FROM saved_blogs sb JOIN blogs b ON b.id = sb.blog_id
-            WHERE sb.user_id = ? AND b.status = 'PUBLISHED'""";
+            WHERE sb.user_id = ? AND %s""".formatted(SHOWN_BLOG);
 
     private final JdbcTemplate jdbc;
 
@@ -66,14 +68,17 @@ public class SavedRepository {
                 userId);
     }
 
-    /** Saved posts ("POST") or questions ("QA"), newest saved first. Topics are attached by the service. */
+    /**
+     * Saved posts ("POST") or questions ("QA"), newest saved first. Topics are attached by the service. Solved is
+     * the rule of the Hỏi-Đáp list ({@link QaRepository#SOLVED_SQL}).
+     */
     public List<SavedBlog> blogs(long userId, String type) {
         return jdbc.query("""
                 SELECT b.id, b.blog_type, b.title, u.id, u.display_name, u.avatar_url, b.like_count, b.comment_count,
                        %s AS solved, b.created_at, sb.created_at AS saved_at
                 FROM saved_blogs sb JOIN blogs b ON b.id = sb.blog_id JOIN users u ON u.id = b.author_id
-                WHERE sb.user_id = ? AND b.status = 'PUBLISHED' AND b.blog_type = ?
-                ORDER BY sb.created_at DESC, b.id DESC""".formatted(SOLVED_SQL),
+                WHERE sb.user_id = ? AND %s AND b.blog_type = ?
+                ORDER BY sb.created_at DESC, b.id DESC""".formatted(QaRepository.SOLVED_SQL, SHOWN_BLOG),
                 (rs, i) -> new SavedBlog(rs.getLong(1), rs.getString(2), rs.getString(3),
                         new SavedAuthor(rs.getLong(4), rs.getString(5), rs.getString(6)), List.of(),
                         rs.getInt(7), rs.getInt(8), rs.getBoolean(9), instant(rs.getTimestamp(10)),

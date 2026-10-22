@@ -26,10 +26,12 @@ public class AdminDashboardService {
 
     /**
      * Lấy các chỉ số thống kê tổng hợp và danh sách nhật ký gần nhất.
+     * Tài khoản đã xóa (DELETED) không được tính ở đâu cả. Số Moderator chỉ tính tài khoản đang hoạt động, như giới
+     * hạn max_moderators.
      */
     @Transactional(readOnly = true)
     public DashboardStats getDashboardStats() {
-        Long totalUsersObj = jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class);
+        Long totalUsersObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE status <> 'DELETED'", Long.class);
         long totalUsers = totalUsersObj != null ? totalUsersObj : 0;
 
         Long activeUsersObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE status = 'ACTIVE'", Long.class);
@@ -38,19 +40,24 @@ public class AdminDashboardService {
         Long lockedUsersObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE status = 'LOCKED'", Long.class);
         long lockedUsers = lockedUsersObj != null ? lockedUsersObj : 0;
 
-        Long userRoleCountObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE role = 'USER'", Long.class);
+        Long userRoleCountObj = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE role = 'USER' AND status <> 'DELETED'", Long.class);
         long userRoleCount = userRoleCountObj != null ? userRoleCountObj : 0;
 
-        Long moderatorCountObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE role = 'MODERATOR'", Long.class);
+        Long moderatorCountObj = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE role = 'MODERATOR' AND status = 'ACTIVE'", Long.class);
         long moderatorCount = moderatorCountObj != null ? moderatorCountObj : 0;
 
-        Long academicCountObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE role = 'ACADEMIC_MANAGER'", Long.class);
+        Long academicCountObj = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE role = 'ACADEMIC_MANAGER' AND status <> 'DELETED'", Long.class);
         long academicManagerCount = academicCountObj != null ? academicCountObj : 0;
 
-        Long adminCountObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE role = 'ADMIN'", Long.class);
+        Long adminCountObj = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND status <> 'DELETED'", Long.class);
         long adminCount = adminCountObj != null ? adminCountObj : 0;
 
-        Long falseReportCountObj = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE false_report_count > 0", Long.class);
+        Long falseReportCountObj = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE false_report_count > 0 AND status <> 'DELETED'", Long.class);
         long falseReportUsersCount = falseReportCountObj != null ? falseReportCountObj : 0;
 
         int maxModerators = userService.getMaxModeratorsAllowed();

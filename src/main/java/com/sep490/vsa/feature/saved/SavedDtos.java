@@ -27,7 +27,7 @@ public final class SavedDtos {
      * A saved post or question that is still published.
      *
      * @param type   POST (opens /blog/{id}) or QA (opens /qa/{id})
-     * @param solved questions only: the best answer is still published
+     * @param solved questions only: the best answer is still published and its writer's account active
      */
     public record SavedBlog(Long id, String type, String title, SavedAuthor author, List<TopicRef> topics,
                             int likeCount, int commentCount, boolean solved, Instant createdAt, Instant savedAt) {

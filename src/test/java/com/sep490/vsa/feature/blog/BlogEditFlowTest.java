@@ -226,6 +226,18 @@ class BlogEditFlowTest {
     }
 
     @Test
+    void phoneNumbersOrChatIdsAddedByAnEditNeedAnIdentityTag() throws Exception {
+        long id = created(create(veteran, body("POST", "Bài sạch", "nội dung", List.of(experience), List.of())));
+        update(veteran, body("POST", "Bài sạch", "Liên hệ LINE ID: scam123 hoặc 090-1234-5678", List.of(experience),
+                List.of()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram."));
+        Map<String, Object> row = jdbc.queryForMap("SELECT content, is_edited FROM blogs WHERE id = ?", id);
+        assertThat(row).containsEntry("content", "nội dung").containsEntry("is_edited", false);
+    }
+
+    @Test
     void keptPhotosCountTowardTheFivePhotoLimit() throws Exception {
         long id = created(create(veteran, body("POST", "Một ảnh", "nội dung", List.of(experience), List.of()), photo()));
         await().atMost(Duration.ofSeconds(15)).until(() -> "PUBLISHED".equals(blogStatus(id)));

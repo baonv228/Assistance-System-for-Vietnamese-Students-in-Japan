@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.blog;
 
 import com.sep490.vsa.common.dto.ApiResponse;
+import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.BlogDetail;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.CommentRequest;
@@ -9,6 +10,7 @@ import com.sep490.vsa.feature.blog.BlogDetailDtos.LikeState;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.ReportRequest;
 import com.sep490.vsa.feature.blog.BlogDetailDtos.SaveState;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -113,9 +115,22 @@ public class BlogDetailController {
         return ApiResponse.ok("Đã lưu bình luận.", detailService.detail(blogId, me, null));
     }
 
+    /**
+     * The refreshed post, or {@code data: null} when the comment was deleted but the post can no longer be shown to
+     * this viewer (hidden or being scanned since the page was opened): the delete still succeeded.
+     */
     @DeleteMapping("/api/comments/{id:\\d+}")
     public ApiResponse<BlogDetail> deleteComment(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
         long blogId = actionService.deleteComment(me, id);
-        return ApiResponse.ok("Đã xóa bình luận.", detailService.detail(blogId, me, null));
+        BlogDetail post;
+        try {
+            post = detailService.detail(blogId, me, null);
+        } catch (ApiException e) {
+            if (e.getStatus() != HttpStatus.NOT_FOUND) {
+                throw e;
+            }
+            post = null;
+        }
+        return ApiResponse.ok("Đã xóa bình luận.", post);
     }
 }

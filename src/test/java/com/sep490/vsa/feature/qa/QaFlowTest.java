@@ -165,6 +165,39 @@ class QaFlowTest {
     }
 
     @Test
+    void aHiddenAnswerKeptOnlyByAReplyLeavesTheQuestionUnanswered() throws Exception {
+        long question = ask(asker, "Đổi bằng lái " + word + " ở đâu?", "");
+        mvc.perform(withCsrf(post("/api/questions/" + question + "/answers"), helper)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"Ở trung tâm sát hạch.\"}"))
+                .andExpect(status().isOk());
+        long answer = jdbc.queryForObject("SELECT id FROM comments WHERE blog_id = ? AND parent_id IS NULL", Long.class, question);
+        mvc.perform(withCsrf(post("/api/questions/" + question + "/answers"), other)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Mình cũng muốn biết\",\"parentId\":" + answer + "}"))
+                .andExpect(status().isOk());
+        assertThat(ids("UNANSWERED")).isEmpty();
+        long unansweredBefore = unansweredCount();
+        mvc.perform(get("/api/questions").param("q", word)).andExpect(jsonPath("$.data.items[0].unanswered").value(false));
+
+        // The only answer is hidden by reports; its reply is still published
+        jdbc.update("UPDATE comments SET status = 'HIDDEN' WHERE id = ?", answer);
+        assertThat(ids("UNANSWERED")).containsExactly(question);
+        assertThat(ids("UNSOLVED")).containsExactly(question);
+        assertThat(unansweredCount()).isEqualTo(unansweredBefore + 1);
+        // The card's "Chưa ai trả lời" follows the same rule, although answerCount is not 0 (the reply counts there)
+        mvc.perform(get("/api/questions").param("q", word))
+                .andExpect(jsonPath("$.data.items[0].unanswered").value(true))
+                .andExpect(jsonPath("$.data.items[0].answerCount").value(org.hamcrest.Matchers.greaterThan(0)));
+
+        // A reply alone never makes a question answered; the asker's own answer does (no rule change)
+        mvc.perform(withCsrf(post("/api/questions/" + question + "/answers"), asker)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"Mình tự tìm được rồi.\"}"))
+                .andExpect(status().isOk());
+        assertThat(ids("UNANSWERED")).isEmpty();
+        assertThat(unansweredCount()).isEqualTo(unansweredBefore);
+    }
+
+    @Test
     void askerDeletesTheirQuestion() throws Exception {
         long question = ask(asker, "Câu hỏi sẽ xóa " + word, "");
         mvc.perform(withCsrf(delete("/api/questions/" + question), other)).andExpect(status().isForbidden());
@@ -252,6 +285,12 @@ class QaFlowTest {
     private static long created(ResultActions result) throws Exception {
         String body = result.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return Long.parseLong(body.replaceAll(".*\"data\":\\{\"id\":(\\d+).*", "$1"));
+    }
+
+    private long unansweredCount() throws Exception {
+        String body = mvc.perform(get("/api/questions/overview")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) com.jayway.jsonpath.JsonPath.read(body, "$.data.stats.unanswered")).longValue();
     }
 
     /** Ids of this test's questions shown with the given status filter. */

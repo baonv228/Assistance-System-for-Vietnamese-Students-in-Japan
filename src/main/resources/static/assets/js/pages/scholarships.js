@@ -5,16 +5,27 @@ await mountNavbar();
 
 const list = document.querySelector("#scholarship-list");
 
+/** An element whose text is set with textContent: API data never goes in as HTML. */
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) {
+        node.className = className;
+    }
+    if (text !== undefined) {
+        node.textContent = text ?? "";
+    }
+    return node;
+}
+
 try {
     const scholarships = await apiClient.getScholarships();
-    list.innerHTML = scholarships.map((scholarship) => `
-        <article class="list-item">
-            <span class="tag">${scholarship.provider}</span>
-            <h2>${scholarship.title}</h2>
-            <p>${scholarship.description}</p>
-            <strong>Deadline: ${scholarship.deadline}</strong>
-        </article>
-    `).join("");
+    list.replaceChildren(...scholarships.map((scholarship) => {
+        const item = el("article", "list-item");
+        item.append(el("span", "tag", scholarship.provider), el("h2", null, scholarship.title),
+            el("p", null, scholarship.description), el("strong", null, `Deadline: ${scholarship.deadline ?? ""}`));
+        return item;
+    }));
 } catch (error) {
-    list.innerHTML = `<p class="error">${error.message}</p>`;
+    // Scholarships are not built: the API answers "Tính năng này sắp ra mắt."
+    list.replaceChildren(el("p", "error", error.message));
 }
