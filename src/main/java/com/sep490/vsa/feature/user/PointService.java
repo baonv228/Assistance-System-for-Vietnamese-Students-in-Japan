@@ -19,7 +19,7 @@ import java.time.Clock;
 public class PointService {
 
     public static final int BEST_ANSWER = 5;
-    /** A published review (reason REVIEW_CREATED), SRS 1.1 (8). */
+    /** A published place or event review (reason REVIEW_CREATED, ref REVIEW), SRS 1.1 (8), paid the first time it is published. */
     public static final int REVIEW = 10;
     /**
      * A published blog post or question (reason BLOG_CREATED). The SRS point list has no value for posts yet;

@@ -130,6 +130,30 @@ export const apiClient = {
     updateBlog: (id, formData) => request(`/blogs/${id}`, { method: "PUT", body: formData }),
     scamWarnings: (placeId) => request(`/blogs/scam-warnings?${toQuery({ placeId })}`),
 
+    // Map (UC-U14, UC-U15): { categories, places, center, signedIn }; search { categories, places, external }
+    mapOverview: () => request("/map"),
+    mapEvents: (days) => request(`/map/events?${toQuery({ days })}`),
+    mapSearch: (q) => request(`/map/search?${toQuery({ q })}`),
+    // UC-U19 "Cắm ghim": createPin takes FormData (part "pin" JSON + "images") ; UC-U20 "Báo đã đóng cửa"
+    pinCompose: () => request("/map/pins/compose"),
+    pinDuplicates: (lat, lng, names) => request(`/map/pins/duplicates?${toQuery({ lat, lng, names: names.join("|") })}`),
+    createPin: (formData) => request("/map/pins", { method: "POST", body: formData }),
+    reportClosed: (id) => post(`/map/places/${id}/closed-report`),
+    mapNearby: (lat, lng) => request(`/map/nearby?${toQuery({ lat, lng })}`),
+    mapPlace: (id) => request(`/map/places/${id}`),
+    mapPlaceReviews: (id, page = 0) => request(`/map/places/${id}/reviews?${toQuery({ page })}`),
+    mapPlacePhrases: (id) => request(`/map/places/${id}/phrases`),
+    saveMapPlace: (id, on) => request(`/map/places/${id}/save`, { method: on ? "POST" : "DELETE" }),
+    // Write / Edit / Delete Review (UC-U16..18). createReview / updateReview take FormData: part "review" (JSON
+    // {placeId | externalPlaceId, rating, content} / {rating, content, keepMediaIds}) + "images" (≤ 5) + "video" (≤ 1)
+    reviewCompose: (placeId) => request(`/reviews/compose?${toQuery({ placeId })}`),
+    createReview: (formData) => request("/reviews", { method: "POST", body: formData }),
+    reviewEditData: (id) => request(`/reviews/${id}/edit`),
+    updateReview: (id, formData) => request(`/reviews/${id}`, { method: "PUT", body: formData }),
+    deleteReview: (id) => request(`/reviews/${id}`, { method: "DELETE" }),
+    likeReview: (id, on) => request(`/reviews/${id}/like`, { method: on ? "POST" : "DELETE" }),
+    reportReview: (id, body) => post(`/reviews/${id}/report`, body),
+
     // Hỏi-Đáp. params: { q, topicIds: [..], status: ALL|UNANSWERED|UNSOLVED|SOLVED, sort: NEWEST|LIKES|ANSWERS, page, size }
     questions: (params = {}) => request(`/questions?${toQuery(params)}`),
     questionOverview: () => request("/questions/overview"),

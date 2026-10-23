@@ -19,7 +19,7 @@ function renderGuest(data) {
                     <p>Các senpai đã đánh dấu sẵn chỗ ăn rẻ, ga tàu, văn phòng quận. Mở bản đồ là thấy nơi nào đã có
                         người Việt review, kèm câu tiếng Nhật để dùng ngay tại đó.</p>
                     <div class="row">
-                        <a class="btn pri" href="${soon("map")}">${ic("map")}Xem bản đồ Nippori</a>
+                        <a class="btn pri" href="/map">${ic("map")}Xem bản đồ Nippori</a>
                         <a class="btn" href="/register">${ic("person_add")}Đăng ký miễn phí</a>
                     </div>
                     <p class="note">Xem bản đồ, review và từ vựng không cần tài khoản.</p>
@@ -41,7 +41,7 @@ function renderGuest(data) {
                 </figure>`).join("")}
             </div>` : ""}
             <div class="feat">
-                ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", soon("map"))}
+                ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", "/map")}
                 ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", soon("learn"))}
                 ${feature("contact_support", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/qa")}
                 ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", "/events")}
@@ -79,7 +79,7 @@ async function renderMember() {
                     <div class="bar2"><span style="width:${g.total ? (g.done / g.total) * 100 : 0}%"></span></div>
                     ${g.next ? `<b>${esc(g.next.title)}</b>
                         ${g.next.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(g.next.dueNote)}</span></span>` : ""}
-                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="${soon("map")}">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
+                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="/map">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
                             <a class="btn sm" href="${soon("guide")}">Mở cẩm nang</a></div>`
                         : `<p>${g.total ? "Bạn đã xong giai đoạn này." : "Cẩm nang cho giai đoạn này đang được biên soạn."}</p>`}
                 </div>
@@ -94,7 +94,7 @@ async function renderMember() {
                 </div>
                 <div class="card">
                     <div class="row"><span class="badge">${ic("rate_review")}${home.areaName ? `Review mới quanh ${esc(areaShort(home.areaName))}` : "Review mới"}</span></div>
-                    ${home.reviews.map((r) => `<a class="mini" href="${soon("map")}">${ic(r.categoryIcon)}
+                    ${home.reviews.map((r) => `<a class="mini" href="/map">${ic(r.categoryIcon)}
                         <span><b>${esc(r.placeName)}</b> <span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span><br>
                         <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span></span></a>`).join("")
                         || '<p class="note">Chưa có review mới.</p>'}

@@ -8,7 +8,7 @@ const soon = (feature) => `/coming-soon?f=${feature}`;
 
 const TABS = [
     ["home", "Trang chủ", "home", "/"],
-    ["map", "Bản đồ", "map", soon("map")],
+    ["map", "Bản đồ", "map", "/map"],
     ["learn", "Học", "school", soon("learn")],
     ["fest", "Sự kiện", "celebration", "/events"],
     ["blog", "Blog", "forum", "/blog"],
