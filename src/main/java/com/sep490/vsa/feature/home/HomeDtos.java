@@ -31,7 +31,7 @@ public final class HomeDtos {
     }
 
     /** {@code daysUntil} is 0 when the event is happening today. */
-    public record EventItem(String title, LocalDate startDate, LocalDate endDate, String locationName, long daysUntil) {
+    public record EventItem(Long id, String title, LocalDate startDate, LocalDate endDate, String locationName, long daysUntil) {
     }
 
     public record ReviewItem(String placeName, String categoryIcon, int rating, String authorName, String excerpt) {

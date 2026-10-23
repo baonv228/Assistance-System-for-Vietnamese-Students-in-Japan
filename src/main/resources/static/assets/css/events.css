@@ -1,0 +1,117 @@
+/* Lễ hội và sự kiện: list, detail, write review and the Moderator page. Uses blog.css, blog-detail.css and
+   blog-write.css for the shared parts (search box, dialogs, toast, form fields, photo picks). */
+
+.badge.ev { background: var(--lantern-soft); color: var(--lantern-text); border-color: transparent; }
+
+/* ---------------- covers ---------------- */
+.festart { display: block; width: 100%; height: 120px; }
+.festart.photo { object-fit: cover; background: var(--surface-2); }
+.festcover { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.festcover > .badge { position: absolute; top: 8px; left: 8px; }
+
+/* ---------------- list ---------------- */
+.events-page { display: grid; gap: 14px; }
+.events-page h1 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; }
+.events-section { display: grid; gap: 10px; }
+.events-section h2 { font-size: 18px; }
+.fest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.festcard { gap: 8px; overflow: hidden; }
+.festcard .festcover { margin: -16px -16px 2px; border-radius: 0; }
+.festcard h3 { font-size: 16px; line-height: 1.35; }
+.festcard h3 a { color: inherit; text-decoration: none; }
+.festcard h3 a:hover { color: var(--brand); }
+.festcard .note .ic { font-size: 16px; vertical-align: -3px; }
+.festcard .actions-row { margin-top: auto; }
+
+/* ---------------- detail ---------------- */
+.event-full { gap: 12px; }
+.event-full .festart { height: 200px; }
+.event-full h1 { font-size: clamp(22px, 3.2vw, 30px); font-weight: 800; }
+.album { display: grid; gap: 6px; }
+.album-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.album-grid button {
+    width: 76px;
+    height: 58px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface-2);
+    cursor: pointer;
+}
+.album-grid button:focus-visible { outline: none; box-shadow: var(--focus); }
+.album-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.prac { background: var(--surface-2); border-radius: 10px; padding: 9px 12px; font-size: 14px; }
+.prac .ic { color: var(--brand); }
+.rating-line { gap: 8px; align-items: center; }
+.rating-line b { font-size: 18px; }
+.stars { color: var(--brand); letter-spacing: 1px; }
+.event-place { display: grid; gap: 8px; }
+.reviews { display: grid; gap: 4px; }
+.reviews h2 { font-size: 18px; }
+.review { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
+.review:first-of-type { border-top: 0; }
+.review .who { gap: 6px; align-items: center; }
+.review .body { white-space: pre-line; overflow-wrap: anywhere; }
+.review .media-grid { max-width: 520px; }
+
+/* photo viewer of the album */
+.viewer-dlg { width: min(760px, calc(100vw - 24px)); }
+.viewer-dlg .viewer { display: grid; gap: 10px; padding: 14px; }
+.viewer-dlg img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 10px; background: #1d2440; }
+
+/* ---------------- write review ---------------- */
+.star-pick { display: flex; gap: 8px; margin: 0; padding: 0; border: 0; }
+.star-pick label {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 22px;
+    cursor: pointer;
+}
+.star-pick input { position: absolute; opacity: 0; pointer-events: none; }
+.star-pick label.on { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
+.star-pick input:focus-visible + span { outline: 2px solid var(--brand); outline-offset: 6px; border-radius: 4px; }
+.write-card textarea.input.short { min-height: 140px; }
+
+/* ---------------- Moderator page ---------------- */
+.mod-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.mod-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.mod-table th, .mod-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.mod-table th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+.mod-table tbody tr:last-child td { border-bottom: 0; }
+.mod-table .row { flex-wrap: nowrap; }
+.mod-table td:first-child { min-width: 180px; }
+.mod-table td:nth-child(2) { white-space: nowrap; }
+.mod-form .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.mod-form .col { display: grid; gap: 12px; align-content: start; }
+.mod-form .two-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pick-map { position: relative; isolation: isolate; height: 300px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface-2); cursor: crosshair; }
+.pick-map .map-off { padding: 16px; }
+.cover-preview { display: grid; gap: 6px; max-width: 320px; }
+.cover-preview .festart { height: 100px; border-radius: 10px; }
+.place-picks { display: grid; gap: 2px; }
+.place-picks button {
+    display: grid;
+    gap: 2px;
+    text-align: left;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+}
+.place-picks button:hover, .place-picks button:focus-visible { background: var(--surface-2); outline: none; }
+
+@media (max-width: 860px) {
+    .mod-form .split { grid-template-columns: minmax(0, 1fr); }
+    .event-full .festart { height: 150px; }
+}

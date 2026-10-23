@@ -9,6 +9,7 @@
 // the form is filled from GET …/{id}/edit and sent with PUT; attached photos/video can be removed (keepMediaIds).
 import { apiClient, ApiError } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
+import { isImageFile, isVideoFile, MB, shrinkToJpeg, unreadableImage, videoLength } from "../lib/media-files.js";
 import { esc, ic, loginUrl } from "../lib/ui.js";
 
 const QUESTION = document.body.dataset.kind === "QA";
@@ -84,13 +85,7 @@ const MSG = {
     IMAGE_RULE: "Tối đa 5 ảnh, định dạng JPG, PNG hoặc HEIC, mỗi ảnh không quá 20 MB.",
     TOPICS: "Hãy chọn ít nhất 1 chủ đề. Không có chủ đề phù hợp thì chọn “Khác”."
 };
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif"];
-const IMAGE_EXT = /\.(jpe?g|png|heic|heif)$/i;
-const VIDEO_TYPES = ["video/mp4", "video/quicktime"];
-const VIDEO_EXT = /\.(mp4|mov)$/i;
-const MAX_SIDE = 1600;
 const SEARCH_DELAY = 250;
-const MB = 1024 * 1024;
 
 /** Which control to focus for each field the server may complain about. */
 const FIELD_INPUT = {
@@ -597,7 +592,7 @@ async function addImages(files) {
     processingImages += files.length;
     renderMedia();
     for (const file of files) {
-        const typeOk = IMAGE_TYPES.includes(file.type.toLowerCase()) || IMAGE_EXT.test(file.name);
+        const typeOk = isImageFile(file);
         try {
             if (!typeOk || file.size > imageMaxMb * MB) {
                 fieldError("images", MSG.IMAGE_RULE);
@@ -608,10 +603,7 @@ async function addImages(files) {
                 state.images.push({ blob, url: URL.createObjectURL(blob), name: file.name });
             }
         } catch {
-            const heic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
-            fieldError("images", heic
-                ? `Trình duyệt này không mở được ảnh HEIC “${file.name}”. Hãy chọn ảnh JPG hoặc PNG, hoặc dùng Safari.`
-                : `Không mở được ảnh “${file.name}”. Tệp có thể bị hỏng; hãy chọn ảnh khác.`);
+            fieldError("images", unreadableImage(file));
         } finally {
             processingImages--;
             renderMedia();
@@ -619,54 +611,12 @@ async function addImages(files) {
     }
 }
 
-/** Draws the photo on a canvas at most MAX_SIDE px wide or tall and saves it as JPG (no EXIF, no GPS). */
-async function shrinkToJpeg(file) {
-    const { source, width, height, release } = await openImage(file);
-    try {
-        const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(width * scale));
-        canvas.height = Math.max(1, Math.round(height * scale));
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#fff";                         // transparent PNG areas become white, as on the server
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-        return await new Promise((resolve, reject) => canvas.toBlob(
-            (blob) => (blob ? resolve(blob) : reject(new Error("encode"))), "image/jpeg", 0.85));
-    } finally {
-        release();
-    }
-}
-
-/** createImageBitmap applies the EXIF rotation; an <img> is the fallback (Safari opens HEIC this way). */
-async function openImage(file) {
-    if ("createImageBitmap" in window) {
-        try {
-            const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-            return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
-        } catch {
-            // fall through to <img>
-        }
-    }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = url;
-    try {
-        await img.decode();
-    } catch (error) {
-        URL.revokeObjectURL(url);
-        throw error;
-    }
-    return { source: img, width: img.naturalWidth, height: img.naturalHeight, release: () => URL.revokeObjectURL(url) };
-}
-
 async function addVideo(file) {
     els.videoInput.value = "";
     clearFieldError("video");
     if (!file) return;
     const { videoMaxMb, videoMaxSeconds } = options.limits;
-    const typeOk = VIDEO_TYPES.includes(file.type.toLowerCase()) || VIDEO_EXT.test(file.name);
+    const typeOk = isVideoFile(file);
     if (!typeOk || file.size > videoMaxMb * MB) {
         fieldError("video", `Video phải là MP4 hoặc MOV, dài tối đa ${videoMaxSeconds} giây và không quá ${videoMaxMb} MB.`);
         return;
@@ -681,23 +631,6 @@ async function addVideo(file) {
     if (state.video) URL.revokeObjectURL(state.video.url);
     state.video = { file, url, seconds };
     renderMedia();
-}
-
-/** Length in seconds, or null when this browser cannot open the video (the server still checks it). */
-function videoLength(url) {
-    return new Promise((resolve) => {
-        const video = document.createElement("video");
-        const done = (value) => {
-            clearTimeout(timer);
-            resolve(value);
-        };
-        const timer = setTimeout(() => done(null), 8000);
-        video.preload = "metadata";
-        video.muted = true;
-        video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? video.duration : null);
-        video.onerror = () => done(null);
-        video.src = url;
-    });
 }
 
 function renderMedia() {

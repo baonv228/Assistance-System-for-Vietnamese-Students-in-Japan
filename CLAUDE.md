@@ -52,8 +52,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   question solved; acting on hidden content answers 404. `comment_count` counts only comments of active accounts:
   `AuthorStatusSync` recounts the posts the account commented on when an Admin locks/unlocks it or the user deletes it
   (post rows locked before the users row, same order as comment actions) and refreshes "Bài nổi bật" after commit.
-  Home leaves out their reviews too (guest numbers and "Hữu ích" quotes, member "Review mới"; `ActiveAuthors.of("r")`);
-  what else happens to reviews of such accounts is still open.
+  Home leaves out their reviews too (guest numbers and "Hữu ích" quotes, member "Review mới"; `ActiveAuthors.of("r")`),
+  and so do the event pages (reviews, ratings, album); what else happens to place reviews of such accounts is still open.
 - New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
 - Places: OpenStreetMap places store their `osm_id`, names, address and coordinates (ODbL allows it; credit
   "© OpenStreetMap contributors"); places saved from Google Maps before keep their `google_place_id` (no address or
@@ -119,7 +119,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
-  `/moderator`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
+  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -265,7 +265,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   reviews, reviews of pending/removed/rejected/merged places, locked/deleted authors, tag proofs, files attached to
   nothing, keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
   Security's firewall). Content type from `media.mime_type`, `nosniff`, Range requests and 304 work. Only registered
-  while `app.media.public-base-url=/media/`; a new kind of attachment (events) or a Moderator queue adds its rule in
+  while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
+  event is not deleted, and the cover of an event that is not deleted. A Moderator queue adds its rule in
   `MediaAccess`.
 - `feature/moderation`: `MediaScanService` + `ImageModerator`. With `app.moderation.openai.api-key` (or env
   `OPENAI_API_KEY`) photos go to OpenAI Moderation `omni-moderation-latest` (free); without a key
@@ -350,6 +351,33 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   category, address, lat, lng, osmId. The map element is kept across re-renders (likes, comments).
 - Dev sample places: Ga Nippori is the real OSM station N772389775, the other made-up places are TEAM places;
   `DevDataSeeder` moves rows of older checkouts (made-up "ChIJ-dev-…" Google ids) the same way.
+
+## Lễ hội và sự kiện (feature/event)
+- Events are posted by Moderators only (UC-M07, page `/moderator/events`, `ModeratorEventController` under
+  `/api/moderator/events`): title, dates, place name, optional position (picked on a Leaflet map or from an ASVSJ place
+  with coordinates, `GET /api/moderator/events/places?q=`), cost, "Mẹo cho người đi" and an optional cover photo
+  (multipart part `event` + `cover`; re-encoded like any photo, marked PASSED without the scanner because staff upload
+  it). Empty place name → "Vị trí trên bản đồ" / "Chưa gắn vị trí", empty cost → "Chưa rõ". Delete is soft
+  (`deleted_at`): the event, its reviews and their photos are shown nowhere. Create/update/delete go to the activity log
+  (`EVENT_CREATED|UPDATED|DELETED`, target EVENT). The answer says whether the pin is on the map yet (30-day window).
+- Public: `GET /api/events?q=` (soonest first, accents ignored; the page groups Đang diễn ra / Trong 30 ngày tới / Sau
+  này / Đã diễn ra), `GET /api/events/pins?days=15|30` (located events happening now or starting within the window, for
+  the Map once it is built), `GET /api/events/{id}` (album of review photos, Moderator tip, reviews, viewer flags).
+  State and days are Japan dates. Pages `/events` and `/events/{id}` (`pages/events.html`, `event-detail.html`); events
+  without a cover get a drawing from the prototype (`lib/fest-art.js`, picked by words in the title).
+- Event reviews (`EventReviewService`, `reviews` rows with `event_id` + `event_year` = year of the start date): Members
+  only, once the event has started, one per user per year (409 otherwise). Page `/events/{id}/review` writes the
+  review of this year or edits it. Same order of checks as Write Post: stars 1–5 + text ≤ 2,000 + files (≤ 5 photos,
+  1 video ≤ 30 s) → links (BR-22) → new-account limit (counted with posts in `user_daily_usage`) → banned keywords.
+  No files → PUBLISHED and `PointService.REVIEW` (+10, reason REVIEW_CREATED, paid once); files → PROCESSING and
+  `EventReviewPublishService` scans them like `BlogPublishService` (keyword check again, retry job, notification
+  `CONTENT_REJECTED` with ref_type REVIEW). Calls under `/api/event-reviews/{id}` (PUT edit with `keepMediaIds`, DELETE
+  own: hard delete, points withdrawn, files discarded, open report cases closed; `like`; `report` → HIDDEN past
+  `report_hide_threshold`), so place reviews can take `/api/reviews`. Reviews, ratings and album photos of LOCKED or
+  DELETED accounts are hidden (`ActiveAuthors.of("r")`); the author still sees their own PROCESSING/REJECTED/HIDDEN one.
+- Shared front-end pieces made for it: `lib/map.js` (Leaflet loader, also used by blog-detail), `lib/media-files.js`
+  (photo shrinking, video length, also used by blog-write), `components/staff-desk.js` (staff top bar + side menu;
+  a module with an `href` links to its built page, the others show "Đang phát triển").
 
 ## Map page (feature/place: MapController, MapService, MapRepository, MapDtos) – Tiến owns the Map
 - UC ids are those of Tiến's spec (UC-U14 Browse Locations on Map, UC-U15 View Location Details, …). Page `/map`

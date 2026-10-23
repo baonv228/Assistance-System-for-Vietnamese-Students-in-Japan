@@ -169,7 +169,29 @@ export const apiClient = {
     reportQuestion: (id, body) => post(`/questions/${id}/report`, body),
     answerQuestion: (id, body) => post(`/questions/${id}/answers`, body),
     chooseBestAnswer: (id, answerId) =>
-        request(`/questions/${id}/best-answer`, { method: "PUT", body: JSON.stringify({ answerId }) })
+        request(`/questions/${id}/best-answer`, { method: "PUT", body: JSON.stringify({ answerId }) }),
+
+    // Lễ hội và sự kiện. events: [EventCard] soonest first; event: { event, tip, album, albumCount, reviews, viewer,
+    // reportReasons }
+    events: (q) => request(`/events?${toQuery({ q })}`),
+    eventPins: (days) => request(`/events/pins?${toQuery({ days })}`),
+    event: (id) => request(`/events/${id}`),
+    // "Viết review": { event, limits, quota, canPostLinks, review (own review of this year, to edit) }
+    eventReviewForm: (id) => request(`/events/${id}/review-form`),
+    // FormData: part "review" (JSON {rating, content}) + "images" (≤ 5) + "video" (≤ 1)
+    createEventReview: (id, formData) => request(`/events/${id}/reviews`, { method: "POST", body: formData }),
+    // FormData: part "review" (JSON {rating, content, keepMediaIds}) + new files
+    updateEventReview: (reviewId, formData) => request(`/event-reviews/${reviewId}`, { method: "PUT", body: formData }),
+    deleteEventReview: (reviewId) => request(`/event-reviews/${reviewId}`, { method: "DELETE" }),
+    likeEventReview: (reviewId, on) => request(`/event-reviews/${reviewId}/like`, { method: on ? "POST" : "DELETE" }),
+    reportEventReview: (reviewId, body) => post(`/event-reviews/${reviewId}/report`, body),
+
+    // Moderator: UC-M07. create/update take FormData: part "event" (JSON) + optional "cover" photo
+    modEvents: () => request("/moderator/events"),
+    modCreateEvent: (formData) => request("/moderator/events", { method: "POST", body: formData }),
+    modUpdateEvent: (id, formData) => request(`/moderator/events/${id}`, { method: "PUT", body: formData }),
+    modDeleteEvent: (id) => request(`/moderator/events/${id}`, { method: "DELETE" }),
+    modEventPlaces: (q) => request(`/moderator/events/places?${toQuery({ q })}`)
 };
 
 /** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */
