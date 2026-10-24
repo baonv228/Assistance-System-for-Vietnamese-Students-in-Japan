@@ -155,7 +155,7 @@ public class HomeService {
                 SELECT gi.title, gi.due_note, p.name_vi, (ugp.item_id IS NOT NULL) FROM guide_items gi
                 LEFT JOIN places p ON p.id = gi.place_id AND p.status = 'ACTIVE'
                 LEFT JOIN user_guide_progress ugp ON ugp.item_id = gi.id AND ugp.user_id = ?
-                WHERE gi.stage_code = ? ORDER BY gi.sort_order, gi.id""",
+                WHERE gi.stage_code = ? AND gi.published = TRUE ORDER BY gi.sort_order, gi.id""",
                 (rs, i) -> new Item(rs.getString(1), rs.getString(2), rs.getString(3), rs.getBoolean(4)),
                 userId, stageCode);
         int done = (int) items.stream().filter(Item::done).count();

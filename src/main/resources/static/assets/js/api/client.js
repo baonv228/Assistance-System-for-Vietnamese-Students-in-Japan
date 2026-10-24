@@ -74,7 +74,11 @@ async function request(path, options = {}, retried = false) {
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const apiClient = {
-    getGuides: () => request("/guides"),
+    getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
+    guideTopics: () => request("/guides/topics"),
+    browseGuides: (params = {}) => request(`/guides/browse?${toQuery(params)}`),
+    guide: (id) => request(`/guides/${id}`),
+    createGuide: (body) => request("/moderator/guides", { method: "POST", body }),
     getScholarships: () => request("/scholarships"),
 
     // Auth

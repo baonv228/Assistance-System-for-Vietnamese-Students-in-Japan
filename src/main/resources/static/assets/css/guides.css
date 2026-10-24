@@ -1,0 +1,39 @@
+
+.guide-page { min-width: 0; }
+.guide-page .page-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.guide-page .page-heading h1 { width: 100%; margin: 0; }
+.guide-page .page-heading p { flex: 1; margin: 0; color: var(--muted, #687483); }
+.guide-page .guide-filters, .guide-page .guide-actions { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; margin: 20px 0; }
+.guide-page label { display: block; margin: 12px 0; flex: 1; font-weight: 500; }
+.guide-page input, .guide-page textarea, .guide-page select { display: block; width: 100%; box-sizing: border-box; padding: 10px 12px; margin-top: 6px; border: 1px solid var(--line, #e7d7dd); border-radius: 10px; background: var(--surface, white); color: var(--ink, #304174); font: inherit; }
+.guide-page input:focus-visible, .guide-page textarea:focus-visible, .guide-page select:focus-visible { outline: 2px solid var(--brand, #c74173); outline-offset: 2px; }
+.guide-page textarea { min-height: 120px; resize: vertical; }
+.guide-page fieldset, .guide-page .list-item { min-width: 0; border: 1px solid var(--line, #e7d7dd); border-radius: var(--radius, 14px); background: var(--surface, white); margin: 16px 0; padding: 20px; }
+.guide-page legend { font-weight: 600; padding: 0 8px; }
+.guide-page .guide-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.guide-page #detail img, .guide-page .guide-thumbnail { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin: 16px 0; border-radius: 10px; }
+.guide-page .guide-thumbnail { max-height: 200px; }
+.guide-page #message { color: var(--crit, #9a3326); }
+.guide-page #message:empty { display: none; }
+.guide-page .guide-meta { color: var(--muted, #687483); font-size: .9rem; }
+.guide-page .guide-section-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.guide-page #detail { padding: 20px 0; }
+.guide-page #detail > .btn { margin: 12px 12px 0 0; }
+.guide-page a { overflow-wrap: anywhere; }
+[data-guide-card] { cursor: pointer; }
+[data-guide-card]:hover { border-color: var(--brand); }
+@media (max-width: 600px) { .guide-page .guide-filters { align-items: stretch; flex-direction: column; } }
+
+.guide-browse { max-width: 1200px; margin: 0 auto; }
+.guide-browse .guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 18px; }
+.guide-browse .guide-result { align-content: start; }
+.guide-browse .guide-result h2 { font-size: 20px; margin: 6px 0; }
+.guide-browse .guide-title { text-decoration: none; color: var(--ink); }
+.guide-browse .guide-title:hover { color: var(--brand-text); }
+.guide-browse .guide-result .badge { justify-self: start; }
+.guide-browse .guide-summary { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.guide-browse #browse-detail { gap: 16px; }
+.guide-browse #browse-detail img { display: block; max-width: 100%; max-height: 650px; object-fit: contain; border-radius: 12px; margin: 16px 0; }
+.guide-browse #browse-back { margin-top: 20px; }
+.guide-browse .guide-detail-section { border-top: 1px solid var(--line); padding-top: 16px; min-width: 0; }
+.guide-browse #browse-error { margin-bottom: 16px; }

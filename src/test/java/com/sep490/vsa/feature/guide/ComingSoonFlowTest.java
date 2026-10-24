@@ -43,7 +43,7 @@ class ComingSoonFlowTest {
         assertThat(jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_name IN ('guide', 'scholarship')""", Integer.class)).isZero();
-        for (String url : List.of("/api/guides", "/api/guides?category=visa", "/api/scholarships")) {
+        for (String url : List.of("/api/scholarships")) {
             mvc.perform(get(url))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false))

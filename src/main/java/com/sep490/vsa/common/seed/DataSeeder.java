@@ -32,10 +32,10 @@ public class DataSeeder implements CommandLineRunner {
         if (guideRepository.count() == 0) {
             guideRepository.save(new Guide(null, "Thu tuc visa du hoc",
                     "Checklist ho so, thoi han gia han va cac luu y khi nop tai Nhat.",
-                    "VISA", true));
+                    "PRE", true));
             guideRepository.save(new Guide(null, "Tim nha o lan dau",
                     "Cach chuan bi giay to, tien dau vao va cau hoi can hoi cong ty bat dong san.",
-                    "LIFE", true));
+                    "ARR", true));
         }
 
         if (scholarshipRepository.count() == 0) {

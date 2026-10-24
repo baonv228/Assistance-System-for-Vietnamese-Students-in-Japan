@@ -13,7 +13,7 @@ const TABS = [
     ["fest", "Sự kiện", "celebration", soon("fest")],
     ["blog", "Blog", "forum", "/blog"],
     ["qa", "Hỏi-Đáp", "contact_support", "/qa"],
-    ["guide", "Cẩm nang", "menu_book", soon("guide")],
+    ["guide", "Cẩm nang", "menu_book", "/guides"],
     ["me", "Tôi", "person", "/profile"]
 ];
 

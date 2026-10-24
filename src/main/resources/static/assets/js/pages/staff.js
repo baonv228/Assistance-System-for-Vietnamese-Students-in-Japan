@@ -46,6 +46,7 @@ const DESKS = {
     }
 };
 
+const guideContent = document.querySelector("#guide-content");
 const role = document.body.dataset.role;
 const desk = DESKS[role];
 const user = await currentUser();
@@ -73,8 +74,8 @@ function render() {
         <div class="desk">
             <nav class="desk-side" aria-label="Chức năng">
                 <span class="side-title">Chức năng</span>
-                <a href="#" aria-current="page">${ic("space_dashboard")}Tổng quan</a>
-                ${desk.modules.map(([icon, name]) => `<a href="#" data-soon>${ic(icon)}${esc(name)}</a>`).join("")}
+                <a href="${role === "MODERATOR" ? "/moderator" : "#"}" ${guideContent ? "" : 'aria-current="page"'}>${ic("space_dashboard")}Tổng quan</a>
+                ${desk.modules.map(([icon, name]) => `<a href="${icon === "menu_book" ? "/moderator/guides" : "#"}" ${icon === "menu_book" ? (guideContent ? 'aria-current="page"' : "") : "data-soon"}>${ic(icon)}${esc(name)}</a>`).join("")}
             </nav>
             <main class="desk-main">
                 <div>
@@ -83,11 +84,18 @@ function render() {
                 </div>
                 <div class="info">${ic("construction")} Đây là trang mẫu: đăng nhập và phân quyền đã hoạt động, các chức năng bên dưới đang được nhóm xây dựng.</div>
                 <div class="feat">${desk.modules.map(([icon, name, uc]) => `
-                    <div class="card module">${ic(icon, "big")}<h3>${esc(name)}</h3>
-                        <span class="note">${esc(uc)}</span><span><span class="badge lan">Đang phát triển</span></span></div>`).join("")}
+                    <div class="card module" ${icon === "menu_book" ? 'data-guide-card role="link" tabindex="0"' : ""}>${ic(icon, "big")}<h3>${esc(name)}</h3>
+                        <span class="note">${esc(uc)}</span><span><span class="badge lan">${icon === "menu_book" ? "Mở cẩm nang" : "Đang phát triển"}</span></span></div>`).join("")}
                 </div>
             </main>
         </div>`;
+    if (guideContent) {
+        document.querySelector(".desk-main").replaceChildren(guideContent.content.cloneNode(true));
+        document.title = "Cẩm nang – Senpai ơi";
+    }
+    const guideCard = document.querySelector("[data-guide-card]");
+    guideCard?.addEventListener("click", () => location.assign("/moderator/guides"));
+    guideCard?.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); location.assign("/moderator/guides"); } });
     document.querySelector("[data-logout]").addEventListener("click", logout);
     document.querySelectorAll("[data-soon]").forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
 }

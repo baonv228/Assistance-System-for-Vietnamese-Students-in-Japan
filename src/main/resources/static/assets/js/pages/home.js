@@ -80,7 +80,7 @@ async function renderMember() {
                     ${g.next ? `<b>${esc(g.next.title)}</b>
                         ${g.next.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(g.next.dueNote)}</span></span>` : ""}
                         <div class="row">${g.next.placeName ? `<a class="btn sm" href="/map">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
-                            <a class="btn sm" href="${soon("guide")}">Mở cẩm nang</a></div>`
+                            <a class="btn sm" href="/guides">Mở cẩm nang</a></div>`
                         : `<p>${g.total ? "Bạn đã xong giai đoạn này." : "Cẩm nang cho giai đoạn này đang được biên soạn."}</p>`}
                 </div>
                 <div class="card">
