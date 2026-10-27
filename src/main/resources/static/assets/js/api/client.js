@@ -77,6 +77,7 @@ export const apiClient = {
     getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
     guideTopics: () => request("/guides/topics"),
     browseGuides: (params = {}) => request(`/guides/browse?${toQuery(params)}`),
+    moderatorGuides: (params = {}) => request(`/moderator/guides/browse?${toQuery(params)}`),
     guide: (id) => request(`/guides/${id}`),
     createGuide: (body) => request("/moderator/guides", { method: "POST", body }),
     getScholarships: () => request("/scholarships"),

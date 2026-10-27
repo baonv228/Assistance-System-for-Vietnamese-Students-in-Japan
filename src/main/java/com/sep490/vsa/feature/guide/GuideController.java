@@ -16,7 +16,7 @@ import java.util.List;
  public ApiResponse<List<GuideResponse>> list(@RequestParam(required=false) String category,@RequestParam(required=false) String q){return ApiResponse.ok("Danh sách cẩm nang",service.list(category,q));}
  @GetMapping({"/api/guides/topics","/api/moderator/guides/topics"})
  public ApiResponse<List<GuideService.Topic>> topics(){return ApiResponse.ok("Chủ đề cẩm nang",service.topics());}
- @GetMapping("/api/guides/browse")
+ @GetMapping({"/api/guides/browse", "/api/moderator/guides/browse"})
  public ApiResponse<GuideService.BrowsePage> browse(@RequestParam(required=false) String category,
         @RequestParam(required=false) String q, @RequestParam(defaultValue="NEWEST") String sort,
         @RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="12") int size) {

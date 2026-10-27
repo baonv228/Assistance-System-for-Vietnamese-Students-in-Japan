@@ -199,6 +199,20 @@ class GuideFlowTest {
                 .andExpect(jsonPath("$.data.items.length()").value(0));
         mvc.perform(get("/api/guides/browse").param("q", keyword).param("size", "1").param("page", "999"))
                 .andExpect(jsonPath("$.data.page").value(1));
+        mvc.perform(get("/api/moderator/guides/browse").session(moderatorSession)
+                        .param("q", keyword).param("category", "PRE").param("size", "1").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(2))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(first.id()));
+        mvc.perform(get("/api/moderator/guides/browse").session(moderatorSession)
+                        .param("q", keyword).param("category", "HOME"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get("/api/moderator/guides/browse"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/moderator/guides/browse").session(session("USER")))
+                .andExpect(status().isForbidden());
         mvc.perform(get("/api/guides/" + hidden.id())).andExpect(status().isNotFound());
         mvc.perform(get("/api/guides/" + first.id()).session(session("USER")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.title").value(first.title()));

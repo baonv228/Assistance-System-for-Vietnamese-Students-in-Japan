@@ -11,6 +11,35 @@ const message = text => { $("#message").textContent = text; };
 const managing = location.pathname.startsWith("/moderator") || location.pathname.includes("/pages/moderator/");
 if (managing) await import("./staff.js");
 let draft = null, busy = false, sequence = 0;
+const initialQuery = new URLSearchParams(location.search);
+const listState = {
+ q: (initialQuery.get("q") || "").slice(0, 200),
+ category: initialQuery.get("category") || "",
+ page: /^\d{1,9}$/.test(initialQuery.get("page") || "") ? Number(initialQuery.get("page")) : 0,
+ size: 10
+};
+function updateListUrl(id = new URLSearchParams(location.search).get("id")) {
+ const query = new URLSearchParams();
+ for (const key of ["q", "category", "page"]) if (listState[key]) query.set(key, listState[key]);
+ if (id) query.set("id", id);
+ history.replaceState(null, "", location.pathname + (query.size ? "?" + query : ""));
+}
+function renderPager(result) {
+ const pager = $("#guide-pager"); pager.replaceChildren();
+ pager.hidden = result.totalPages <= 1;
+ if (pager.hidden) return;
+ const go = page => { message(""); loadList(page); };
+ const previous = button("← Trang trước", () => go(result.page - 1));
+ previous.disabled = result.page === 0; pager.append(previous);
+ for (let page = Math.max(0, result.page - 2); page <= Math.min(result.totalPages - 1, result.page + 2); page++) {
+  const item = button(String(page + 1), () => go(page));
+  item.setAttribute("aria-label", "Trang " + (page + 1));
+  if (page === result.page) { item.classList.add("on"); item.setAttribute("aria-current", "page"); }
+  pager.append(item);
+ }
+ const next = button("Trang sau →", () => go(result.page + 1));
+ next.disabled = result.page >= result.totalPages - 1; pager.append(next);
+}
 const previewUrls = new Map();
 function clearPreviews() { previewUrls.forEach(url => URL.revokeObjectURL(url)); previewUrls.clear(); }
 function show(view) {
@@ -34,21 +63,27 @@ function renderGuide(guide, preview = false) {
  if (preview) {
   target.prepend(el("p", "guide-meta", "Bản nháp xem trước — chưa xuất bản"));
   target.append(button("Tiếp tục chỉnh sửa", () => show("editor")), button("Lưu và xuất bản", publish));
- } else target.append(button("Quay lại danh sách", () => { history.replaceState(null, "", location.pathname); show("listing"); }));
+ } else target.append(button("Quay lại danh sách", () => { updateListUrl(null); show("listing"); }));
  show("detail");
 }
-async function loadList() {
+async function loadList(page = listState.page) {
  const request = ++sequence;
  $("#guide-list").textContent = "Đang tải…";
+ $("#guide-pager").hidden = true;
+ $("#count").textContent = "";
  try {
-  const params = Object.fromEntries(new FormData($("#filters")));
-  const guides = await apiClient.getGuides(params);
+  const result = await apiClient.moderatorGuides({ ...listState, page });
   if (request !== sequence) return;
-  $("#count").textContent = guides.length + " cẩm nang";
+  const guides = result.items;
+  listState.page = result.page; updateListUrl();
+  $("#count").textContent = result.total
+   ? result.total + " cẩm nang · Trang " + (result.page + 1) + "/" + result.totalPages
+   : "0 cẩm nang";
+  renderPager(result);
   $("#guide-list").replaceChildren(...guides.map(g => {
    const article = el("article", "list-item card");
    article.append(el("span", "tag", g.topicName), el("h2", null, g.title), el("p", null, g.summary), el("p", "guide-meta", new Date(g.createdAt).toLocaleString("vi-VN")), button("Xem chi tiết", async () => {
-    try { const guide = await apiClient.guide(g.id); history.replaceState(null, "", "?id=" + g.id); renderGuide(guide); message(""); } catch(e) { message(e.message); }
+    try { const guide = await apiClient.guide(g.id); updateListUrl(g.id); renderGuide(guide); message(""); } catch(e) { message(e.message); }
    })); return article;
   }));
   if (!guides.length) $("#guide-list").append(el("p", null, "Không có cẩm nang phù hợp."));
@@ -83,12 +118,16 @@ async function publish() {
   form.append("guide", new Blob([JSON.stringify(draft.data)], { type: "application/json" }));
   draft.images.forEach(file => form.append("images", file));
   const guide = await apiClient.createGuide(form); clearPreviews(); draft = null; $("#guide-form").reset(); $("#sections").replaceChildren(); addSection();
-  history.replaceState(null, "", "?id=" + guide.id); renderGuide(guide); await loadList(); message("Đã lưu và xuất bản cẩm nang thành công.");
+  updateListUrl(guide.id); renderGuide(guide); await loadList(0); message("Đã lưu và xuất bản cẩm nang thành công.");
  } catch(e) { message(e.message + (Object.values(e.fields || {}).length ? " " + Object.values(e.fields).join(" ") : "")); }
  finally { busy = false; $("#detail").querySelectorAll("button").forEach(b => b.disabled = false); }
 }
-$("#filters").addEventListener("submit", e => { e.preventDefault(); message(""); loadList(); });
-$("#filters select").addEventListener("change", () => loadList());
+function searchGuides() {
+ Object.assign(listState, Object.fromEntries(new FormData($("#filters"))), { page: 0 });
+ listState.q = listState.q.trim(); message(""); loadList(0);
+}
+$("#filters").addEventListener("submit", e => { e.preventDefault(); searchGuides(); });
+$("#filters select").addEventListener("change", searchGuides);
 $("#create").addEventListener("click", () => { message(""); show("editor"); });
 $("#add-section").addEventListener("click", addSection);
 $("#cancel").addEventListener("click", () => { show("listing"); message(""); });
@@ -115,6 +154,8 @@ try {
   $("#create").hidden = user?.role !== "MODERATOR"; $("#dashboard").hidden = managing || user?.role !== "MODERATOR";
   const topics = await apiClient.guideTopics();
   for (const select of document.querySelectorAll("select[name=category]")) for (const topic of topics) { const option = el("option", null, topic.title); option.value = topic.code; select.append(option); }
+  $("#filters").elements.q.value = listState.q;
+  $("#filters").elements.category.value = listState.category;
   addSection(); await loadList();
   const id = new URLSearchParams(location.search).get("id"); if (id && /^\d+$/.test(id)) renderGuide(await apiClient.guide(id));
  }
