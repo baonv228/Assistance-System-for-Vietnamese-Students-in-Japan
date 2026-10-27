@@ -87,6 +87,13 @@ export const apiClient = {
     completeRegistration: (body) => post("/auth/register/complete", body),
     pendingSocial: () => request("/auth/social/pending"),
     completeSocial: (body) => post("/auth/social/complete", body),
+    // UC-U05 "Quên mật khẩu": forgotPassword answers the message to show (the same whether the email has an account);
+    // checkPasswordLink { email } (masked) or 400 when the link is used or expired
+    forgotPassword: (email) => post("/auth/password/forgot", { email }),
+    checkPasswordLink: (token) => post("/auth/password/check", { token }),
+    resetPassword: (token, password, confirmPassword) => post("/auth/password/reset", { token, password, confirmPassword }),
+    // UC-U06 "Đổi mật khẩu" / "Tạo mật khẩu" ({ currentPassword, password, confirmPassword }): the message to show
+    changePassword: (body) => request("/me/password", { method: "PUT", body: JSON.stringify(body) }),
 
     // Legal documents: "tos", "privacy", "community"
     legal: (type) => request(`/legal/${type}`),
@@ -99,6 +106,12 @@ export const apiClient = {
     deleteAccount: () => request("/me", { method: "DELETE" }),
     // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
     saved: () => request("/me/saved"),
+    // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
+    pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),
+    // UC-U09 "Xin tag định danh": { tags: [{ id, name, description, color, selfieOnly, proofTypes, owned }], pending,
+    // keepDays, photoMaxMb }; submitTagRequest takes FormData: part "request" (JSON {tagId, proofTypeId, consent}) + "photo"
+    tagCompose: () => request("/me/tag-requests/compose"),
+    submitTagRequest: (formData) => request("/me/tag-requests", { method: "POST", body: formData }),
     areas: () => request("/areas"),
 
     // Blog Feed (UC-09), posts only. params: { q, topicIds: [..], sort, page, size }
@@ -220,7 +233,12 @@ export const apiClient = {
     modMergeCompare: (a, b) => request(`/moderator/merges/compare?${toQuery({ a, b })}`),
     modMergeSearch: (q, near) => request(`/moderator/merges/search?${toQuery({ q, near })}`),
     modMerge: (body) => post("/moderator/merges", body),
-    modDismissPair: (aId, bId) => post("/moderator/merges/dismiss", { aId, bId })
+    modDismissPair: (aId, bId) => post("/moderator/merges/dismiss", { aId, bId }),
+    // "Duyệt tag định danh" (UC-M01, UC-M02). params: { tag, q, page }; a request's photoUrl is the Moderator API
+    modTagRequests: (params = {}) => request(`/moderator/tag-requests?${toQuery(params)}`),
+    modTagRequest: (id) => request(`/moderator/tag-requests/${id}`),
+    modApproveTag: (id) => post(`/moderator/tag-requests/${id}/approve`),
+    modRejectTag: (id, reason) => post(`/moderator/tag-requests/${id}/reject`, { reason })
 };
 
 /** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */

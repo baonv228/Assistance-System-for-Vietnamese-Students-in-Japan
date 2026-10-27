@@ -42,8 +42,8 @@ function render(p) {
             <p class="note">${esc(p.email)} · Đăng nhập bằng: ${esc(methods)}</p>
         </div></div>
 
-        <div class="card">
-            <div class="row"><b>${p.points} điểm</b><span class="badge lan">${esc(current.name)}</span><span class="grow"></span>
+        <div class="card" id="points">
+            <div class="row"><b>${p.points} điểm</b><span class="badge lan">${ic("military_tech")}${esc(current.name)}</span><span class="grow"></span>
                 <span class="note">${next ? `Còn ${next.minPoints - p.points} điểm nữa lên ${esc(next.name)}` : "Hạng cao nhất"}</span></div>
             <div class="bar2"><span style="width:${progress}%"></span></div>
             <div class="ranks">${ranks.map((r, i) => `
@@ -55,6 +55,9 @@ function render(p) {
             </div>
             <p class="note">Review +10 · Ghim được duyệt +15 · Câu luyện tập +2 · Câu được đánh dấu đúng +3 ·
                 Câu trả lời hay nhất +5 · Bài bị gỡ −20 · Tự xóa bài thì điểm của bài đó được thu lại</p>
+            <div class="row"><button class="btn sm" type="button" id="history-toggle" aria-expanded="false"
+                aria-controls="history">${ic("history")}Lịch sử điểm</button></div>
+            <div id="history" aria-live="polite" hidden></div>
         </div>
 
         ${p.newAccount ? `<div class="card">
@@ -66,7 +69,7 @@ function render(p) {
 
         ${p.pendingTag
             ? `<div class="info">Yêu cầu tag ${esc(p.pendingTag)} đang chờ duyệt. Ảnh minh chứng tự xóa sau 14 ngày nếu chưa được duyệt.</div>`
-            : `<a class="btn" href="${soon("tag")}">${ic("verified")}Xin tag định danh</a>`}
+            : `<a class="btn" href="/tag-request">${ic("verified")}Xin tag định danh</a>`}
 
         <div class="card">
             <h3>${ic("person_pin_circle")} Khu vực và giai đoạn</h3>
@@ -82,6 +85,26 @@ function render(p) {
             <div class="row"><button class="btn sm" type="button" id="save">Lưu</button><span class="note" id="saved" role="status"></span></div>
         </div>
 
+        <div class="card" id="password-card">
+            <div class="row"><h3>${ic("password")} Mật khẩu</h3><span class="grow"></span>
+                <button class="btn sm" type="button" id="pw-open">${p.hasPassword ? "Đổi mật khẩu" : "Tạo mật khẩu"}</button></div>
+            <p class="note">${p.hasPassword ? "Đổi mật khẩu sẽ đăng xuất bạn khỏi các thiết bị khác."
+                : "Tài khoản này đăng nhập bằng Google/Facebook. Tạo mật khẩu để đăng nhập được cả bằng email."}</p>
+            <form id="pw-form" method="post" novalidate hidden>
+                <div class="alert error" id="pw-error" role="alert" hidden></div>
+                ${p.hasPassword ? `<div class="field"><label for="pw-current">Mật khẩu hiện tại</label>
+                    <input class="select" id="pw-current" name="currentPassword" type="password" autocomplete="current-password" maxlength="72"></div>` : ""}
+                <div class="field"><label for="pw-new">Mật khẩu mới</label>
+                    <input class="select" id="pw-new" name="password" type="password" autocomplete="new-password" maxlength="72">
+                    <span class="note">8–72 ký tự, có cả chữ và số.</span></div>
+                <div class="field"><label for="pw-confirm">Nhập lại mật khẩu mới</label>
+                    <input class="select" id="pw-confirm" name="confirmPassword" type="password" autocomplete="new-password" maxlength="72"></div>
+                <div class="row"><button class="btn sm pri" type="submit">Lưu mật khẩu</button>
+                    <button class="btn sm" type="button" id="pw-cancel">Hủy</button></div>
+            </form>
+            <p class="note" id="pw-done" role="status"></p>
+        </div>
+
         <div class="actions">
             <a class="btn" href="${soon("public-profile")}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
             <a class="btn" href="${soon("notebook")}">${ic("bookmark")}Sổ tay tiếng Nhật</a>
@@ -95,6 +118,101 @@ function render(p) {
     document.querySelector("#save").addEventListener("click", save);
     document.querySelector("#logout").addEventListener("click", logout);
     document.querySelector("#delete-ask").addEventListener("click", askDelete);
+    bindPassword(p);
+    bindHistory();
+}
+
+/** UC-U10 "Lịch sử điểm": newest first, 20 a page; content still visible is a link. */
+function bindHistory() {
+    const toggle = document.querySelector("#history-toggle");
+    const box = document.querySelector("#history");
+    const show = async (page) => {
+        box.innerHTML = `<p class="note">Đang tải…</p>`;
+        let data;
+        try {
+            data = await apiClient.pointHistory(page);
+        } catch (error) {
+            box.innerHTML = `<div class="alert error">${esc(error.message)}</div>`;
+            return;
+        }
+        if (!data.total) {
+            // Points given before the history was kept (e.g. imported sample data) have no lines
+            box.innerHTML = `<p class="note">${data.points
+                ? "Chưa có lần cộng hoặc trừ điểm nào được ghi lại."
+                : "Bạn chưa có điểm nào. Viết review đầu tiên để nhận 10 điểm."}</p>`;
+            return;
+        }
+        const pages = Math.ceil(data.total / data.size);
+        box.innerHTML = `<ul class="point-list">${data.items.map((x) => `<li>
+                <span class="delta ${x.delta < 0 ? "minus" : "plus"}">${x.delta > 0 ? "+" : "−"}${Math.abs(x.delta)}</span>
+                <span class="what"><b>${esc(x.reasonLabel)}</b>${x.title
+                    ? ` · ${x.link ? `<a class="link" href="${esc(x.link)}">${esc(x.title)}</a>` : `<span class="note">${esc(x.title)}</span>`}`
+                    : ` · <span class="note">Nội dung không còn</span>`}</span>
+                <span class="note when">${new Date(x.createdAt).toLocaleDateString("vi-VN")}</span></li>`).join("")}</ul>
+            ${pages > 1 ? `<div class="row pager">
+                <button class="btn sm" type="button" data-page="${data.page - 1}" ${data.page === 0 ? "disabled" : ""} aria-label="Trang trước">‹</button>
+                <span class="note">Trang ${data.page + 1}/${pages}</span>
+                <button class="btn sm" type="button" data-page="${data.page + 1}" ${data.page + 1 >= pages ? "disabled" : ""} aria-label="Trang sau">›</button></div>` : ""}`;
+    };
+    toggle.addEventListener("click", () => {
+        const open = box.hidden;
+        box.hidden = !open;
+        toggle.setAttribute("aria-expanded", String(open));
+        if (open) show(0);
+    });
+    box.addEventListener("click", (event) => {
+        const b = event.target.closest("[data-page]");
+        if (b) show(Number(b.dataset.page));
+    });
+    // From the points on Home (/profile#points): the card is drawn after loading, so scroll to it now
+    if (location.hash === "#points") document.querySelector("#points").scrollIntoView({ block: "start" });
+}
+
+/** UC-U06 "Đổi mật khẩu" / AF3 "Tạo mật khẩu" for an account made with Google/Facebook. */
+function bindPassword(p) {
+    const form = document.querySelector("#pw-form");
+    const open = document.querySelector("#pw-open");
+    const errorBox = document.querySelector("#pw-error");
+    const done = document.querySelector("#pw-done");
+    const close = () => {
+        form.reset();
+        form.hidden = true;
+        open.hidden = false;
+        errorBox.hidden = true;
+        form.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
+    };
+    open.addEventListener("click", () => {
+        done.textContent = "";
+        form.hidden = false;
+        open.hidden = true;
+        form.querySelector("input").focus();
+    });
+    document.querySelector("#pw-cancel").addEventListener("click", close);
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector("[type=submit]");
+        button.disabled = true;
+        try {
+            const message = await apiClient.changePassword({ currentPassword: form.currentPassword?.value ?? null,
+                password: form.password.value, confirmPassword: form.confirmPassword.value });
+            close();
+            done.textContent = message;
+            if (!p.hasPassword) {
+                render(await apiClient.profile());        // "Tạo mật khẩu" becomes "Đổi mật khẩu"
+                document.querySelector("#pw-done").textContent = message;
+            }
+        } catch (error) {
+            const fields = error.fields || {};
+            form.querySelectorAll("input").forEach((el) => {
+                if (fields[el.name]) el.setAttribute("aria-invalid", "true");
+                else el.removeAttribute("aria-invalid");
+            });
+            errorBox.textContent = [...new Set(Object.values(fields))].join(" ") || error.message;
+            errorBox.hidden = false;
+        } finally {
+            button.disabled = false;
+        }
+    });
 }
 
 async function save() {

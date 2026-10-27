@@ -68,7 +68,7 @@ async function renderMember() {
         <div class="page">
             <div class="greet">${LOGO_SVG}<div>
                 <h2>${greeting(home)}</h2>
-                <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}${home.points} điểm · ${esc(home.rankName)}</p>
+                <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}<a class="link" href="/profile#points">${home.points} điểm · ${esc(home.rankName)}</a></p>
             </div></div>
             ${profilePrompt(home, areas)}
             <div class="homegrid">

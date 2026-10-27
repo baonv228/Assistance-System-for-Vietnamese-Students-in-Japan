@@ -113,14 +113,30 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `password_min_length` is checked in `RegistrationService.complete` (the page gets it with the verify-code answer) with
   BCrypt's 72-byte limit. Display names are stripped (Unicode spaces too) before validation. SMTP waits at most 5 s
   (`spring.mail.properties.mail.smtp.*timeout`).
+- Passwords (UC-U05 / UC-U06, `feature/auth/PasswordService`, `PasswordController`, `PasswordMail`):
+  "Quên mật khẩu?" on /login → `/forgot-password` (the typed email is carried in sessionStorage, never in the address)
+  → `POST /api/auth/password/forgot` `{email}` always answers the same message (also as `data`); only for an ACTIVE
+  account, at most 1 link a minute and 5 a day, a new link cancels the older ones; the link is a `user_tokens` row
+  (RESET_PASSWORD, SHA-256 of the token, `reset_token_minutes` 30) and the email goes out on a background thread
+  (`@Async`, so the answer time says nothing). The link is `app.public-url` (env `APP_PUBLIC_URL`, never the Host
+  header) + `/reset-password?token=`; the page takes the token out of the address, has `referrer` no-referrer, checks it
+  (`POST /api/auth/password/check` → masked email) and sends `POST /api/auth/password/reset` `{token, password,
+  confirmPassword}`: 8 (`password_min_length`)–72 characters / 72 bytes, letters and digits, both equal (all problems
+  in `fields`); sets the hash, clears the login lock, confirms the email, uses up every link, signs every device out,
+  then /login?reset=1. "Đổi mật khẩu" / "Tạo mật khẩu" (account without a password) on Tôi → `PUT /api/me/password`
+  `{currentPassword, password, confirmPassword}`: the current one through `AuthService.checkCurrentPassword` (counted
+  like a login, 400 on `currentPassword`, 423 when locked), new ≠ current; the session gets a new id, the other devices
+  are signed out (`common/security/UserSessions`: sessions per user in memory, filled by `SessionSignIn`, emptied by the
+  session listener) and the owner gets an email. **The local profile may have a real SMTP server: a manual test of
+  these flows sends real emails** (the seed addresses belong to strangers).
 - "Xóa tài khoản" (`ProfileService.deleteAccount`) also revokes the user's tags, closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
-  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
+  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -164,6 +180,27 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area, then a topic
   that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest).
   Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+- Points (UC-U10): the Tôi card shows the total, the rank badge, progress, ranks with perks and the point rules;
+  "Lịch sử điểm" = `GET /api/me/points?page=` (`feature/user/PointHistoryService`, 20 a page, newest first: delta, reason
+  label, the content's title and a link only while it can still be seen; plain SQL over `point_transactions`). The
+  points on the member Home link to `/profile#points`. `PointService.add` keeps `users.points` ≥ 0 (`GREATEST`), the
+  history keeps every point taken. Sample data sets `users.points` without history lines ("Chưa có lần cộng hoặc trừ
+  điểm nào được ghi lại."). Rank badges next to names elsewhere (reviews, posts, comments) are not done yet.
+- Identity tags (UC-U09, UC-M01, UC-M02; `feature/tag`: `TagService`, `TagRepository`, `TagController`, `TagDtos`).
+  "Xin tag định danh" on Tôi → page `/tag-request` (`tag-request.js`): `GET /api/me/tag-requests/compose` (active tags
+  with description, colour, proof types, `selfieOnly`, `owned`; the waiting request; keep days) and `POST
+  /api/me/tag-requests` multipart (part "request" `{tagId, proofTypeId, consent}` + "photo"; USER role; one waiting
+  request per user, users row locked; held tags refused; a selfie-only tag takes its single proof type; messages "Hãy
+  chọn một tag.", "Hãy chọn loại minh chứng.", "Hãy chọn ảnh minh chứng." / "Hãy chọn ảnh chân dung.", "Bạn cần đồng ý
+  cho Kiểm duyệt viên xem ảnh."). The photo is re-encoded (EXIF dropped), stored under `tagproof/`, **never sent to the
+  image scanner** (scan_status stays PROCESSING) and never public (`MediaAccess` gives tag proofs to nobody but their
+  owner). Moderator page `/moderator/tags` (`mod-tags.js`): `GET /api/moderator/tag-requests?tag=&q=&page=` (PENDING of
+  ACTIVE users, oldest first, 10 a page, `daysLeft`), `GET …/{id}`, `GET …/{id}/photo` (bytes only while PENDING,
+  `no-store, private`, inline, nosniff; the page blocks the context menu), `POST …/{id}/approve` (user_tags granted or
+  re-granted, notification "Bạn đã được cấp tag X.") and `POST …/{id}/reject` `{reason}` (one of `TagService.REJECT_REASONS`;
+  "Yêu cầu tag X bị từ chối: lý do. Bạn có thể gửi lại."). Either way the photo is discarded at once and the action logged
+  (target USER). `expireOld` (hourly at :15) closes requests older than `proof_keep_days` (14) as EXPIRED, deletes the
+  photo and tells the user. A request handled meanwhile → 409 "Yêu cầu này đã được xử lý.".
 - "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
   shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
   `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has

@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.auth;
 
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.common.security.UserSessions;
 import com.sep490.vsa.feature.user.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,10 +21,13 @@ public class SessionSignIn {
 
     private final SecurityContextRepository contextRepository;
     private final CsrfTokenRepository csrfTokenRepository;
+    private final UserSessions userSessions;
 
-    public SessionSignIn(SecurityContextRepository contextRepository, CsrfTokenRepository csrfTokenRepository) {
+    public SessionSignIn(SecurityContextRepository contextRepository, CsrfTokenRepository csrfTokenRepository,
+                         UserSessions userSessions) {
         this.contextRepository = contextRepository;
         this.csrfTokenRepository = csrfTokenRepository;
+        this.userSessions = userSessions;
     }
 
     public void signIn(User user, HttpServletRequest request, HttpServletResponse response) {
@@ -43,5 +47,7 @@ public class SessionSignIn {
         // A new CSRF token too, as Spring's own login does: one planted before the sign-in is no use afterwards. The
         // page fetches the new one (client.js asks again after Spring's 403)
         csrfTokenRepository.saveToken(null, request, response);
+        // Known by user, so a password change or reset can sign the other devices out (UserSessions)
+        userSessions.add(user.getId(), request.getSession());
     }
 }

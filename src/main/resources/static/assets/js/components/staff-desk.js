@@ -12,7 +12,7 @@ export const DESKS = {
         home: "/moderator",
         intro: "Kiểm duyệt nội dung cộng đồng, địa điểm, sự kiện và cẩm nang.",
         modules: [
-            ["tags", "verified", "Duyệt tag định danh", "UC-M01, UC-M02"],
+            ["tags", "verified", "Duyệt tag định danh", "UC-M01, UC-M02", "/moderator/tags"],
             ["reports", "flag", "Báo cáo nội dung", "UC-M03"],
             ["appeals", "gavel", "Khiếu nại", "UC-M04"],
             ["closed", "storefront", "Báo cáo đóng cửa", "UC-M05", "/moderator/closed"],

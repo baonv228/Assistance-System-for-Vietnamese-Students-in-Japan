@@ -85,3 +85,8 @@
     .mod-master, .mod-compare { grid-template-columns: minmax(0, 1fr); }
     .mod-filters .input { width: 100%; }
 }
+
+/* "Duyệt tag định danh": the proof photo, for checking only */
+.proof-box { background: var(--surface-2); border-radius: 12px; padding: 8px; text-align: center; }
+.proof { max-width: 100%; max-height: 480px; object-fit: contain; border-radius: 8px; user-select: none;
+    -webkit-user-drag: none; -webkit-touch-callout: none; }

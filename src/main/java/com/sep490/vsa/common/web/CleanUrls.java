@@ -43,6 +43,8 @@ public final class CleanUrls {
         PAGES.put("/blog/new", "/pages/blog-write.html");
         PAGES.put("/qa", "/pages/qa.html");
         PAGES.put("/qa/ask", "/pages/qa-ask.html");
+        PAGES.put("/forgot-password", "/pages/forgot-password.html");
+        PAGES.put("/reset-password", "/pages/reset-password.html");
         PAGES.put("/events", "/pages/events.html");
         PAGES.put("/moderator", "/pages/moderator/index.html");
         PAGES.put("/moderator/events", "/pages/moderator/events.html");
@@ -50,6 +52,8 @@ public final class CleanUrls {
         PAGES.put("/moderator/closed", "/pages/moderator/closed.html");
         PAGES.put("/moderator/places", "/pages/moderator/places.html");
         PAGES.put("/moderator/merge", "/pages/moderator/merge.html");
+        PAGES.put("/moderator/tags", "/pages/moderator/tags.html");
+        PAGES.put("/tag-request", "/pages/tag-request.html");
         PAGES.put("/academic", "/pages/academic/index.html");
         PAGES.put("/admin", "/pages/admin/index.html");
         PAGES.put("/admin/users", "/pages/admin/users.html");
