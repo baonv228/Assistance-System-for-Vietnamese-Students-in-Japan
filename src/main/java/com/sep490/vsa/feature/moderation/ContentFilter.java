@@ -102,7 +102,9 @@ public class ContentFilter {
             "mai đám cưới", "mai đám giỗ", "mai đám ma", "bàn đàm phán", "bận đám cưới", "bận đám giỗ", "mưa dầm",
             "gái điểm cao", "gái điểm thấp", "nhà thờ", "bảo nuôi", "gái bao nhiêu", "gái bao giờ", "trai bao nhiêu",
             "trai bao giờ", "bạn gái gọi", "con gái gọi", "cô gái gọi", "em gái gọi", "chị gái gọi", "gái gọi điện",
-            "đi khách sạn", "支援交", "応援交", "救援交", "風俗習慣");
+            "đi khách sạn", "支援交", "応援交", "救援交", "風俗習慣",
+            // the work permit on every working student's residence card: 「資格外活動許可…風俗営業等の従事を除く」
+            "風俗営業等の従事");
     private static final List<Keyword> EVERYDAY = prepare(EVERYDAY_PHRASES);
 
     // ---------------------------------------------------------------- links (BR-22)

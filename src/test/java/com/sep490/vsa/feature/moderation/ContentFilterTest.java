@@ -211,6 +211,9 @@ class ContentFilterTest {
         texts.put("Mình làm thêm ở quán pachinko được không?", "pachinko");
         texts.put("パチンコ店でバイト", "パチンコ");
         texts.put("Du học sinh không được làm thêm ở quán 風俗", "風俗");
+        texts.put("風俗店で働く", "風俗");
+        texts.put("風俗画像を集めています", "風俗");
+        texts.put("Tuyển nữ làm 風俗営業, lương cao", "風俗");
         texts.put("援交の募集", "援交");
         texts.put("売春は違法", "売春");
         texts.put("Gái gọi Shinjuku", "gái gọi");
@@ -276,7 +279,10 @@ class ContentFilterTest {
                 "Massage ở Nhật giá bao nhiêu?", "Cảnh báo: có người gạ tình trong nhóm",
                 "Kích thước vali bao nhiêu thì mang lên máy bay?", "Vé xổ số ở Nhật mua ở đâu?",
                 "Chơi Pokémon GO ở Ueno", "Bác sĩ khám bệnh lây qua đường tình dục ở đâu?",
-                "留学生支援交流会に参加しました", "日本の風俗習慣を学ぶ", "ボディソープを買う", "SIMスロットが壊れた");
+                "留学生支援交流会に参加しました", "日本の風俗習慣を学ぶ", "ボディソープを買う", "SIMスロットが壊れた",
+                // The work permit printed on the back of a working student's residence card
+                "資格外活動許可 許可：原則週28時間以内・風俗営業等の従事を除く",
+                "Thẻ ngoại kiều ghi 資格外活動許可（風俗営業等の従事を除く）");
         for (String text : ordinary) {
             assertThat(ContentFilter.findKeyword(text, list)).as(text).isEmpty();
         }
