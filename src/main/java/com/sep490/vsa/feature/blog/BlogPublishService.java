@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,8 +27,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * Second half of UC-11 for posts with photos or a video. The post waits in PROCESSING (only its author sees
  * it) while each file is scanned ({@link MediaScanService}). Then:
  * <ul>
- *   <li>every file passed → the post becomes PUBLISHED and the author earns the post's points now;</li>
- *   <li>a file failed → the post becomes REJECTED, the failed files are deleted and the author is notified;</li>
+ *   <li>every file passed → the post becomes PUBLISHED, the author earns the post's points now and is notified
+ *       ({@code CONTENT_PUBLISHED});</li>
+ *   <li>a file failed → the post becomes REJECTED, the failed files are deleted and the author is notified
+ *       ({@code CONTENT_REJECTED}, with the reason);</li>
  *   <li>the scanner could not answer → the post stays PROCESSING and the retry job tries again.</li>
  * </ul>
  * Before the files are scanned and again right before the post is published, its title and text are checked against
@@ -144,7 +147,7 @@ public class BlogPublishService {
         }
         boolean allPassed = files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()));
         if (allPassed && repository.setStatus(blogId, "PROCESSING", "PUBLISHED")) {
-            awardOnce(blog.authorId(), blogId);
+            tellPublished(blog, awardOnce(blog.authorId(), blogId));
         }
     }
 
@@ -154,19 +157,43 @@ public class BlogPublishService {
     }
 
     private void tellRejected(PendingBlog blog, String reason) {
-        String what = "QA".equals(blog.type()) ? "Câu hỏi" : "Bài viết";
         notifications.send(blog.authorId(), NotificationService.CONTENT_REJECTED,
-                what + " “" + blog.title() + "” chưa được đăng vì " + reason + ". Bạn có thể sửa bài rồi gửi lại.",
-                "QA".equals(blog.type()) ? "QUESTION" : "BLOG", blog.id());
+                what(blog) + " “" + blog.title() + "” chưa được đăng vì " + reason + ". Bạn có thể sửa bài rồi gửi lại.",
+                refType(blog), blog.id());
+    }
+
+    /**
+     * The scan passed: the post is public now. {@code paid}: it earned its points now, so this is its first
+     * publication; otherwise an edit of a post that was published before (with new photos or a video) went through.
+     */
+    private void tellPublished(PendingBlog blog, boolean paid) {
+        String text = paid
+                ? what(blog) + " “" + blog.title() + "” đã qua kiểm duyệt ảnh/video và đã được đăng. +"
+                        + PointService.BLOG_POST + " điểm."
+                : "Bản sửa " + what(blog).toLowerCase(Locale.ROOT) + " “" + blog.title()
+                        + "” đã qua kiểm duyệt ảnh/video và đã được đăng.";
+        notifications.send(blog.authorId(), NotificationService.CONTENT_PUBLISHED, text, refType(blog), blog.id());
+    }
+
+    private static String what(PendingBlog blog) {
+        return "QA".equals(blog.type()) ? "Câu hỏi" : "Bài viết";
+    }
+
+    private static String refType(PendingBlog blog) {
+        return "QA".equals(blog.type()) ? "QUESTION" : "BLOG";
     }
 
     /**
      * The post's points ({@link PointService#BLOG_POST}), paid the first time it is published and never again:
      * an edited post that is scanned and published a second time, or a rejected post fixed later, earns nothing more.
+     *
+     * @return true when the points were paid now
      */
-    void awardOnce(long authorId, long blogId) {
-        if (!repository.postAwarded(blogId)) {
-            points.add(authorId, PointService.BLOG_POST, "BLOG_CREATED", "BLOG", blogId);
+    boolean awardOnce(long authorId, long blogId) {
+        if (repository.postAwarded(blogId)) {
+            return false;
         }
+        points.add(authorId, PointService.BLOG_POST, "BLOG_CREATED", "BLOG", blogId);
+        return true;
     }
 }

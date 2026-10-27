@@ -4,6 +4,7 @@ import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.moderation.MediaScanService;
 import com.sep490.vsa.feature.notification.NotificationService;
 import com.sep490.vsa.feature.review.ReviewRepository.AttachedMedia;
+import com.sep490.vsa.feature.review.ReviewRepository.PlaceRef;
 import com.sep490.vsa.feature.review.ReviewRepository.ReviewRow;
 import com.sep490.vsa.feature.user.PointService;
 import org.slf4j.Logger;
@@ -17,14 +18,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Second half of UC-U16 / UC-U17 for reviews with photos or a video, like posts (BlogPublishService). The review waits
- * in PROCESSING (only its author sees it) while each file is scanned. Then every file passed → PUBLISHED and the
- * author earns the review's points (once); a file failed → REJECTED, the failed files are deleted and the author is
- * notified to edit the review; the scanner could not answer → it stays PROCESSING and the retry job tries again.
+ * in PROCESSING (only its author sees it) while each file is scanned. Then every file passed → PUBLISHED, the author
+ * earns the review's points (once) and is notified; a file failed → REJECTED, the failed files are deleted and the
+ * author is notified to edit the review; the scanner could not answer → it stays PROCESSING and the retry job tries
+ * again.
  */
 @Service
 public class ReviewPublishService {
@@ -99,28 +102,50 @@ public class ReviewPublishService {
         List<AttachedMedia> files = repository.media(reviewId);
         List<Long> rejected = files.stream().filter(m -> "REJECTED".equals(m.scanStatus()))
                 .map(AttachedMedia::id).toList();
+        Optional<PlaceRef> place = review.placeId() == null ? Optional.empty() : repository.place(review.placeId());
+        String about = place.map(p -> " về “" + p.name() + "”").orElse("");
         if (!rejected.isEmpty()) {
             String reason = scanner.rejectionReason(rejected).orElse("ảnh hoặc video vi phạm Quy tắc cộng đồng");
             repository.setStatus(reviewId, "PROCESSING", "REJECTED");
             repository.unlinkMedia(reviewId, rejected);
             media.discard(rejected);
-            String place = review.placeId() == null ? "" : repository.place(review.placeId())
-                    .map(p -> " về “" + p.name() + "”").orElse("");
             notifications.send(review.authorId(), NotificationService.CONTENT_REJECTED,
-                    "Review" + place + " chưa được đăng vì " + reason + ". "
+                    "Review" + about + " chưa được đăng vì " + reason + ". "
                             + "Bạn có thể sửa review rồi gửi lại.", "REVIEW", reviewId);
             return;
         }
         if (files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()))
                 && repository.setStatus(reviewId, "PROCESSING", "PUBLISHED")) {
-            awardOnce(review.authorId(), reviewId);
+            boolean paid = awardOnce(review.authorId(), reviewId);
+            boolean pendingPin = place.map(p -> "PENDING".equals(p.status())).orElse(false);
+            notifications.send(review.authorId(), NotificationService.CONTENT_PUBLISHED,
+                    publishedText(about, paid, pendingPin), "REVIEW", reviewId);
         }
     }
 
-    /** +10 the first time the review is published, never again (an edited or re-sent review earns nothing more). */
-    void awardOnce(long authorId, long reviewId) {
-        if (!repository.awarded(reviewId)) {
-            points.add(authorId, PointService.REVIEW, "REVIEW_CREATED", "REVIEW", reviewId);
+    /**
+     * "Review về “X” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm." Not paid now: an edit of a review that was
+     * published before. A review of the author's own pin waiting for a Moderator is shown to others only once the pin
+     * is approved.
+     */
+    static String publishedText(String about, boolean paid, boolean pendingPin) {
+        String review = (paid ? "Review" : "Bản sửa review") + (pendingPin ? " đầu tiên" : "") + about;
+        String shown = pendingPin
+                ? " đã qua kiểm duyệt ảnh/video. Review sẽ hiển thị cho mọi người khi ghim được Moderator duyệt."
+                : " đã qua kiểm duyệt ảnh/video và đã được đăng.";
+        return review + shown + (paid ? " +" + PointService.REVIEW + " điểm." : "");
+    }
+
+    /**
+     * +10 the first time the review is published, never again (an edited or re-sent review earns nothing more).
+     *
+     * @return true when the points were paid now
+     */
+    boolean awardOnce(long authorId, long reviewId) {
+        if (repository.awarded(reviewId)) {
+            return false;
         }
+        points.add(authorId, PointService.REVIEW, "REVIEW_CREATED", "REVIEW", reviewId);
+        return true;
     }
 }

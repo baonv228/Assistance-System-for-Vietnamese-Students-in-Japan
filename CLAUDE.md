@@ -240,7 +240,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   PUBLISHED and +`PointService.BLOG_POST` (10, not confirmed in the SRS yet). Media → PROCESSING;
   `BlogPublishService` scans after commit (and a retry job every 2 min, 20 waiting posts a run in id order after the
   previous run's last one, from the oldest again after a short page, so stuck posts never starve newer ones): all PASSED → PUBLISHED + points,
-  any REJECTED → REJECTED, rejected files deleted, author notified (`CONTENT_REJECTED`). `user_daily_usage` counts
+  author notified (`CONTENT_PUBLISHED`: "Bài viết “T” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm.", "Bản sửa
+  bài viết…" without points when it was published before), any REJECTED → REJECTED, rejected files deleted, author
+  notified (`CONTENT_REJECTED`, with the reason); nothing while it waits. `user_daily_usage` counts
   every new post, in Japan dates. Values still "cần chốt" (title 150, QA description optional, photo rules = review
   rules) are constants in `BlogWriteRules`.
 - Edit ("Sửa bài" / "Sửa câu hỏi", `BlogWriteService.update`): `GET /api/blogs/{id}/edit` (and `/api/questions/{id}/edit`)
@@ -404,8 +406,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   review of this year or edits it. Same order of checks as Write Post: stars 1–5 + text ≤ 2,000 + files (≤ 5 photos,
   1 video ≤ 30 s) → links (BR-22) → new-account limit (counted with posts in `user_daily_usage`) → banned keywords.
   No files → PUBLISHED and `PointService.REVIEW` (+10, reason REVIEW_CREATED, paid once); files → PROCESSING and
-  `EventReviewPublishService` scans them like `BlogPublishService` (keyword check again, retry job, notification
-  `CONTENT_REJECTED` with ref_type REVIEW). Calls under `/api/event-reviews/{id}` (PUT edit with `keepMediaIds`, DELETE
+  `EventReviewPublishService` scans them like `BlogPublishService` (keyword check again, retry job, notifications
+  `CONTENT_PUBLISHED` / `CONTENT_REJECTED` with ref_type REVIEW). Calls under `/api/event-reviews/{id}` (PUT edit with `keepMediaIds`, DELETE
   own: hard delete, points withdrawn, files discarded, open report cases closed; `like`; `report` → HIDDEN past
   `report_hide_threshold`), so place reviews can take `/api/reviews`. Reviews, ratings and album photos of LOCKED or
   DELETED accounts are hidden (`ActiveAuthors.of("r")`); the author still sees their own PROCESSING/REJECTED/HIDDEN one.
@@ -457,8 +459,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Write Post (links, new-account limit shared with posts in `user_daily_usage`, banned keywords). An
   `externalPlaceId` goes through `PlaceService.resolve/save` (the OSM place is added). Without media → PUBLISHED and
   +10 (`PointService.REVIEW`, reason REVIEW_CREATED, paid once); with media → PROCESSING until
-  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it; an edit with new media
-  hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
+  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it and notifies the author
+  (`CONTENT_PUBLISHED` / `CONTENT_REJECTED`; the first review of a PENDING pin: "…sẽ hiển thị cho mọi người khi ghim
+  được Moderator duyệt"); an edit with new media hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
   The form is a panel mode ("write") of map.js; pins are reloaded after a save.
 - "Cắm ghim" (UC-U19, feature/review PinService/PinController): `GET /api/map/pins/compose`, `GET
   /api/map/pins/duplicates?lat=&lng=&names=a|b` (ACTIVE places within 200 m whose squashed name contains / is contained
