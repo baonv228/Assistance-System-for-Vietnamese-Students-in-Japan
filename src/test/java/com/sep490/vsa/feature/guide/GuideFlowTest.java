@@ -166,6 +166,74 @@ class GuideFlowTest {
     }
 
     @Test
+    void draftCanBeResumedAndPublishedWithoutChangingCreationAuditOrLosingCover() throws Exception {
+        var moderator = session("MODERATOR");
+        String title = "Draft " + UUID.randomUUID();
+        var draft = new GuideRequest(title, null, null,
+                List.of(new GuideRequest.Section("", "", null, null)), null, null, "DRAFT", 0, false);
+        var response = mvc.perform(multipart("/api/moderator/guides")
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(draft)))
+                        .file(photo()).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andExpect(jsonPath("$.data.published").value(false)).andReturn().getResponse();
+        var saved = json.readTree(response.getContentAsByteArray()).get("data");
+        long id = saved.get("id").asLong();
+        String cover = saved.get("coverImageUrl").asText();
+        mvc.perform(get("/api/guides/" + id)).andExpect(status().isNotFound());
+        mvc.perform(get(cover)).andExpect(status().isNotFound());
+        mvc.perform(get(cover).session(moderator)).andExpect(status().isOk());
+        mvc.perform(get("/api/moderator/guides/" + id).session(moderator))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("DRAFT"));
+        mvc.perform(get("/api/moderator/guides/browse").session(moderator).param("status", "DRAFT").param("q", title))
+                .andExpect(jsonPath("$.data.total").value(1));
+        mvc.perform(get("/api/guides/browse").param("q", title))
+                .andExpect(jsonPath("$.data.total").value(0));
+
+        var published = new GuideRequest(title, "Summary", "ARR",
+                List.of(new GuideRequest.Section("Nội dung", "**Hướng dẫn**", null, null)),
+                "PROCEDURES", "https://example.org/source", "PUBLISHED", null, false);
+        var updated = mvc.perform(multipart("/api/moderator/guides/" + id)
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(published)))
+                        .with(request -> { request.setMethod("PUT"); return request; }).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(id))
+                .andExpect(jsonPath("$.data.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.data.topicName").value("Thủ tục"))
+                .andExpect(jsonPath("$.data.coverImageUrl").value(cover)).andReturn().getResponse();
+        var result = json.readTree(updated.getContentAsByteArray()).get("data");
+        assertThat(result.get("createdAt")).isEqualTo(saved.get("createdAt"));
+        assertThat(result.get("createdBy")).isEqualTo(saved.get("createdBy"));
+        mvc.perform(get("/api/guides/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sourceUrl").value("https://example.org/source"));
+        mvc.perform(get(cover)).andExpect(status().isOk());
+        mvc.perform(get("/api/guides/browse").param("q", title).param("category", "ARR").param("topicCode", "PROCEDURES"))
+                .andExpect(jsonPath("$.data.total").value(1));
+        mvc.perform(get("/api/guides/browse").param("q", title).param("topicCode", "LIVING"))
+                .andExpect(jsonPath("$.data.total").value(0));
+        String topicKeyword = "Subject-" + UUID.randomUUID();
+        jdbc.update("UPDATE guide_topics SET title=? WHERE code='PROCEDURES'", topicKeyword);
+        mvc.perform(get("/api/guides/browse").param("q", topicKeyword).param("category", "ARR"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(id))
+                .andExpect(jsonPath("$.data.items[0].coverImageUrl").value(cover));
+    }
+
+    @Test
+    void publishingRequiresClassificationsAndContentAndRejectsInvalidSource() throws Exception {
+        var moderator = session("MODERATOR");
+        for (var request : List.of(
+                new GuideRequest("Title", null, null, List.of(new GuideRequest.Section("", "", null, null)), null, null, "PUBLISHED", null, false),
+                new GuideRequest("Title", null, "PRE", List.of(new GuideRequest.Section("Heading", "Content", null, null)), "INVALID", null, "PUBLISHED", null, false),
+                new GuideRequest("Title", null, "PRE", List.of(new GuideRequest.Section("Heading", "Content", null, null)), "LIVING", "javascript:alert(1)", "DRAFT", null, false))) {
+            mvc.perform(post("/api/moderator/guides").session(moderator)
+                            .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token")
+                            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(request)))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void guestAndMemberBrowseOnlyPublicGuidesWithSearchSortingAndPagination() throws Exception {
         var moderatorSession = session("MODERATOR");
         var context = (SecurityContextImpl) moderatorSession.getAttribute("SPRING_SECURITY_CONTEXT");
@@ -200,7 +268,7 @@ class GuideFlowTest {
         mvc.perform(get("/api/guides/browse").param("q", keyword).param("size", "1").param("page", "999"))
                 .andExpect(jsonPath("$.data.page").value(1));
         mvc.perform(get("/api/moderator/guides/browse").session(moderatorSession)
-                        .param("q", keyword).param("category", "PRE").param("size", "1").param("page", "1"))
+                        .param("status", "PUBLISHED").param("q", keyword).param("category", "PRE").param("size", "1").param("page", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(2))
                 .andExpect(jsonPath("$.data.totalPages").value(2))
                 .andExpect(jsonPath("$.data.page").value(1))

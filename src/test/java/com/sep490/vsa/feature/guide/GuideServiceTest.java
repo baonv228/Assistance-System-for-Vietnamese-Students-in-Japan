@@ -56,9 +56,9 @@ class GuideServiceTest {
         try (var factory = Validation.buildDefaultValidatorFactory()) {
             var validator = factory.getValidator();
             assertThat(validator.validate(request)).isEmpty();
-            assertThat(validator.validate(new GuideRequest(" ", " ", "", List.of()))).hasSize(4);
+            assertThat(validator.validate(new GuideRequest(" ", " ", "", List.of()))).hasSize(2);
             assertThat(validator.validate(new GuideRequest("x".repeat(256), "Summary", "PRE",
-                    List.of(new GuideRequest.Section("", " ", null, null))))).hasSize(3);
+                    List.of(new GuideRequest.Section("", " ", null, null))))).hasSize(1);
         }
     }
 }

@@ -74,7 +74,8 @@ public class MediaAccess {
                            JOIN places p ON p.id = r.place_id
                            WHERE rm.media_id = m.id AND r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND %s) OR EXISTS (
                            SELECT 1 FROM guide_sections gs JOIN guide_items g ON g.id = gs.guide_id
-                           WHERE gs.media_id = m.id AND g.published = TRUE)) AS shown,
+                           WHERE gs.media_id = m.id AND g.published = TRUE) OR EXISTS (
+                           SELECT 1 FROM guide_items g WHERE g.cover_media_id = m.id AND g.published = TRUE)) AS shown,
                        EXISTS (SELECT 1 FROM users o WHERE o.id = m.owner_id AND o.status = 'ACTIVE') AS owner_active
                 FROM media m WHERE m.storage_key = ? AND m.deleted_at IS NULL"""
                         .formatted(ActiveAuthors.of("b"), ActiveAuthors.of("r")),

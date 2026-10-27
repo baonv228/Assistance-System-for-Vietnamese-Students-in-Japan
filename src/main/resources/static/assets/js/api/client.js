@@ -76,6 +76,9 @@ const post = (path, body) => request(path, { method: "POST", body: JSON.stringif
 export const apiClient = {
     getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
     guideTopics: () => request("/guides/topics"),
+    guideSubjects: () => request("/guides/subjects"),
+    moderatorGuide: (id) => request(`/moderator/guides/${id}`),
+    updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),
     browseGuides: (params = {}) => request(`/guides/browse?${toQuery(params)}`),
     moderatorGuides: (params = {}) => request(`/moderator/guides/browse?${toQuery(params)}`),
     guide: (id) => request(`/guides/${id}`),

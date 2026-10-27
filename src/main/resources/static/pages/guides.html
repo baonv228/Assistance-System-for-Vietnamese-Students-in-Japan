@@ -17,13 +17,13 @@
 <header class="page-heading"><h1>Cẩm nang sinh viên</h1><p>Hướng dẫn thiết thực cho việc học tập và cuộc sống tại Nhật Bản.</p></header>
 <p id="browse-error" class="alert error" role="alert" hidden></p>
 <section id="browse-listing">
-<form id="browse-filters" class="guide-filters card" role="search">
-<label>Từ khóa<input type="search" name="q" maxlength="200" placeholder="Tìm theo tiêu đề, mô tả hoặc nội dung"></label>
-<label>Chủ đề<select name="category"><option value="">Tất cả chủ đề</option></select></label>
-<label>Sắp xếp<select name="sort"><option value="NEWEST">Mới nhất</option><option value="OLDEST">Cũ nhất</option><option value="TITLE">Tiêu đề A–Z</option></select></label>
-<button class="btn pri" type="submit">Tìm kiếm</button><a class="btn" href="/guides">Xóa bộ lọc</a>
+<form id="browse-filters" class="guide-browse-filters" role="search">
+<div class="guide-search-row"><label class="sr-only" for="guide-search">Tìm cẩm nang</label><input id="guide-search" type="search" name="q" maxlength="200" placeholder="Tìm theo tiêu đề, chủ đề hoặc từ khóa..."><button class="btn pri" type="submit">Tìm kiếm</button></div>
+<input type="hidden" name="topicCode" value="">
+<div id="browse-topics" class="guide-topic-pills" role="group" aria-label="Lọc theo chủ đề"></div>
+<div class="guide-stage-row"><label for="guide-stage">Giai đoạn</label><select id="guide-stage" name="category"><option value="">Tất cả giai đoạn</option></select><a class="link" href="/guides">Xóa bộ lọc</a></div>
 </form>
-<p id="browse-count" class="note" role="status" aria-live="polite">Đang tải cẩm nang…</p>
+<div class="guide-results-head"><p id="browse-count" class="note" role="status" aria-live="polite">Đang tải cẩm nang…</p><label class="sr-only" for="guide-sort">Sắp xếp cẩm nang</label><select id="guide-sort" name="sort" form="browse-filters" aria-label="Sắp xếp cẩm nang"><option value="NEWEST">Mới nhất</option><option value="OLDEST">Cũ nhất</option><option value="TITLE">Tiêu đề A–Z</option></select></div>
 <div id="browse-list" class="guide-grid"></div>
 <nav id="browse-pager" class="guide-actions" aria-label="Phân trang cẩm nang" hidden></nav>
 </section>

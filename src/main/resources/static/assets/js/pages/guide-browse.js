@@ -1,3 +1,4 @@
+import { guideContent } from "../lib/guide-content.js";
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 
@@ -6,6 +7,7 @@ const params = new URLSearchParams(location.search);
 const state = {
  q: (params.get("q") || "").slice(0, 200),
  category: params.get("category") || "",
+ topicCode: params.get("topicCode") || "",
  sort: ["NEWEST", "OLDEST", "TITLE"].includes(params.get("sort")) ? params.get("sort") : "NEWEST",
  page: /^\d{1,9}$/.test(params.get("page") || "") ? Number(params.get("page")) : 0,
  size: 12
@@ -19,7 +21,7 @@ function el(tag, className, text) {
 }
 function url(path, criteria = state) {
  const query = new URLSearchParams();
- for (const key of ["q", "category", "sort", "page"]) {
+ for (const key of ["q", "category", "topicCode", "sort", "page"]) {
   const value = criteria[key];
   if (value && !(key === "sort" && value === "NEWEST")) query.set(key, value);
  }
@@ -28,7 +30,7 @@ function url(path, criteria = state) {
 function link(text, href, className = "btn") {
  const a = el("a", className, text); a.href = href; return a;
 }
-function date(value) { return new Date(value).toLocaleString("vi-VN"); }
+function date(value) { return new Date(value).toLocaleDateString("vi-VN"); }
 function safeUrl(value, image = false) {
  if (!value) return null;
  try {
@@ -67,11 +69,22 @@ async function list() {
   : "Không có cẩm nang phù hợp. Hãy thử từ khóa hoặc chủ đề khác.";
  const cards = result.items.map(guide => {
   const article = el("article", "card guide-result");
+  article.dataset.topic = guide.topicCode || "OTHER";
+  const cover = link("", url("/guides/" + guide.id), "guide-card-cover");
+  cover.setAttribute("aria-label", "Xem cẩm nang: " + guide.title);
+  const imageUrl = safeUrl(guide.coverImageUrl, true);
+  const fallback = () => { const icon = el("span", "ic guide-cover-placeholder", "menu_book"); icon.setAttribute("aria-hidden", "true"); cover.prepend(icon); };
+  if (imageUrl) {
+   const image = el("img"); image.src = imageUrl; image.alt = guide.title; image.loading = "lazy"; image.decoding = "async"; image.referrerPolicy = "no-referrer";
+   image.addEventListener("error", () => { image.remove(); fallback(); }, { once: true }); cover.append(image);
+  } else fallback();
+  cover.append(el("span", "guide-card-topic", guide.topicName || "Cẩm nang"));
+  const body = el("div", "guide-card-body");
   const title = el("h2"); title.append(link(guide.title, url("/guides/" + guide.id), "guide-title"));
-  article.append(el("span", "badge", guide.topicName), title,
-   el("p", "guide-summary", guide.summary || "Hướng dẫn dành cho sinh viên Việt Nam tại Nhật Bản."),
-   el("p", "note", "Ngày tạo: " + date(guide.createdAt)),
-   link("Xem chi tiết →", url("/guides/" + guide.id)));
+  body.append(title, el("p", "guide-summary", guide.summary || "Hướng dẫn dành cho sinh viên Việt Nam tại Nhật Bản."));
+  if (guide.stageName) body.append(el("p", "guide-card-stage", guide.stageName));
+  const time = el("time", "guide-card-date", date(guide.createdAt)); time.dateTime = guide.createdAt; body.append(time);
+  article.append(cover, body);
   return article;
  });
  $("#browse-list").replaceChildren(...cards); pager(result);
@@ -87,9 +100,12 @@ async function detail() {
   target.replaceChildren(el("span", "badge", guide.topicName), el("h2", null, guide.title),
    el("p", "note", "Ngày tạo: " + date(guide.createdAt) + (guide.creatorName ? " · " + guide.creatorName : "")),
    el("p", "guide-content", guide.summary));
+  if (guide.coverImageUrl && safeUrl(guide.coverImageUrl, true)) { const image = el("img"); image.src = safeUrl(guide.coverImageUrl, true); image.alt = guide.title; target.append(image); }
+  if (guide.stageName) target.append(el("p", "note", "Giai đoạn: " + guide.stageName));
+  if (guide.sourceUrl && safeUrl(guide.sourceUrl)) { const source = link("Đường dẫn gốc ↗", safeUrl(guide.sourceUrl), "link"); source.target = "_blank"; source.rel = "noopener noreferrer"; target.append(source); }
   for (const [i, section] of guide.sections.entries()) {
    const block = el("section", "guide-detail-section");
-   block.append(el("h3", null, (i + 1) + ". " + section.heading), el("p", "guide-content", section.content));
+   block.append(el("h3", null, (i + 1) + ". " + section.heading), guideContent(section.content));
    const imageUrl = safeUrl(section.imageUrl, true);
    if (imageUrl) {
     const image = el("img"); image.src = imageUrl; image.alt = section.heading;
@@ -111,7 +127,7 @@ $("#browse-filters").addEventListener("submit", event => {
  const filters = Object.fromEntries(new FormData(event.target));
  location.assign(url("/guides", { ...state, ...filters, q: filters.q.trim(), page: 0 }));
 });
-for (const select of $("#browse-filters").querySelectorAll("select")) {
+for (const select of document.querySelectorAll("#browse-filters select, select[form=\"browse-filters\"]")) {
  select.addEventListener("change", () => $("#browse-filters").requestSubmit());
 }
 try {
@@ -122,9 +138,18 @@ try {
   const select = $("#browse-filters").elements.category;
   for (const topic of topics) { const option = el("option", null, topic.title); option.value = topic.code; select.append(option); }
   if (state.category && !topics.some(topic => topic.code === state.category)) {
-   const option = el("option", null, "Chủ đề không tồn tại"); option.value = state.category; select.append(option);
+   const option = el("option", null, "Giai đoạn không tồn tại"); option.value = state.category; select.append(option);
   }
-  for (const key of ["q", "category", "sort"]) $("#browse-filters").elements[key].value = state[key];
+  const subjects = await apiClient.guideSubjects();
+  const pill = (code, title) => {
+   const node = el("button", "guide-topic-pill", title); node.type = "button";
+   node.setAttribute("aria-pressed", String(state.topicCode === code));
+   node.addEventListener("click", () => { $("#browse-filters").elements.topicCode.value = code; $("#browse-filters").requestSubmit(); });
+   $("#browse-topics").append(node);
+  };
+  pill("", "Tất cả"); for (const topic of subjects) pill(topic.code, topic.title);
+  if (state.topicCode && !subjects.some(topic => topic.code === state.topicCode)) pill(state.topicCode, "Chủ đề không tồn tại");
+  for (const key of ["q", "category", "topicCode", "sort"]) $("#browse-filters").elements[key].value = state[key];
   await list();
  }
 } catch (error) { showError(error); }

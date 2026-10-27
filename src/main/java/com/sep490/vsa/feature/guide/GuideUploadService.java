@@ -29,6 +29,14 @@ public class GuideUploadService {
 
     // Decode and scan before opening the write transaction. Failed uploads leave no files or rows.
     public GuideResponse create(GuideRequest request, List<MultipartFile> files, AppUserPrincipal me) {
+        return save(request, files, me, null);
+    }
+
+    public GuideResponse update(long id, GuideRequest request, List<MultipartFile> files, AppUserPrincipal me) {
+        return save(request, files, me, id);
+    }
+
+    private GuideResponse save(GuideRequest request, List<MultipartFile> files, AppUserPrincipal me, Long id) {
         if (me == null || !"MODERATOR".equals(me.role())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Chỉ Moderator được tạo cẩm nang.");
         }
@@ -37,6 +45,15 @@ public class GuideUploadService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Tối đa 5 ảnh, mỗi ảnh JPG/PNG không quá 20 MB.");
         }
         var used = new HashSet<Integer>();
+        if (request.coverImageIndex() != null) {
+            if (request.coverImageIndex() < 0 || request.coverImageIndex() >= files.size()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Ảnh bìa không hợp lệ.");
+            }
+            used.add(request.coverImageIndex());
+            if (files.get(request.coverImageIndex()).getSize() > 5 * 1024L * 1024L) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Ảnh bìa không được vượt quá 5 MB.");
+            }
+        }
         for (var section : request.sections()) {
             if (section.imageUrl() != null && !section.imageUrl().isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Vui lòng chọn ảnh từ máy tính.");
@@ -73,6 +90,6 @@ public class GuideUploadService {
             }
             prepared.add(new Image(image, moderator.engine(), verdict.detail()));
         }
-        return guides.createWithImages(request, me, prepared);
+        return id == null ? guides.createWithImages(request, me, prepared) : guides.updateWithImages(id, request, me, prepared);
     }
 }
