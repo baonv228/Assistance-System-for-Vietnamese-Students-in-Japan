@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.place;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.sep490.vsa.common.http.WindowsTrust;
 import com.sep490.vsa.common.text.VietnameseText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,23 +11,11 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.DefaultUriBuilderFactory;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-import java.io.IOException;
 import java.net.ConnectException;
-import java.net.HttpURLConnection;
 import java.net.NoRouteToHostException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-import java.security.GeneralSecurityException;
-import java.security.KeyStore;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -42,7 +31,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * OpenStreetMap places through two free public services (no key, no billing):
@@ -59,8 +47,9 @@ import java.util.stream.Stream;
  * Both services ask every app to name itself in the User-Agent ({@code app.places.osm.user-agent}). Every request sent
  * to them, answered or not, is counted in {@code api_usage} ({@link #SEARCH_USAGE}, {@link #LOOKUP_USAGE}) through
  * {@link ApiUsageCounter}.
- * On Windows the client also trusts the Windows certificate store, like browsers do: antivirus software that scans
- * HTTPS (Kaspersky, Avast, ESET…) re-signs the sites' certificates with its own root, which Java alone rejects.
+ * On Windows the client also trusts the Windows certificate store, like browsers do ({@link WindowsTrust}): antivirus
+ * software that scans HTTPS (Kaspersky, Avast, ESET…) re-signs the sites' certificates with its own root, which Java
+ * alone rejects.
  */
 public class OsmPlaces implements ExternalPlaces {
 
@@ -140,31 +129,10 @@ public class OsmPlaces implements ExternalPlaces {
 
     OsmPlaces(String searchUrl, String lookupUrl, String userAgent, List<String> regions, long lookupGapMs,
               ApiUsageCounter usage) {
-        SSLSocketFactory ssl = windowsAwareSsl();
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory() {
-            @Override
-            protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
-                super.prepareConnection(connection, httpMethod);
-                if (ssl != null && connection instanceof HttpsURLConnection https) {
-                    https.setSSLSocketFactory(ssl);
-                }
-            }
-        };
-        factory.setConnectTimeout(5_000);
-        factory.setReadTimeout(8_000);
+        SimpleClientHttpRequestFactory factory = WindowsTrust.requestFactory(5_000, 8_000);
         // Photon is asked first but only waited for briefly: the public server is sometimes overloaded (10–20 s per
         // answer), and then Nominatim answers instead
-        SimpleClientHttpRequestFactory quick = new SimpleClientHttpRequestFactory() {
-            @Override
-            protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
-                super.prepareConnection(connection, httpMethod);
-                if (ssl != null && connection instanceof HttpsURLConnection https) {
-                    https.setSSLSocketFactory(ssl);
-                }
-            }
-        };
-        quick.setConnectTimeout(3_000);
-        quick.setReadTimeout(PHOTON_WAIT_MS);
+        SimpleClientHttpRequestFactory quick = WindowsTrust.requestFactory(3_000, PHOTON_WAIT_MS);
         // The typed text goes in as a URI variable and is fully encoded ("+" and "&" included)
         DefaultUriBuilderFactory uris = new DefaultUriBuilderFactory();
         uris.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.TEMPLATE_AND_VALUES);
@@ -641,56 +609,5 @@ public class OsmPlaces implements ExternalPlaces {
         String message = "OpenStreetMap " + service + " failed (" + reason + "): " + detail;
         log.warn(message.length() > 400 ? message.substring(0, 400) : message);
         return new ExternalPlacesException(reason, message, cause);
-    }
-
-    /**
-     * On Windows: trust Java's own certificates and those of the Windows store (where antivirus HTTPS scanning and
-     * company proxies put their root). Elsewhere, or if the store cannot be read: null, Java's default is used.
-     */
-    static SSLSocketFactory windowsAwareSsl() {
-        if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) {
-            return null;
-        }
-        try {
-            X509TrustManager java = trustManager(null);
-            KeyStore windows = KeyStore.getInstance("Windows-ROOT");
-            windows.load(null, null);
-            X509TrustManager system = trustManager(windows);
-            X509TrustManager both = new X509TrustManager() {
-                @Override
-                public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    java.checkClientTrusted(chain, authType);
-                }
-
-                @Override
-                public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    try {
-                        java.checkServerTrusted(chain, authType);
-                    } catch (CertificateException notInJava) {
-                        system.checkServerTrusted(chain, authType);
-                    }
-                }
-
-                @Override
-                public X509Certificate[] getAcceptedIssuers() {
-                    return Stream.concat(Arrays.stream(java.getAcceptedIssuers()),
-                            Arrays.stream(system.getAcceptedIssuers())).toArray(X509Certificate[]::new);
-                }
-            };
-            SSLContext context = SSLContext.getInstance("TLS");
-            context.init(null, new TrustManager[]{both}, null);
-            return context.getSocketFactory();
-        } catch (GeneralSecurityException | IOException e) {
-            log.warn("Could not read the Windows certificate store, using Java's certificates only: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private static X509TrustManager trustManager(KeyStore store) throws GeneralSecurityException {
-        TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        factory.init(store);
-        return Arrays.stream(factory.getTrustManagers()).filter(X509TrustManager.class::isInstance)
-                .map(X509TrustManager.class::cast).findFirst()
-                .orElseThrow(() -> new GeneralSecurityException("no X509TrustManager"));
     }
 }

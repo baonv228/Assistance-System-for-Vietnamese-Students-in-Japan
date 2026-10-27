@@ -3,10 +3,10 @@ package com.sep490.vsa.feature.moderation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sep490.vsa.common.http.WindowsTrust;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
@@ -18,7 +18,8 @@ import java.util.Map;
 /**
  * Checks photos with the OpenAI Moderation endpoint (model {@code omni-moderation-latest}), which is free to
  * use and accepts images. A photo is rejected when OpenAI marks it {@code flagged}. Network or quota problems
- * return ERROR so the post stays in PROCESSING and the retry job tries again.
+ * return ERROR so the post stays in PROCESSING and the retry job tries again. On Windows the client also trusts the
+ * Windows certificate store ({@link WindowsTrust}), for antivirus software that scans HTTPS.
  */
 public class OpenAiImageModerator implements ImageModerator {
 
@@ -29,11 +30,8 @@ public class OpenAiImageModerator implements ImageModerator {
     private final ObjectMapper json;
 
     public OpenAiImageModerator(String apiKey, String baseUrl, ObjectMapper json) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5_000);
-        factory.setReadTimeout(30_000);
         this.client = RestClient.builder()
-                .requestFactory(factory)
+                .requestFactory(WindowsTrust.requestFactory(5_000, 30_000))
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .build();

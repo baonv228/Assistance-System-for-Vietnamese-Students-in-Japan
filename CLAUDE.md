@@ -342,7 +342,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Implementations of `ExternalPlaces` (`ExternalPlacesConfig`): `DevOsmPlaces` (made-up Tokyo/Hanoi places, ids
   `DEV-…`, works offline) when `app.places.dev-fake=true`, `OsmPlaces` when `app.places.osm.enabled` (default true),
   else none (ASVSJ places only). Tests set `app.places.osm.enabled=false` or mock `ExternalPlaces`: no test calls the
-  internet. On Windows the client also trusts the Windows certificate store (antivirus HTTPS scanning).
+  internet. On Windows the client also trusts the Windows certificate store (antivirus HTTPS scanning;
+  `common/http/WindowsTrust`, also used by the OpenAI client).
 - Place chips (Blog, Hỏi-Đáp lists and detail) open the place on openstreetmap.org in a new tab (`ui.js osmUrl`: the
   OSM object from `osmId`, else a marker at lat/lng, else a name search). Post / question detail lists the linked
   places, each with "Chỉ đường" = a Google Maps directions URL (`googleDirectionsUrl`, no key, no Maps Platform call;
