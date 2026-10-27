@@ -73,7 +73,7 @@ function fill() {
     }
     els.content.maxLength = form.limits.contentMax;
     els.linkNote.textContent = form.canPostLinks
-        ? "" : "Chỉ tài khoản có tag định danh mới chèn được link.";
+        ? "" : "Chỉ tài khoản có tag định danh mới chèn được link hoặc đăng ảnh có mã QR.";
     renderQuota();
     renderStars();
     renderMedia();

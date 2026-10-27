@@ -32,6 +32,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `lock_minutes`).
 - Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation, and the text and
   speech that Gemini reads in photos and videos go through the same keyword and link rules (`feature/moderation`).
+  A photo with a QR code counts as a link (BR-22): members without an identity tag cannot post one (read on the server
+  when the photo is uploaded; in videos only Gemini sees a code, so without a Gemini key a code in a video is missed).
   The banned keywords include every prostitution and gambling word the team listed: solicitation and ads in
   `V5__prostitution_gambling_keywords.sql` ("kèo nhà cái", "fb88", "nhận bao nuôi", "パパ活"…) and, decided later, the
   general words in `V6__general_prostitution_gambling_keywords.sql` ("mại dâm", "cờ bạc", "cá cược", "nhà cái",
@@ -215,7 +217,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   out but a different accented word does not match, "vậy nóng" ≠ "vay nóng", and disguises such as "v.a.y n0ng",
   "vaynong", fullwidth or Cyrillic letters are caught; the list is cached 60 s and `AdminConfigService` clears it when
   a keyword is added or deleted. BR-22: links, VN/JP mobile numbers and Zalo/LINE/Telegram ids only for tagged
-  users, landlines and toll-free numbers allowed, no short links for anyone), `feature/user/PointService`,
+  users, landlines and toll-free numbers allowed, no short links for anyone; a photo holding a QR code counts as a
+  link wherever the code stands: `checkQrCodes` refuses it at once, under "images", for a member without an identity
+  tag ("Ảnh thứ N bạn vừa chọn có mã QR…") and for everyone when the code leads to a short link, `checkQrKeywords` when
+  it holds a banned keyword; posts, questions, edits, place reviews, pins and event reviews all run them),
+  `feature/user/PointService`,
   `feature/notification/NotificationService`,
   `common/settings/SystemSettings`, `common/text/VietnameseText`. Media URLs = `app.media.public-base-url`
   (default `/media/`) + `media.storage_key`.
@@ -228,8 +234,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   accepted when there are no files). "Địa điểm liên quan" uses `GET /api/places/search` (see Places below).
   `GET /api/blogs/scam-warnings[?placeId=]` lists places with a published "Cảnh báo lừa đảo" post, for the Map "!".
 - `BlogWriteService.create` checks in the agreed order and stops at the first failing step: fields/lengths and the
-  files (`BlogWriteRules`, outside the DB transaction) → links (`ContentFilter.checkLinks`) → new-account daily
-  limit (usage row locked, MSG44, 429) → banned keywords (`ContentFilter.checkKeywords`, MSG36). No media →
+  files (`BlogWriteRules`, outside the DB transaction) → links (`ContentFilter.checkLinks`, then `checkQrCodes` for
+  the QR codes of the photos) → new-account daily limit (usage row locked, MSG44, 429) → banned keywords
+  (`ContentFilter.checkKeywords`, MSG36, then `checkQrKeywords`). No media →
   PUBLISHED and +`PointService.BLOG_POST` (10, not confirmed in the SRS yet). Media → PROCESSING;
   `BlogPublishService` scans after commit (and a retry job every 2 min, 20 waiting posts a run in id order after the
   previous run's last one, from the oldest again after a short page, so stuck posts never starve newer ones): all PASSED → PUBLISHED + points,
@@ -247,7 +254,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - `feature/media`: `MediaService` re-encodes photos to JPG ≤ 1600 px (EXIF/GPS dropped; the page also shrinks them
   before upload, HEIC only where the browser opens it; at most 2 photos decoded at once on the server, a photo waits
   20 s for a slot then gets "Máy chủ đang xử lý nhiều ảnh…", and each is read subsampled so the decoded pixels
-  (bytes per pixel counted, e.g. 8 for 16-bit RGBA) stay ≤ 48 MB; all "cần chốt"), checks MP4/MOV length ≤ 30 s from the file itself
+  (bytes per pixel counted, e.g. 8 for 16-bit RGBA) stay ≤ 48 MB; all "cần chốt"; the QR codes of the resized photo
+  are read on the server with ZXing, `com.google.zxing:core`, `QrCodes`, into `Prepared.qrCodes`, no outside service:
+  only codes ZXing can actually read count, several per photo and at an angle too; the search is bounded, 1000 possible
+  corner squares or 3 s, because a photo crafted as a grid of corner squares kept ZXing's multi-code finder busy for
+  minutes or out of memory: such a photo is refused with `MediaService.QR_UNCHECKED`; a new member upload path must call
+  `ContentFilter.checkQrCodes`, photos kept on an edit are not read again), checks MP4/MOV length ≤ 30 s from the file itself
   (`Mp4Duration`, no ffprobe; fragmented MP4 refused; a box size past the end of the file counts as "to the end", so
   crafted 64-bit sizes cannot loop or reach a negative offset, and any parser error is the normal "Không đọc được video"
   message, never a 500). Videos are stored without their metadata, like photos without EXIF: the `udta`, `meta` and
@@ -277,9 +289,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   files over 5 MB go through the Files API and are deleted after the reading; videos read at MEDIA_RESOLUTION_HIGH).
   It answers `messageText` (captions, screenshot content without the phone/browser interface, a card or note held up to
   the camera), `sceneText` (signs, posters and menus where they hang: stored, never checked, because of パチンコ signs),
-  `speech` (no song lyrics or background sound), `qrCode` (any QR code it can see, however small) and flags (SEXUAL,
-  MINOR_SEXUAL, GRAPHIC_VIOLENCE, SELF_HARM, GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); ID, bank and card
-  numbers come back as "[số]". A flag or Google's
+  `speech` (no song lyrics or background sound), `qrCode` (any QR code it can see, however small: the second layer
+  after ZXing for photos, the only one for videos) and flags (SEXUAL, MINOR_SEXUAL, GRAPHIC_VIOLENCE, SELF_HARM,
+  GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); ID, bank and card numbers come back as "[số]". A flag or Google's
   own refusal → REJECTED; then the banned keywords line by line and BR-22 (`ContentFilter.linkProblem`) on messageText
   and speech for the file's owner; a QR code counts as a link. The Vietnamese reason (naming the keyword,
   link or number) is stored in `moderation_scans.detail` (`reason`, engine GEMINI, V9) and put into the rejection
@@ -378,8 +390,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Events are posted by Moderators only (UC-M07, page `/moderator/events`, `ModeratorEventController` under
   `/api/moderator/events`): title, dates, place name, optional position (picked on a Leaflet map or from an ASVSJ place
   with coordinates, `GET /api/moderator/events/places?q=`), cost, "Mẹo cho người đi" and an optional cover photo
-  (multipart part `event` + `cover`; re-encoded like any photo, marked PASSED without the scanner because staff upload
-  it). Empty place name → "Vị trí trên bản đồ" / "Chưa gắn vị trí", empty cost → "Chưa rõ". Delete is soft
+  (multipart part `event` + `cover`; re-encoded like any photo, marked PASSED without the scanner and without the QR
+  rule because staff upload it: real event posters carry official QR codes). Empty place name → "Vị trí trên bản đồ" / "Chưa gắn vị trí", empty cost → "Chưa rõ". Delete is soft
   (`deleted_at`): the event, its reviews and their photos are shown nowhere. Create/update/delete go to the activity log
   (`EVENT_CREATED|UPDATED|DELETED`, target EVENT). The answer says whether the pin is on the map yet (30-day window).
 - Public: `GET /api/events?q=` (soonest first, accents ignored; the page groups Đang diễn ra / Trong 30 ngày tới / Sau

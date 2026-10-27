@@ -484,6 +484,65 @@ class ContentFilterTest {
     }
 
     @Test
+    void aQrCodeInAPhotoCountsAsALinkWhereverItStands() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(1L))).thenReturn(0L);     // no tag
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(2L))).thenReturn(1L);     // Mentor
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+        List<List<String>> secondHasZalo = List.of(List.of(), List.of("http://zaloapp.com/qr/p/179af8age0av7"));
+
+        // No identity tag: refused, naming the photo, under "images"
+        assertThatThrownBy(() -> filter.checkQrCodes(secondHasZalo, 1)).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.getMessage()).isEqualTo("Ảnh thứ 2 bạn vừa chọn có mã QR. Chỉ tài khoản đã có tag định danh mới"
+                    + " được đăng ảnh có mã QR (mã QR được tính như link). Hãy cắt hoặc che mã QR rồi chọn lại ảnh.");
+            assertThat(e.getFields()).containsEntry("images", e.getMessage());
+        });
+        // Any code counts, a link or not (Wi-Fi, a contact card, plain text)
+        assertThatThrownBy(() -> filter.checkQrCodes(List.of(List.of("WIFI:S:Sakura;T:WPA;P:abc;;")), 1))
+                .hasMessageStartingWith("Ảnh thứ 1 bạn vừa chọn có mã QR.");
+        assertThatThrownBy(() -> filter.checkQrCodes(List.of(List.of("")), 1))
+                .hasMessageStartingWith("Ảnh thứ 1 bạn vừa chọn có mã QR.");
+        // With a tag the same photos pass
+        assertThatCode(() -> filter.checkQrCodes(secondHasZalo, 2)).doesNotThrowAnyException();
+        // A code leading to a shortened link: nobody, tagged or not
+        assertThatThrownBy(() -> filter.checkQrCodes(List.of(List.of("https://bit.ly/3abcXYZ")), 2))
+                .hasMessage("Ảnh thứ 1 bạn vừa chọn có mã QR dẫn tới link rút gọn. Không dùng link rút gọn"
+                        + " (bit.ly, tinyurl…).");
+        // Photos without a code, or no photo at all: nothing to check, the tag is not even looked up
+        JdbcTemplate quiet = mock(JdbcTemplate.class);
+        ContentFilter untouched = new ContentFilter(quiet, Clock.systemUTC());
+        assertThatCode(() -> untouched.checkQrCodes(List.of(List.of(), List.of()), 1)).doesNotThrowAnyException();
+        assertThatCode(() -> untouched.checkQrCodes(List.of(), 1)).doesNotThrowAnyException();
+        verify(quiet, times(0)).queryForObject(anyString(), eq(Long.class), eq(1L));
+    }
+
+    @Test
+    void theIdentityTagIsLookedUpOnceForAllThePhotosWithACode() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(2L))).thenReturn(1L);
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        filter.checkQrCodes(List.of(List.of("https://zalo.me/a"), List.of(), List.of("https://line.me/b")), 2);
+        verify(jdbc, times(1)).queryForObject(anyString(), eq(Long.class), eq(2L));
+    }
+
+    @Test
+    void aBannedKeywordInWhatAQrCodeHoldsIsRefused() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        doReturn(List.of("fb88", "vay nóng")).when(jdbc).query(anyString(), any(RowMapper.class));
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        assertThatThrownBy(() -> filter.checkQrKeywords(List.of(List.of(), List.of("https://fb88.com/khuyen-mai"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getMessage()).isEqualTo("Chưa đăng được: mã QR trong ảnh thứ 2 bạn vừa chọn chứa từ"
+                            + " khóa không được phép “fb88”. Hãy dùng ảnh khác.");
+                    assertThat(e.getFields()).containsEntry("images", e.getMessage());
+                });
+        assertThatCode(() -> filter.checkQrKeywords(List.of(List.of("https://zalo.me/g/abc"), List.of())))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void theKeywordListIsReadOnceAMinuteAndRightAfterTheAdminChangesIt() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         doReturn(List.of("vay nóng")).when(jdbc).query(anyString(), any(RowMapper.class));

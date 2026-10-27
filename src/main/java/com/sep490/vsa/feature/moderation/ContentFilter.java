@@ -36,7 +36,8 @@ import java.util.stream.Collectors;
  *       ("v.a.y n.ó.n.g", "vaynong", "v4y n0ng", fullwidth or Cyrillic letters). A keyword standing only inside an
  *       everyday phrase is not counted ("co bac nao biet" is "có bác nào biết", {@link #EVERYDAY_PHRASES}). Also
  *       checked: display names ({@link #checkDisplayName}).</li>
- *   <li>Links: only accounts with an identity tag may post links, and shortened links are never allowed.</li>
+ *   <li>Links: only accounts with an identity tag may post links, and shortened links are never allowed. A QR code in
+ *       a photo counts as a link ({@link #checkQrCodes}).</li>
  *   <li>Contact details, same rule as links: Vietnamese and Japanese mobile numbers and Zalo, LINE, Telegram… ids
  *       only from accounts with an identity tag. Landlines and toll-free numbers (a ward office) stay allowed.</li>
  * </ul>
@@ -50,6 +51,8 @@ public class ContentFilter {
     static final String LINK_NEEDS_TAG = "Chỉ tài khoản đã có tag định danh mới được chèn link.";
     static final String CONTACT_NEEDS_TAG =
             "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.";
+    static final String QR_NEEDS_TAG = "Chỉ tài khoản đã có tag định danh mới được đăng ảnh có mã QR (mã QR được tính"
+            + " như link). Hãy cắt hoặc che mã QR rồi chọn lại ảnh.";
 
     /** What the link and contact rule (BR-22) refuses in a text, with the message shown to the user. */
     public enum LinkProblem {
@@ -281,6 +284,50 @@ public class ContentFilter {
         linkProblem(text, authorId).ifPresent(problem -> {
             throw ApiException.badRequest(problem.message());
         });
+    }
+
+    /**
+     * Link rule (BR-22) for the QR codes read in the photos being uploaded ({@code qrCodes}: the codes of each photo, in
+     * the order the photos were chosen, see {@code MediaService.qrCodesOfPhotos}). A QR code counts as a link, wherever
+     * it stands in the photo: an account without an identity tag may not post a photo holding one, and nobody may post
+     * one that leads to a shortened link. Throws 400 under "images" naming the photo; the identity tag is looked up only
+     * when a photo holds a code.
+     */
+    public void checkQrCodes(List<List<String>> qrCodes, long authorId) {
+        Boolean tagged = null;
+        for (int i = 0; i < qrCodes.size(); i++) {
+            List<String> codes = qrCodes.get(i);
+            if (codes.isEmpty()) {
+                continue;
+            }
+            String photo = "Ảnh thứ " + (i + 1) + " bạn vừa chọn có mã QR";
+            if (codes.stream().flatMap(code -> links(code).stream()).anyMatch(ContentFilter::isShortened)) {
+                throw photoError(photo + " dẫn tới link rút gọn. Không dùng link rút gọn (bit.ly, tinyurl…).");
+            }
+            if (tagged == null) {
+                tagged = hasIdentityTag(authorId);
+            }
+            if (!tagged) {
+                throw photoError(photo + ". " + QR_NEEDS_TAG);
+            }
+        }
+    }
+
+    /** Banned keywords (MSG36) in what the QR codes of the photos hold (same order as {@link #checkQrCodes}). */
+    public void checkQrKeywords(List<List<String>> qrCodes) {
+        for (int i = 0; i < qrCodes.size(); i++) {
+            for (String code : qrCodes.get(i)) {
+                Optional<String> keyword = bannedKeyword(code);
+                if (keyword.isPresent()) {
+                    throw photoError("Chưa đăng được: mã QR trong ảnh thứ " + (i + 1) + " bạn vừa chọn chứa từ khóa"
+                            + " không được phép “" + keyword.get() + "”. Hãy dùng ảnh khác.");
+                }
+            }
+        }
+    }
+
+    private static ApiException photoError(String message) {
+        return ApiException.invalid(message, Map.of("images", message));
     }
 
     /**
