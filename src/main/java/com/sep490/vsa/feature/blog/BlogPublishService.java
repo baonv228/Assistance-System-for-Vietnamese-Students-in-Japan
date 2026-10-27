@@ -136,9 +136,10 @@ public class BlogPublishService {
         List<MediaState> files = repository.mediaStates(blogId);
         List<Long> rejected = files.stream().filter(m -> "REJECTED".equals(m.scanStatus())).map(MediaState::id).toList();
         if (!rejected.isEmpty()) {
+            String reason = scanner.rejectionReason(rejected).orElse("ảnh hoặc video vi phạm Quy tắc cộng đồng");
             repository.setStatus(blogId, "PROCESSING", "REJECTED");
             media.discard(rejected);
-            tellRejected(blog, "ảnh hoặc video vi phạm Quy tắc cộng đồng");
+            tellRejected(blog, reason);
             return;
         }
         boolean allPassed = files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()));

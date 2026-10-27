@@ -100,13 +100,14 @@ public class ReviewPublishService {
         List<Long> rejected = files.stream().filter(m -> "REJECTED".equals(m.scanStatus()))
                 .map(AttachedMedia::id).toList();
         if (!rejected.isEmpty()) {
+            String reason = scanner.rejectionReason(rejected).orElse("ảnh hoặc video vi phạm Quy tắc cộng đồng");
             repository.setStatus(reviewId, "PROCESSING", "REJECTED");
             repository.unlinkMedia(reviewId, rejected);
             media.discard(rejected);
             String place = review.placeId() == null ? "" : repository.place(review.placeId())
                     .map(p -> " về “" + p.name() + "”").orElse("");
             notifications.send(review.authorId(), NotificationService.CONTENT_REJECTED,
-                    "Review" + place + " chưa được đăng vì ảnh hoặc video vi phạm Quy tắc cộng đồng. "
+                    "Review" + place + " chưa được đăng vì " + reason + ". "
                             + "Bạn có thể sửa review rồi gửi lại.", "REVIEW", reviewId);
             return;
         }

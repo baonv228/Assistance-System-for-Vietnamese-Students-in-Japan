@@ -99,7 +99,8 @@ public class MediaService {
                            Integer durationSec) {
     }
 
-    public record MediaRow(Long id, Long ownerId, String type, String storageKey, String scanStatus, boolean deleted) {
+    public record MediaRow(Long id, Long ownerId, String type, String storageKey, String mimeType, String scanStatus,
+                           boolean deleted) {
     }
 
     private final JdbcTemplate jdbc;
@@ -285,9 +286,10 @@ public class MediaService {
 
     public Optional<MediaRow> find(long id) {
         return jdbc.query("""
-                SELECT id, owner_id, media_type, storage_key, scan_status, deleted_at IS NOT NULL FROM media WHERE id = ?""",
+                SELECT id, owner_id, media_type, storage_key, mime_type, scan_status, deleted_at IS NOT NULL
+                FROM media WHERE id = ?""",
                 (rs, i) -> new MediaRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getString(5),
-                        rs.getBoolean(6)), id).stream().findFirst();
+                        rs.getString(6), rs.getBoolean(7)), id).stream().findFirst();
     }
 
     public byte[] read(String storageKey) {

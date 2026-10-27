@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.moderation;
 
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.text.VietnameseText;
+import com.sep490.vsa.feature.moderation.ContentFilter.LinkProblem;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -436,6 +437,50 @@ class ContentFilterTest {
                 .hasMessage("Không dùng link rút gọn (bit.ly, tinyurl…). Hãy dán link đầy đủ.");
         assertThatCode(() -> filter.checkLinks("ib zalo 0901 234 567, LINE ID: scam123", 2)).doesNotThrowAnyException();
         assertThatCode(() -> filter.checkLinks("Văn phòng quận: 03-3802-3111", 1)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void linkProblemNamesWhatCheckLinksRefusesWithoutThrowing() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(1L))).thenReturn(0L);     // no tag
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(2L))).thenReturn(1L);     // Mentor
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        assertThat(filter.linkProblem("ib zalo 0901 234 567", 1)).contains(LinkProblem.CONTACT_NEEDS_TAG);
+        assertThat(filter.linkProblem("Gọi 090-1234-5678 nhé", 1)).contains(LinkProblem.CONTACT_NEEDS_TAG);
+        assertThat(filter.linkProblem("Xem nhanvisa.online", 1)).contains(LinkProblem.LINK_NEEDS_TAG);
+        // A link and a phone number: the link is named, as checkLinks does
+        assertThat(filter.linkProblem("Xem nhanvisa.online, zalo 0901 234 567", 1))
+                .contains(LinkProblem.LINK_NEEDS_TAG);
+        // Short links: nobody, tagged or not
+        assertThat(filter.linkProblem("bit . ly/abc", 1)).contains(LinkProblem.SHORT_LINK);
+        assertThat(filter.linkProblem("bit . ly/abc", 2)).contains(LinkProblem.SHORT_LINK);
+        assertThat(filter.linkProblem("ib zalo 0901 234 567, LINE ID: scam123, https://example.com", 2)).isEmpty();
+        assertThat(filter.linkProblem("Văn phòng quận: 03-3802-3111", 1)).isEmpty();
+        assertThat(filter.linkProblem("", 1)).isEmpty();
+
+        // The messages are the ones checkLinks throws
+        assertThat(LinkProblem.SHORT_LINK.message())
+                .isEqualTo("Không dùng link rút gọn (bit.ly, tinyurl…). Hãy dán link đầy đủ.");
+        assertThat(LinkProblem.LINK_NEEDS_TAG.message())
+                .isEqualTo("Chỉ tài khoản đã có tag định danh mới được chèn link.");
+        assertThat(LinkProblem.CONTACT_NEEDS_TAG.message()).isEqualTo(
+                "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.");
+    }
+
+    @Test
+    void theIdentityTagIsLookedUpOnlyWhenALinkOrContactIsFound() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(1L))).thenReturn(0L);
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        assertThat(filter.linkProblem("Hoa anh đào ở Ueno nở rồi", 1)).isEmpty();
+        assertThat(filter.linkProblem("Xem https://bit.ly/abc", 1)).contains(LinkProblem.SHORT_LINK);
+        assertThatCode(() -> filter.checkLinks("Hoa anh đào ở Ueno nở rồi", 1)).doesNotThrowAnyException();
+        verify(jdbc, times(0)).queryForObject(anyString(), eq(Long.class), eq(1L));
+
+        assertThat(filter.linkProblem("LINE ID: scam123", 1)).contains(LinkProblem.CONTACT_NEEDS_TAG);
+        verify(jdbc, times(1)).queryForObject(anyString(), eq(Long.class), eq(1L));
     }
 
     @Test

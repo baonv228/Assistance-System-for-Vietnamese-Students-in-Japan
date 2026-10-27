@@ -30,7 +30,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (`BCryptPasswordEncoder`), never store or log plain passwords. Email verification and password reset use
   one-time tokens stored as SHA-256 hashes. 5 wrong passwords → lock 30 minutes (Admin settings `lock_attempts` /
   `lock_minutes`).
-- Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation.
+- Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation, and the text and
+  speech that Gemini reads in photos and videos go through the same keyword and link rules (`feature/moderation`).
   The banned keywords include every prostitution and gambling word the team listed: solicitation and ads in
   `V5__prostitution_gambling_keywords.sql` ("kèo nhà cái", "fb88", "nhận bao nuôi", "パパ活"…) and, decided later, the
   general words in `V6__general_prostitution_gambling_keywords.sql` ("mại dâm", "cờ bạc", "cá cược", "nhà cái",
@@ -268,13 +269,33 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
   event is not deleted, and the cover of an event that is not deleted. A Moderator queue adds its rule in
   `MediaAccess`.
-- `feature/moderation`: `MediaScanService` + `ImageModerator`. With `app.moderation.openai.api-key` (or env
-  `OPENAI_API_KEY`) photos go to OpenAI Moderation `omni-moderation-latest` (free); without a key
-  `DevImageModerator` answers `app.moderation.dev-result` (PASS, or FLAG to try the rejected flow). Scanner errors
-  keep the post PROCESSING and retry with a growing pause (1 → 60 min). Videos are not frame-scanned (the free
-  endpoint reads images only); they pass once type, size and length are checked.
+- `feature/moderation`: `MediaScanService` + `ImageModerator` + `MediaReader`. Photos first go to OpenAI Moderation
+  `omni-moderation-latest` (free; `app.moderation.openai.api-key` or env `OPENAI_API_KEY`; without a key
+  `DevImageModerator` answers `app.moderation.dev-result`, PASS or FLAG). Then photos and videos go to
+  `GeminiMediaReader` (`app.moderation.gemini.api-key` or env `GEMINI_API_KEY`, free tier of Google AI Studio, model
+  `app.moderation.gemini.model` = `gemini-3.5-flash-lite`; REST `generateContent` v1beta with a JSON schema, no SDK;
+  files over 5 MB go through the Files API and are deleted after the reading; videos read at MEDIA_RESOLUTION_HIGH).
+  It answers `messageText` (captions, screenshot content without the phone/browser interface, a card or note held up to
+  the camera), `sceneText` (signs, posters and menus where they hang: stored, never checked, because of パチンコ signs),
+  `speech` (no song lyrics or background sound), `qrCode` (any QR code it can see, however small) and flags (SEXUAL,
+  MINOR_SEXUAL, GRAPHIC_VIOLENCE, SELF_HARM, GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); ID, bank and card
+  numbers come back as "[số]". A flag or Google's
+  own refusal → REJECTED; then the banned keywords line by line and BR-22 (`ContentFilter.linkProblem`) on messageText
+  and speech for the file's owner; a QR code counts as a link. The Vietnamese reason (naming the keyword,
+  link or number) is stored in `moderation_scans.detail` (`reason`, engine GEMINI, V9) and put into the rejection
+  notification (`MediaScanService.rejectionReason`); pages still show the generic text. A photo OpenAI passed is not
+  sent again when only Gemini failed. Google answered but cannot read the file (a song, too much text, a file it could
+  not process: UNREADABLE) → tried again, refused the third time. PASS rows keep only text lengths; FLAG rows keep the
+  texts and the reason, both removed after 30 days (`forgetOldTexts`, 03:40 Japan time). At most `app.moderation.gemini.requests-per-minute`
+  (10) requests a minute for the server, and no request for 2 minutes after Google failed (BUSY: no row, the next run
+  tries again); other errors keep the post PROCESSING and retry with a growing pause (1 → 60 min). Requests are counted
+  in `api_usage` (`GEMINI_GENERATE`, `GEMINI_FILE_UPLOAD`). Without a Gemini key the step is skipped (videos pass once
+  type, size and length are checked, as before, so a QR code in a video is not caught) or `DevMediaReader` answers
+  `app.moderation.dev-media-text` (e.g. fb88,
+  to try the rejection). Free tier: Google may use what is sent to improve its products, and its reviewers may read it.
 - `BlogWriteFlowTest` runs against its own database `asvsj_test` (created by Flyway on the first run) with the
-  local credentials; it mocks the image scanner.
+  local credentials; it mocks the image scanner. No test calls Gemini: `src/test/resources/config/application-local.properties`
+  blanks the key for every test, `MediaScanFlowTest` mocks the `MediaReader`, `GeminiMediaReaderTest` uses a fake server.
 
 ## Hỏi-Đáp (feature/qa)
 - Questions are `blogs` rows with `blog_type = 'QA'`; answers are top-level `comments`, replies hang under them.
@@ -343,7 +364,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `DEV-…`, works offline) when `app.places.dev-fake=true`, `OsmPlaces` when `app.places.osm.enabled` (default true),
   else none (ASVSJ places only). Tests set `app.places.osm.enabled=false` or mock `ExternalPlaces`: no test calls the
   internet. On Windows the client also trusts the Windows certificate store (antivirus HTTPS scanning;
-  `common/http/WindowsTrust`, also used by the OpenAI client).
+  `common/http/WindowsTrust`, also used by the OpenAI and Gemini clients).
 - Place chips (Blog, Hỏi-Đáp lists and detail) open the place on openstreetmap.org in a new tab (`ui.js osmUrl`: the
   OSM object from `osmId`, else a marker at lat/lng, else a name search). Post / question detail lists the linked
   places, each with "Chỉ đường" = a Google Maps directions URL (`googleDirectionsUrl`, no key, no Maps Platform call;
@@ -443,6 +464,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   from outside Japan; `/api/map` sends it as `devLocation`.
 
 ## Working notes
+- `spring.flyway.out-of-order=true`: migrations are written on several branches at once (V9 here while the HandBook
+  branch has V7/V8), so a database that already ran a higher version still applies a lower one merged later.
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.

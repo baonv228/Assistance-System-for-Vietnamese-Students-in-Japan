@@ -51,6 +51,26 @@ public class ContentFilter {
     static final String CONTACT_NEEDS_TAG =
             "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.";
 
+    /** What the link and contact rule (BR-22) refuses in a text, with the message shown to the user. */
+    public enum LinkProblem {
+        /** A shortened link: nobody may post one. */
+        SHORT_LINK(ContentFilter.SHORT_LINK),
+        /** A link from an account without an identity tag. */
+        LINK_NEEDS_TAG(ContentFilter.LINK_NEEDS_TAG),
+        /** A mobile number or chat-app id (and no link) from an account without an identity tag. */
+        CONTACT_NEEDS_TAG(ContentFilter.CONTACT_NEEDS_TAG);
+
+        private final String message;
+
+        LinkProblem(String message) {
+            this.message = message;
+        }
+
+        public String message() {
+            return message;
+        }
+    }
+
     // ---------------------------------------------------------------- normalised copy
 
     /** Cyrillic and Greek letters that look like Latin ones ("vаy" with a Cyrillic а), read as that letter. Cần chốt. */
@@ -255,16 +275,27 @@ public class ContentFilter {
 
     /**
      * Link and contact rule (BR-22): no shortened links for anyone; links, mobile numbers and chat-app ids only from
-     * accounts with an identity tag.
+     * accounts with an identity tag. Throws 400 with {@link LinkProblem#message()}.
      */
     public void checkLinks(String text, long authorId) {
+        linkProblem(text, authorId).ifPresent(problem -> {
+            throw ApiException.badRequest(problem.message());
+        });
+    }
+
+    /**
+     * {@link #checkLinks} without throwing, for text that is not typed by the user (the text read from a photo or
+     * video). The identity tag is looked up only when a link or contact detail was found.
+     */
+    public Optional<LinkProblem> linkProblem(String text, long authorId) {
         List<String> links = links(text);
         if (links.stream().anyMatch(ContentFilter::isShortened)) {
-            throw ApiException.badRequest(SHORT_LINK);
+            return Optional.of(LinkProblem.SHORT_LINK);
         }
         if ((!links.isEmpty() || !contacts(text).isEmpty()) && !hasIdentityTag(authorId)) {
-            throw ApiException.badRequest(links.isEmpty() ? CONTACT_NEEDS_TAG : LINK_NEEDS_TAG);
+            return Optional.of(links.isEmpty() ? LinkProblem.CONTACT_NEEDS_TAG : LinkProblem.LINK_NEEDS_TAG);
         }
+        return Optional.empty();
     }
 
     /** The first banned keyword found in the text, as the Admin wrote it. */
