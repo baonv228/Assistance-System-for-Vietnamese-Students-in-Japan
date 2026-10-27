@@ -120,7 +120,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
-  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
+  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -267,7 +267,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   nothing, keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
   Security's firewall). Content type from `media.mime_type`, `nosniff`, Range requests and 304 work. Only registered
   while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
-  event is not deleted, and the cover of an event that is not deleted. A Moderator queue adds its rule in
+  event is not deleted, and the cover of an event that is not deleted. A Moderator sees PASSED files of a pending pin's review ("Ghim mới"). A Moderator queue adds its rule in
   `MediaAccess`.
 - `feature/moderation`: `MediaScanService` + `ImageModerator`. With `app.moderation.openai.api-key` (or env
   `OPENAI_API_KEY`) photos go to OpenAI Moderation `omni-moderation-latest` (free); without a key
@@ -441,6 +441,53 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - "Báo đã đóng cửa" (UC-U20): `POST /api/map/places/{id}/closed-report` → `{count, threshold, queued}`; one row per
   user and place (`place_closed_reports`, 409 on a second), ACTIVE and not closed places only; at
   `closed_report_threshold` (5) the place waits for a Moderator, the label is never set automatically.
+- Moderator place pages (feature/place `ModeratorPlaceController`, `PinModerationService`, `PlaceModerationRepository`,
+  `PlaceModerationDtos`; pages use `components/staff-desk.js`, `lib/mod-place-ui.js` toast + small Leaflet map,
+  `assets/css/mod-places.css`). Every action locks the place row (`FOR UPDATE`), writes `place_history`, the activity
+  log (target PLACE) and, for a community pin, a notification; a place another Moderator just handled → 409.
+  - "Ghim mới" `/moderator/pins` (UC-M05, UC-M06): `GET /api/moderator/pins?category=&duplicates=` (PENDING USER pins,
+    oldest first, approved places within 200 m, "Có thể trùng" = a squashed name contains / is contained in another),
+    `GET /api/moderator/pins/{id}` (names, first review with its PASSED photos, places within 200 m with distance and
+    review count, PIN_REJECT reasons, categories, `scanning`), `POST …/approve` `{nameVi, categoryId}` (ACTIVE, +15
+    `PointService.PIN_APPROVED` reason PIN_APPROVED ref PLACE, notification "Ghim “…” đã được duyệt. +15 điểm."; 409
+    while the first review's files are still scanned), `POST …/reject` `{reasonId}` (REJECTED + `reject_reason`, the
+    first review deleted like its author would: report cases closed, points withdrawn, files discarded), `POST …/merge`
+    `{targetId}` (an ACTIVE place within 200 m; the first review moves there unless the author already has one there, then
+    it is deleted; pin MERGED + `merged_into_id`, saves moved, `place_merges` row, MERGED history on both).
+    `MediaAccess` lets an ACTIVE Moderator see PASSED files of a review of a PENDING place (audience STAFF, no-store).
+  - "Báo đóng cửa" `/moderator/closed` (UC-M04 AF4/AF5): `GET /api/moderator/closed` (`waiting` = ACTIVE open places with
+    ≥ `closed_report_threshold` unresolved reports, most first; `closed` = labelled places), `PUT
+    /api/moderator/places/{id}/closed` `{closed}` (true: label + reports kept as resolved, CLOSED history; false: label
+    off, reports deleted so people can report again, REOPENED history), `DELETE /api/moderator/places/{id}/closed-reports`
+    ("Vẫn mở cửa, xóa các báo cáo").
+  - "Địa điểm" `/moderator/places` (UC-M07, UC-M08; `PlaceAdminService`, page `mod-places.js`, `?id=` opens a place,
+    `?new=1` "Thêm địa điểm"): `GET /api/moderator/places?q=&category=&source=&status=&area=&page=` (10 a page, newest
+    first, `q` over the names and address with accents ignored; source MODERATOR also lists TEAM), `GET …/{id}` (details,
+    counts, history as ready text "Sửa thông tin · Danh mục: Quán ăn → Siêu thị", categories, areas, PLACE_REMOVE
+    reasons), `GET /api/moderator/places/osm-search?q=` (= `PlaceService.search`: Senpai ơi places with an id → "Mở",
+    OSM places → "Chọn"), `GET …/osm/{externalId}` (`PlaceService.resolve`: `existingId`, or a filled-in form with the
+    category from `category_osm_tags`), `POST /api/moderator/places` and `PUT …/{id}` `{osmId?, nameVi, nameJa, nameEn,
+    address, categoryId, areaId, lat, lng, confirmDuplicate}` (required: name "Hãy nhập tên hiển thị.", category,
+    position "Hãy bấm lên bản đồ để đặt vị trí."; a similar ACTIVE name within 200 m answers `duplicates` without
+    `placeId` until `confirmDuplicate`; new places are ACTIVE at once, source OSM with `osm_id` or MODERATOR; an OSM id
+    Senpai ơi has answers that place; edits keep the OSM id, never write to OpenStreetMap, history `{changes: [{field,
+    from, to}]}`, "Không có thay đổi nào." when nothing changed, pin authors notified), `POST …/{id}/remove`
+    `{reasonId, note}` (ACTIVE → REMOVED, `removed_reason` = "reason: note", hidden everywhere, nothing deleted) and
+    `POST …/{id}/restore`. The closed label uses `PUT …/{id}/closed`.
+  - "Gộp trùng lặp" `/moderator/merge` (UC-M09; `PlaceMergeService`, `PlaceMergeRepository`, page `mod-merge.js`,
+    `?a=&b=` compares, `?a=` = "Gộp với địa điểm khác" from a place): the queue is worked out on request (no table, so
+    it is always current): ACTIVE places ≤ 200 m apart with similar squashed names, not in `duplicate_dismissals`;
+    HIGH ("Cao") = same category, ≤ 50 m and the same Japanese or English name, else MEDIUM; HIGH first, then distance,
+    10 a page (`GET /api/moderator/merges?page=`). `POST /api/moderator/merges/dismiss` `{aId, bId}` = "Không trùng".
+    `GET …/merges/compare?a=&b=` (both sides, counts of reviews/saves/posts/guide items, people with a review on both),
+    `GET …/merges/search?q=&near=` (every word must match, nearest first). `POST /api/moderator/merges` `{keptId,
+    mergedId, fields: {nameVi|nameJa|nameEn|address|categoryId|areaId|position: KEPT|MERGED}, confirmed}` (400 without
+    `confirmed`): both rows locked lower id first; a person with a review on both keeps the newer one (no points taken);
+    reviews, saves, post links, guide items and open closed reports move; places merged into the merged one are pointed
+    at the kept one (links follow one step); the merged place becomes MERGED and keeps its `osm_id` (OSM search then
+    shows the kept place); `place_merges` row, MERGED history on both, pin authors notified. Final, no undo.
+    The settings `duplicate_warn_radius_m` / `merge_suggest_radius_m` are still "Chưa áp dụng": 200 m / 50 m are
+    constants (`PlaceMergeService`, `PinModerationService`).
 - `app.map.dev-location=lat,lng,label` (application-local only) makes "Vị trí của tôi" return a fixed point, for testing
   from outside Japan; `/api/map` sends it as `devLocation`.
 

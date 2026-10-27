@@ -46,6 +46,10 @@ public final class CleanUrls {
         PAGES.put("/events", "/pages/events.html");
         PAGES.put("/moderator", "/pages/moderator/index.html");
         PAGES.put("/moderator/events", "/pages/moderator/events.html");
+        PAGES.put("/moderator/pins", "/pages/moderator/pins.html");
+        PAGES.put("/moderator/closed", "/pages/moderator/closed.html");
+        PAGES.put("/moderator/places", "/pages/moderator/places.html");
+        PAGES.put("/moderator/merge", "/pages/moderator/merge.html");
         PAGES.put("/academic", "/pages/academic/index.html");
         PAGES.put("/admin", "/pages/admin/index.html");
         PAGES.put("/admin/users", "/pages/admin/users.html");

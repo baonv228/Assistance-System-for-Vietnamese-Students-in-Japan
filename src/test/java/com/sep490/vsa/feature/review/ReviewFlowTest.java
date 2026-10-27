@@ -114,6 +114,11 @@ class ReviewFlowTest {
         send(post("/api/reviews"), author, "{\"placeId\":" + place + ",\"rating\":5,\"content\":\"Lần hai thử xem sao.\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(ReviewService.ALREADY));
 
+        // Saved without changing anything: nothing saved, no "đã sửa" (UC-U17 AF3)
+        send(put("/api/reviews/" + id), author, "{\"rating\":4,\"content\":\"Quán ngon, chủ quán dễ thương.\",\"keepMediaIds\":[]}")
+                .andExpect(jsonPath("$.message").value("Không có thay đổi nào."));
+        assertThat(jdbc.queryForObject("SELECT is_edited FROM reviews WHERE id = ?", Boolean.class, id)).isFalse();
+
         // Edit: stars and text change, "đã sửa", no new points
         send(put("/api/reviews/" + id), author, "{\"rating\":2,\"content\":\"Đổi ý rồi, hôm nay phục vụ chậm.\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("PUBLISHED"));

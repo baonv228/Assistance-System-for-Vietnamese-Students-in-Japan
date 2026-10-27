@@ -191,7 +191,36 @@ export const apiClient = {
     modCreateEvent: (formData) => request("/moderator/events", { method: "POST", body: formData }),
     modUpdateEvent: (id, formData) => request(`/moderator/events/${id}`, { method: "PUT", body: formData }),
     modDeleteEvent: (id) => request(`/moderator/events/${id}`, { method: "DELETE" }),
-    modEventPlaces: (q) => request(`/moderator/events/places?${toQuery({ q })}`)
+    modEventPlaces: (q) => request(`/moderator/events/places?${toQuery({ q })}`),
+
+    // Moderator places. "Ghim mới" (UC-M05, UC-M06): { items, categories }, a pin's details, then approve
+    // ({nameVi, categoryId}), reject ({reasonId}) or merge ({targetId}). "Báo đóng cửa": { waiting, closed, threshold }
+    modPins: (params = {}) => request(`/moderator/pins?${toQuery(params)}`),
+    modPin: (id) => request(`/moderator/pins/${id}`),
+    modApprovePin: (id, body) => post(`/moderator/pins/${id}/approve`, body),
+    modRejectPin: (id, reasonId) => post(`/moderator/pins/${id}/reject`, { reasonId }),
+    modMergePin: (id, targetId) => post(`/moderator/pins/${id}/merge`, { targetId }),
+    modClosed: () => request("/moderator/closed"),
+    modSetClosed: (id, closed) => request(`/moderator/places/${id}/closed`, { method: "PUT", body: JSON.stringify({ closed }) }),
+    modKeepOpen: (id) => request(`/moderator/places/${id}/closed-reports`, { method: "DELETE" }),
+    // "Địa điểm" (UC-M07, UC-M08). params: { q, category, source, status, area, page }. createPlace / updatePlace take
+    // { osmId?, nameVi, nameJa, nameEn, address, categoryId, areaId, lat, lng, confirmDuplicate } and answer
+    // { message, placeId, duplicates } (duplicates and no placeId = not saved, "Có thể trùng")
+    modPlaces: (params = {}) => request(`/moderator/places?${toQuery(params)}`),
+    modPlace: (id) => request(`/moderator/places/${id}`),
+    modSearchOsm: (q) => request(`/moderator/places/osm-search?${toQuery({ q })}`),
+    modPickOsm: (externalId) => request(`/moderator/places/osm/${encodeURIComponent(externalId)}`),
+    modCreatePlace: (body) => post("/moderator/places", body),
+    modUpdatePlace: (id, body) => request(`/moderator/places/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    modRemovePlace: (id, reasonId, note) => post(`/moderator/places/${id}/remove`, { reasonId, note }),
+    modRestorePlace: (id) => post(`/moderator/places/${id}/restore`),
+    // "Gộp trùng lặp" (UC-M09): queue { items: [{ a, b, distance, level }], page, size, total }; compare { a, b, distance,
+    // level, sameAuthors }; merge { keptId, mergedId, fields: { nameVi: "KEPT" | "MERGED", … }, confirmed }
+    modMerges: (page = 0) => request(`/moderator/merges?${toQuery({ page })}`),
+    modMergeCompare: (a, b) => request(`/moderator/merges/compare?${toQuery({ a, b })}`),
+    modMergeSearch: (q, near) => request(`/moderator/merges/search?${toQuery({ q, near })}`),
+    modMerge: (body) => post("/moderator/merges", body),
+    modDismissPair: (aId, bId) => post("/moderator/merges/dismiss", { aId, bId })
 };
 
 /** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */

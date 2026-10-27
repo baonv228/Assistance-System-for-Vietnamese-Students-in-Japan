@@ -19,6 +19,8 @@ import java.time.Clock;
 public class PointService {
 
     public static final int BEST_ANSWER = 5;
+    /** A community pin approved by a Moderator (reason PIN_APPROVED, ref PLACE), SRS point list. */
+    public static final int PIN_APPROVED = 15;
     /** A published place or event review (reason REVIEW_CREATED, ref REVIEW), SRS 1.1 (8), paid the first time it is published. */
     public static final int REVIEW = 10;
     /**

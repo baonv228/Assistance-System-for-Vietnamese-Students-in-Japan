@@ -1107,9 +1107,10 @@ async function submitWrite() {
         w.images.forEach((f) => URL.revokeObjectURL(f.preview));
         state.write = null;
         els.panel.classList.remove("full");
-        toast(saved.status === "PROCESSING"
-            ? "Đã gửi. Ảnh/video đang được quét, review hiện cho mọi người sau khi đạt."
-            : w.mode === "edit" ? "Đã lưu thay đổi." : "Đã đăng review. +10 điểm.");
+        toast(saved.changed === false ? "Không có thay đổi nào."
+            : saved.status === "PROCESSING"
+                ? "Đã gửi. Ảnh/video đang được quét, review hiện cho mọi người sau khi đạt."
+                : w.mode === "edit" ? "Đã lưu thay đổi." : "Đã đăng review. +10 điểm.");
         await refreshPlaces();
         resultLayer.clearLayers();
         state.results = null;
