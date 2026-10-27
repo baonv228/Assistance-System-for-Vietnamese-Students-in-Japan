@@ -47,7 +47,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -372,6 +374,12 @@ class ScanNotificationFlowTest {
         long locked = user("USER");
         jdbc.update("UPDATE users SET status = 'LOCKED' WHERE id = ?", locked);
         mvc.perform(get("/api/me/notifications").session(session(locked))).andExpect(status().isUnauthorized());
+
+        // The page: guests go to sign in, members get the page
+        mvc.perform(get("/notifications")).andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("**/login"));
+        mvc.perform(get("/notifications").session(session(owner))).andExpect(status().isOk())
+                .andExpect(forwardedUrl("/pages/notifications.html"));
     }
 
     @Test

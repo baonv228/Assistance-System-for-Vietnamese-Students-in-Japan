@@ -1,0 +1,33 @@
+/* "Thông báo" page. Load after site.css. */
+.notif-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.notif {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: inherit;
+    text-decoration: none;
+}
+a.notif:hover { border-color: var(--brand); }
+a.notif:focus-visible { outline: none; box-shadow: var(--focus); }
+.notif.unread { background: var(--brand-soft); border-color: var(--brand); }
+.notif-ic {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--muted);
+}
+.notif-ic.ok { background: var(--ok-soft); color: var(--ok); }
+.notif-ic.crit { background: var(--crit-soft); color: var(--crit); }
+.notif-ic.br { background: var(--brand-soft); color: var(--brand-text); }
+.notif-ic.lan { background: var(--lantern-soft); color: var(--lantern-text); }
+.notif.unread .notif-ic.br { background: var(--surface); }
+.notif-txt { flex: 1; display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.notif-dot { flex: none; width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: var(--brand); }
