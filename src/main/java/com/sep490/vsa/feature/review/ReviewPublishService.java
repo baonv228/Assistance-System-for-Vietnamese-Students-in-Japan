@@ -59,7 +59,7 @@ public class ReviewPublishService {
         process(reviewId);
     }
 
-    /** Every 2 minutes: reviews still PROCESSING one minute after they were sent. */
+    /** Every 2 minutes: place reviews still PROCESSING one minute after they were sent (not event reviews). */
     @Scheduled(fixedDelayString = "${app.moderation.retry-delay-ms:120000}",
             initialDelayString = "${app.moderation.retry-initial-delay-ms:30000}")
     public void retryPending() {
