@@ -68,6 +68,8 @@ class ReviewFlowTest {
     private MockMvc mvc;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private ReviewRepository repository;
     @MockBean
     private ExternalPlaces map;
     @MockBean
@@ -246,6 +248,37 @@ class ReviewFlowTest {
         publisher.process(id);
         assertThat(jdbc.queryForObject("SELECT status FROM reviews WHERE id = ?", String.class, id))
                 .isEqualTo("PROCESSING");
+    }
+
+    @Test
+    void theRetryJobOfPlaceReviewsLeavesEventReviewsToTheirOwnJob() {
+        String title = "Lễ hội " + word;
+        jdbc.update("""
+                INSERT INTO events (title, start_date, end_date, location_name, created_by)
+                VALUES (?, CURRENT_DATE, CURRENT_DATE, 'Công viên Ueno', ?)""", title, author);
+        long event = jdbc.queryForObject("SELECT id FROM events WHERE title = ?", Long.class, title);
+        // Both waiting for their scan since long ago, so they come first in the job's order
+        Timestamp longAgo = Timestamp.from(Instant.parse("2001-01-01T00:00:00Z"));
+        jdbc.update("""
+                INSERT INTO reviews (author_id, place_id, rating, content, status, created_at, updated_at)
+                VALUES (?, ?, 5, 'Review của quán, đang chờ quét ảnh.', 'PROCESSING', ?, ?)""",
+                author, place, longAgo, longAgo);
+        long placeReview = jdbc.queryForObject("SELECT id FROM reviews WHERE author_id = ? AND place_id = ?",
+                Long.class, author, place);
+        jdbc.update("""
+                INSERT INTO reviews (author_id, event_id, event_year, rating, content, status, created_at, updated_at)
+                VALUES (?, ?, YEAR(CURRENT_DATE), 5, 'Review lễ hội, đang chờ quét ảnh.', 'PROCESSING', ?, ?)""",
+                author, event, longAgo, longAgo);
+        long eventReview = jdbc.queryForObject("SELECT id FROM reviews WHERE author_id = ? AND event_id = ?",
+                Long.class, author, event);
+        try {
+            List<Long> waiting = repository.processingIds(Instant.now().minus(Duration.ofMinutes(1)), 1_000);
+
+            assertThat(waiting).contains(placeReview).doesNotContain(eventReview);
+        } finally {
+            jdbc.update("DELETE FROM reviews WHERE id IN (?, ?)", placeReview, eventReview);
+            jdbc.update("UPDATE events SET deleted_at = UTC_TIMESTAMP() WHERE id = ?", event);
+        }
     }
 
     // ---------------------------------------------------------------- helpers
