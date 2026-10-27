@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.moderation;
 
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.text.VietnameseText;
+import com.sep490.vsa.feature.moderation.ContentFilter.LinkProblem;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -211,6 +212,9 @@ class ContentFilterTest {
         texts.put("Mình làm thêm ở quán pachinko được không?", "pachinko");
         texts.put("パチンコ店でバイト", "パチンコ");
         texts.put("Du học sinh không được làm thêm ở quán 風俗", "風俗");
+        texts.put("風俗店で働く", "風俗");
+        texts.put("風俗画像を集めています", "風俗");
+        texts.put("Tuyển nữ làm 風俗営業, lương cao", "風俗");
         texts.put("援交の募集", "援交");
         texts.put("売春は違法", "売春");
         texts.put("Gái gọi Shinjuku", "gái gọi");
@@ -276,7 +280,10 @@ class ContentFilterTest {
                 "Massage ở Nhật giá bao nhiêu?", "Cảnh báo: có người gạ tình trong nhóm",
                 "Kích thước vali bao nhiêu thì mang lên máy bay?", "Vé xổ số ở Nhật mua ở đâu?",
                 "Chơi Pokémon GO ở Ueno", "Bác sĩ khám bệnh lây qua đường tình dục ở đâu?",
-                "留学生支援交流会に参加しました", "日本の風俗習慣を学ぶ", "ボディソープを買う", "SIMスロットが壊れた");
+                "留学生支援交流会に参加しました", "日本の風俗習慣を学ぶ", "ボディソープを買う", "SIMスロットが壊れた",
+                // The work permit printed on the back of a working student's residence card
+                "資格外活動許可 許可：原則週28時間以内・風俗営業等の従事を除く",
+                "Thẻ ngoại kiều ghi 資格外活動許可（風俗営業等の従事を除く）");
         for (String text : ordinary) {
             assertThat(ContentFilter.findKeyword(text, list)).as(text).isEmpty();
         }
@@ -430,6 +437,109 @@ class ContentFilterTest {
                 .hasMessage("Không dùng link rút gọn (bit.ly, tinyurl…). Hãy dán link đầy đủ.");
         assertThatCode(() -> filter.checkLinks("ib zalo 0901 234 567, LINE ID: scam123", 2)).doesNotThrowAnyException();
         assertThatCode(() -> filter.checkLinks("Văn phòng quận: 03-3802-3111", 1)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void linkProblemNamesWhatCheckLinksRefusesWithoutThrowing() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(1L))).thenReturn(0L);     // no tag
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(2L))).thenReturn(1L);     // Mentor
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        assertThat(filter.linkProblem("ib zalo 0901 234 567", 1)).contains(LinkProblem.CONTACT_NEEDS_TAG);
+        assertThat(filter.linkProblem("Gọi 090-1234-5678 nhé", 1)).contains(LinkProblem.CONTACT_NEEDS_TAG);
+        assertThat(filter.linkProblem("Xem nhanvisa.online", 1)).contains(LinkProblem.LINK_NEEDS_TAG);
+        // A link and a phone number: the link is named, as checkLinks does
+        assertThat(filter.linkProblem("Xem nhanvisa.online, zalo 0901 234 567", 1))
+                .contains(LinkProblem.LINK_NEEDS_TAG);
+        // Short links: nobody, tagged or not
+        assertThat(filter.linkProblem("bit . ly/abc", 1)).contains(LinkProblem.SHORT_LINK);
+        assertThat(filter.linkProblem("bit . ly/abc", 2)).contains(LinkProblem.SHORT_LINK);
+        assertThat(filter.linkProblem("ib zalo 0901 234 567, LINE ID: scam123, https://example.com", 2)).isEmpty();
+        assertThat(filter.linkProblem("Văn phòng quận: 03-3802-3111", 1)).isEmpty();
+        assertThat(filter.linkProblem("", 1)).isEmpty();
+
+        // The messages are the ones checkLinks throws
+        assertThat(LinkProblem.SHORT_LINK.message())
+                .isEqualTo("Không dùng link rút gọn (bit.ly, tinyurl…). Hãy dán link đầy đủ.");
+        assertThat(LinkProblem.LINK_NEEDS_TAG.message())
+                .isEqualTo("Chỉ tài khoản đã có tag định danh mới được chèn link.");
+        assertThat(LinkProblem.CONTACT_NEEDS_TAG.message()).isEqualTo(
+                "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.");
+    }
+
+    @Test
+    void theIdentityTagIsLookedUpOnlyWhenALinkOrContactIsFound() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(1L))).thenReturn(0L);
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        assertThat(filter.linkProblem("Hoa anh đào ở Ueno nở rồi", 1)).isEmpty();
+        assertThat(filter.linkProblem("Xem https://bit.ly/abc", 1)).contains(LinkProblem.SHORT_LINK);
+        assertThatCode(() -> filter.checkLinks("Hoa anh đào ở Ueno nở rồi", 1)).doesNotThrowAnyException();
+        verify(jdbc, times(0)).queryForObject(anyString(), eq(Long.class), eq(1L));
+
+        assertThat(filter.linkProblem("LINE ID: scam123", 1)).contains(LinkProblem.CONTACT_NEEDS_TAG);
+        verify(jdbc, times(1)).queryForObject(anyString(), eq(Long.class), eq(1L));
+    }
+
+    @Test
+    void aQrCodeInAPhotoCountsAsALinkWhereverItStands() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(1L))).thenReturn(0L);     // no tag
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(2L))).thenReturn(1L);     // Mentor
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+        List<List<String>> secondHasZalo = List.of(List.of(), List.of("http://zaloapp.com/qr/p/179af8age0av7"));
+
+        // No identity tag: refused, naming the photo, under "images"
+        assertThatThrownBy(() -> filter.checkQrCodes(secondHasZalo, 1)).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.getMessage()).isEqualTo("Ảnh thứ 2 bạn vừa chọn có mã QR. Chỉ tài khoản đã có tag định danh mới"
+                    + " được đăng ảnh có mã QR (mã QR được tính như link). Hãy cắt hoặc che mã QR rồi chọn lại ảnh.");
+            assertThat(e.getFields()).containsEntry("images", e.getMessage());
+        });
+        // Any code counts, a link or not (Wi-Fi, a contact card, plain text)
+        assertThatThrownBy(() -> filter.checkQrCodes(List.of(List.of("WIFI:S:Sakura;T:WPA;P:abc;;")), 1))
+                .hasMessageStartingWith("Ảnh thứ 1 bạn vừa chọn có mã QR.");
+        assertThatThrownBy(() -> filter.checkQrCodes(List.of(List.of("")), 1))
+                .hasMessageStartingWith("Ảnh thứ 1 bạn vừa chọn có mã QR.");
+        // With a tag the same photos pass
+        assertThatCode(() -> filter.checkQrCodes(secondHasZalo, 2)).doesNotThrowAnyException();
+        // A code leading to a shortened link: nobody, tagged or not
+        assertThatThrownBy(() -> filter.checkQrCodes(List.of(List.of("https://bit.ly/3abcXYZ")), 2))
+                .hasMessage("Ảnh thứ 1 bạn vừa chọn có mã QR dẫn tới link rút gọn. Không dùng link rút gọn"
+                        + " (bit.ly, tinyurl…).");
+        // Photos without a code, or no photo at all: nothing to check, the tag is not even looked up
+        JdbcTemplate quiet = mock(JdbcTemplate.class);
+        ContentFilter untouched = new ContentFilter(quiet, Clock.systemUTC());
+        assertThatCode(() -> untouched.checkQrCodes(List.of(List.of(), List.of()), 1)).doesNotThrowAnyException();
+        assertThatCode(() -> untouched.checkQrCodes(List.of(), 1)).doesNotThrowAnyException();
+        verify(quiet, times(0)).queryForObject(anyString(), eq(Long.class), eq(1L));
+    }
+
+    @Test
+    void theIdentityTagIsLookedUpOnceForAllThePhotosWithACode() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(2L))).thenReturn(1L);
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        filter.checkQrCodes(List.of(List.of("https://zalo.me/a"), List.of(), List.of("https://line.me/b")), 2);
+        verify(jdbc, times(1)).queryForObject(anyString(), eq(Long.class), eq(2L));
+    }
+
+    @Test
+    void aBannedKeywordInWhatAQrCodeHoldsIsRefused() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        doReturn(List.of("fb88", "vay nóng")).when(jdbc).query(anyString(), any(RowMapper.class));
+        ContentFilter filter = new ContentFilter(jdbc, Clock.systemUTC());
+
+        assertThatThrownBy(() -> filter.checkQrKeywords(List.of(List.of(), List.of("https://fb88.com/khuyen-mai"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.getMessage()).isEqualTo("Chưa đăng được: mã QR trong ảnh thứ 2 bạn vừa chọn chứa từ"
+                            + " khóa không được phép “fb88”. Hãy dùng ảnh khác.");
+                    assertThat(e.getFields()).containsEntry("images", e.getMessage());
+                });
+        assertThatCode(() -> filter.checkQrKeywords(List.of(List.of("https://zalo.me/g/abc"), List.of())))
+                .doesNotThrowAnyException();
     }
 
     @Test

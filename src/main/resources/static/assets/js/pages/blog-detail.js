@@ -812,7 +812,16 @@ function toast(message, kind = "ok") {
 
 user = await mountSiteHeader(QUESTION ? "qa" : "blog");
 if (user) restoreDrafts();      // back from signing in after a 401: the boxes are filled in again
-await load();
+// The bell heard that the photos/video of this post were scanned: show the post as it is now (published or refused).
+// Listened to before the first load, which may have read the post just before the scan ended.
+let firstLoad = null;
+window.addEventListener("asvsj:notification", async ({ detail }) => {
+    if (detail.link !== `${ROUTES.list}/${blogId}`) return;
+    await firstLoad;
+    if (post?.status === "PROCESSING") load();
+});
+firstLoad = load();
+await firstLoad;
 announceCreated();
 
 /**

@@ -63,6 +63,61 @@ p { margin: 0; }
 .site-nav a[aria-current="page"] { color: var(--brand-text); background: var(--brand-soft); }
 .site-account { display: flex; gap: 8px; align-items: center; }
 
+/* bell with the unread count */
+.bell { position: relative; }
+.bell-count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--crit);
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* result of a photo/video scan, popped up on any page (site-header.js) */
+.site-notices {
+    position: fixed;
+    z-index: 60;
+    top: 68px;
+    right: 16px;
+    width: min(380px, calc(100vw - 32px));
+    display: grid;
+    gap: 8px;
+    pointer-events: none;
+}
+.site-notice {
+    pointer-events: auto;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 10px 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--ok);
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(47, 62, 110, .22);
+    font-size: 14px;
+    animation: notice-in .2s ease-out;
+}
+.site-notice > .ic { color: var(--ok); }
+.site-notice.crit { border-left-color: var(--crit); }
+.site-notice.crit > .ic { color: var(--crit); }
+.site-notice-txt { flex: 1; display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.site-notice-txt .link { justify-self: start; }
+.site-notice-x { border: 0; background: none; padding: 2px; color: var(--muted); cursor: pointer; border-radius: 8px; }
+.site-notice-x:hover { color: var(--ink); background: var(--surface-2); }
+.site-notice-x:focus-visible { outline: none; box-shadow: var(--focus); }
+@keyframes notice-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .site-notice { animation: none; } }
+
 .tabbar { display: none; }
 
 /* ---------------- buttons, badges, cards ---------------- */
@@ -272,6 +327,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 @media (max-width: 860px) {
     .site-top { padding: 10px 16px; }
     .site-nav, .site-account .who { display: none; }
+    .site-notices { top: 62px; left: 16px; right: 16px; width: auto; }
     .tabbar {
         display: flex;
         position: fixed;

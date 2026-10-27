@@ -36,7 +36,8 @@ import java.util.stream.Collectors;
  *       ("v.a.y n.ó.n.g", "vaynong", "v4y n0ng", fullwidth or Cyrillic letters). A keyword standing only inside an
  *       everyday phrase is not counted ("co bac nao biet" is "có bác nào biết", {@link #EVERYDAY_PHRASES}). Also
  *       checked: display names ({@link #checkDisplayName}).</li>
- *   <li>Links: only accounts with an identity tag may post links, and shortened links are never allowed.</li>
+ *   <li>Links: only accounts with an identity tag may post links, and shortened links are never allowed. A QR code in
+ *       a photo counts as a link ({@link #checkQrCodes}).</li>
  *   <li>Contact details, same rule as links: Vietnamese and Japanese mobile numbers and Zalo, LINE, Telegram… ids
  *       only from accounts with an identity tag. Landlines and toll-free numbers (a ward office) stay allowed.</li>
  * </ul>
@@ -50,6 +51,28 @@ public class ContentFilter {
     static final String LINK_NEEDS_TAG = "Chỉ tài khoản đã có tag định danh mới được chèn link.";
     static final String CONTACT_NEEDS_TAG =
             "Chỉ tài khoản đã có tag định danh mới được ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.";
+    static final String QR_NEEDS_TAG = "Chỉ tài khoản đã có tag định danh mới được đăng ảnh có mã QR (mã QR được tính"
+            + " như link). Hãy cắt hoặc che mã QR rồi chọn lại ảnh.";
+
+    /** What the link and contact rule (BR-22) refuses in a text, with the message shown to the user. */
+    public enum LinkProblem {
+        /** A shortened link: nobody may post one. */
+        SHORT_LINK(ContentFilter.SHORT_LINK),
+        /** A link from an account without an identity tag. */
+        LINK_NEEDS_TAG(ContentFilter.LINK_NEEDS_TAG),
+        /** A mobile number or chat-app id (and no link) from an account without an identity tag. */
+        CONTACT_NEEDS_TAG(ContentFilter.CONTACT_NEEDS_TAG);
+
+        private final String message;
+
+        LinkProblem(String message) {
+            this.message = message;
+        }
+
+        public String message() {
+            return message;
+        }
+    }
 
     // ---------------------------------------------------------------- normalised copy
 
@@ -102,7 +125,9 @@ public class ContentFilter {
             "mai đám cưới", "mai đám giỗ", "mai đám ma", "bàn đàm phán", "bận đám cưới", "bận đám giỗ", "mưa dầm",
             "gái điểm cao", "gái điểm thấp", "nhà thờ", "bảo nuôi", "gái bao nhiêu", "gái bao giờ", "trai bao nhiêu",
             "trai bao giờ", "bạn gái gọi", "con gái gọi", "cô gái gọi", "em gái gọi", "chị gái gọi", "gái gọi điện",
-            "đi khách sạn", "支援交", "応援交", "救援交", "風俗習慣");
+            "đi khách sạn", "支援交", "応援交", "救援交", "風俗習慣",
+            // the work permit on every working student's residence card: 「資格外活動許可…風俗営業等の従事を除く」
+            "風俗営業等の従事");
     private static final List<Keyword> EVERYDAY = prepare(EVERYDAY_PHRASES);
 
     // ---------------------------------------------------------------- links (BR-22)
@@ -253,16 +278,71 @@ public class ContentFilter {
 
     /**
      * Link and contact rule (BR-22): no shortened links for anyone; links, mobile numbers and chat-app ids only from
-     * accounts with an identity tag.
+     * accounts with an identity tag. Throws 400 with {@link LinkProblem#message()}.
      */
     public void checkLinks(String text, long authorId) {
+        linkProblem(text, authorId).ifPresent(problem -> {
+            throw ApiException.badRequest(problem.message());
+        });
+    }
+
+    /**
+     * Link rule (BR-22) for the QR codes read in the photos being uploaded ({@code qrCodes}: the codes of each photo, in
+     * the order the photos were chosen, see {@code MediaService.qrCodesOfPhotos}). A QR code counts as a link, wherever
+     * it stands in the photo: an account without an identity tag may not post a photo holding one, and nobody may post
+     * one that leads to a shortened link. Throws 400 under "images" naming the photo; the identity tag is looked up only
+     * when a photo holds a code.
+     */
+    public void checkQrCodes(List<List<String>> qrCodes, long authorId) {
+        Boolean tagged = null;
+        for (int i = 0; i < qrCodes.size(); i++) {
+            List<String> codes = qrCodes.get(i);
+            if (codes.isEmpty()) {
+                continue;
+            }
+            String photo = "Ảnh thứ " + (i + 1) + " bạn vừa chọn có mã QR";
+            if (codes.stream().flatMap(code -> links(code).stream()).anyMatch(ContentFilter::isShortened)) {
+                throw photoError(photo + " dẫn tới link rút gọn. Không dùng link rút gọn (bit.ly, tinyurl…).");
+            }
+            if (tagged == null) {
+                tagged = hasIdentityTag(authorId);
+            }
+            if (!tagged) {
+                throw photoError(photo + ". " + QR_NEEDS_TAG);
+            }
+        }
+    }
+
+    /** Banned keywords (MSG36) in what the QR codes of the photos hold (same order as {@link #checkQrCodes}). */
+    public void checkQrKeywords(List<List<String>> qrCodes) {
+        for (int i = 0; i < qrCodes.size(); i++) {
+            for (String code : qrCodes.get(i)) {
+                Optional<String> keyword = bannedKeyword(code);
+                if (keyword.isPresent()) {
+                    throw photoError("Chưa đăng được: mã QR trong ảnh thứ " + (i + 1) + " bạn vừa chọn chứa từ khóa"
+                            + " không được phép “" + keyword.get() + "”. Hãy dùng ảnh khác.");
+                }
+            }
+        }
+    }
+
+    private static ApiException photoError(String message) {
+        return ApiException.invalid(message, Map.of("images", message));
+    }
+
+    /**
+     * {@link #checkLinks} without throwing, for text that is not typed by the user (the text read from a photo or
+     * video). The identity tag is looked up only when a link or contact detail was found.
+     */
+    public Optional<LinkProblem> linkProblem(String text, long authorId) {
         List<String> links = links(text);
         if (links.stream().anyMatch(ContentFilter::isShortened)) {
-            throw ApiException.badRequest(SHORT_LINK);
+            return Optional.of(LinkProblem.SHORT_LINK);
         }
         if ((!links.isEmpty() || !contacts(text).isEmpty()) && !hasIdentityTag(authorId)) {
-            throw ApiException.badRequest(links.isEmpty() ? CONTACT_NEEDS_TAG : LINK_NEEDS_TAG);
+            return Optional.of(links.isEmpty() ? LinkProblem.CONTACT_NEEDS_TAG : LinkProblem.LINK_NEEDS_TAG);
         }
+        return Optional.empty();
     }
 
     /** The first banned keyword found in the text, as the Admin wrote it. */

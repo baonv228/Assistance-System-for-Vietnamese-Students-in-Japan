@@ -236,8 +236,8 @@ function setupForm() {
         $("#content-label").insertAdjacentHTML("afterend", ` <span class="note">(không bắt buộc)</span>`);
     }
     els.linkNote.innerHTML = canPostLinks
-        ? `${ic("link")} Bạn có tag định danh nên được chèn link. Không dùng link rút gọn (bit.ly, tinyurl…).`
-        : `${ic("link_off")} Chỉ tài khoản đã có tag định danh mới được chèn link, ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram.`;
+        ? `${ic("link")} Bạn có tag định danh nên được chèn link và đăng ảnh có mã QR. Không dùng link rút gọn (bit.ly, tinyurl…).`
+        : `${ic("link_off")} Chỉ tài khoản đã có tag định danh mới được chèn link, ghi số điện thoại hoặc tài khoản Zalo, LINE, Telegram, hay đăng ảnh có mã QR.`;
     els.mediaRules.textContent = `Ảnh JPG, PNG hoặc HEIC, tối đa ${limits.imagesMax} ảnh, mỗi ảnh không quá ${limits.imageMaxMb} MB. `
         + `Video MP4 hoặc MOV, tối đa ${limits.videoMaxSeconds} giây và ${limits.videoMaxMb} MB.`;
     renderQuota(quota);

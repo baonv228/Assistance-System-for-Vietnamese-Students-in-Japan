@@ -57,7 +57,8 @@ import java.util.concurrent.TimeUnit;
  *   <li>Photos: JPG or PNG (HEIC is converted to JPG in the browser), at most 20 MB. Every photo is decoded and
  *       written again as JPG, at most 1600 px on the long side, which also removes EXIF and GPS data. Decoding is
  *       bounded: at most {@value #DECODE_SLOTS} photos at a time on the server, each within
- *       {@link #DECODE_MAX_BYTES} of memory.</li>
+ *       {@link #DECODE_MAX_BYTES} of memory. The QR codes in the photo are read at the same time ({@link QrCodes}),
+ *       so the caller can apply the link rule to them before anything is saved.</li>
  *   <li>Videos: MP4 or MOV, at most {@code app.media.video-max-mb} (50 MB) and 30 seconds; the length is read
  *       from the file itself ({@link Mp4Duration}).</li>
  * </ul>
@@ -93,13 +94,33 @@ public class MediaService {
 
     public static final String IMAGE_RULE = "Tối đa 5 ảnh, định dạng JPG, PNG hoặc HEIC, mỗi ảnh không quá 20 MB.";
     public static final String BUSY = "Máy chủ đang xử lý nhiều ảnh, vui lòng thử lại sau ít phút.";
+    /** A photo crafted to look like hundreds of QR codes cannot be checked within the limits ({@link QrCodes}). */
+    public static final String QR_UNCHECKED =
+            "Không kiểm tra được ảnh này vì có quá nhiều chi tiết giống mã QR. Hãy dùng ảnh khác.";
 
-    /** A checked file ready to be stored. {@code type} is IMAGE or VIDEO. */
+    /**
+     * A checked file ready to be stored. {@code type} is IMAGE or VIDEO.
+     *
+     * @param qrCodes the texts of the QR codes read in a photo ({@link QrCodes}); empty for a video or a photo without
+     */
     public record Prepared(String type, byte[] bytes, String mimeType, String extension, Integer width, Integer height,
-                           Integer durationSec) {
+                           Integer durationSec, List<String> qrCodes) {
+
+        public Prepared {
+            qrCodes = qrCodes == null ? List.of() : List.copyOf(qrCodes);
+        }
     }
 
-    public record MediaRow(Long id, Long ownerId, String type, String storageKey, String scanStatus, boolean deleted) {
+    /**
+     * The QR codes of each photo among {@code files}, in the order the photos were chosen (videos are left out), for
+     * {@code ContentFilter.checkQrCodes}.
+     */
+    public static List<List<String>> qrCodesOfPhotos(List<Prepared> files) {
+        return files.stream().filter(f -> "IMAGE".equals(f.type())).map(Prepared::qrCodes).toList();
+    }
+
+    public record MediaRow(Long id, Long ownerId, String type, String storageKey, String mimeType, String scanStatus,
+                           boolean deleted) {
     }
 
     private final JdbcTemplate jdbc;
@@ -159,12 +180,21 @@ public class MediaService {
                 throw new InvalidMediaException(IMAGE_RULE);
             }
             BufferedImage fitted = fit(source, IMAGE_MAX_SIDE);
+            source = null;                       // the decoded original can go: only the stored size is used now
+            byte[] bytes;
             try {
-                return new Prepared("IMAGE", jpeg(fitted), "image/jpeg", "jpg", fitted.getWidth(), fitted.getHeight(),
-                        null);
+                bytes = jpeg(fitted);
             } catch (IOException e) {
                 throw new InvalidMediaException(IMAGE_RULE);
             }
+            List<String> qrCodes;
+            try {
+                qrCodes = QrCodes.read(fitted);
+            } catch (QrCodes.TooComplex e) {
+                throw new InvalidMediaException(QR_UNCHECKED);
+            }
+            return new Prepared("IMAGE", bytes, "image/jpeg", "jpg", fitted.getWidth(), fitted.getHeight(), null,
+                    qrCodes);
         } finally {
             DECODES.release();
         }
@@ -209,8 +239,8 @@ public class MediaService {
             throw new InvalidMediaException("Không đọc được video. Hãy dùng video MP4 hoặc MOV.");
         }
         return info.quickTime()
-                ? new Prepared("VIDEO", bytes, "video/quicktime", "mov", null, null, seconds)
-                : new Prepared("VIDEO", bytes, "video/mp4", "mp4", null, null, seconds);
+                ? new Prepared("VIDEO", bytes, "video/quicktime", "mov", null, null, seconds, List.of())
+                : new Prepared("VIDEO", bytes, "video/mp4", "mp4", null, null, seconds, List.of());
     }
 
     // ---------------------------------------------------------------- writes
@@ -285,9 +315,10 @@ public class MediaService {
 
     public Optional<MediaRow> find(long id) {
         return jdbc.query("""
-                SELECT id, owner_id, media_type, storage_key, scan_status, deleted_at IS NOT NULL FROM media WHERE id = ?""",
+                SELECT id, owner_id, media_type, storage_key, mime_type, scan_status, deleted_at IS NOT NULL
+                FROM media WHERE id = ?""",
                 (rs, i) -> new MediaRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getString(5),
-                        rs.getBoolean(6)), id).stream().findFirst();
+                        rs.getString(6), rs.getBoolean(7)), id).stream().findFirst();
     }
 
     public byte[] read(String storageKey) {

@@ -405,7 +405,16 @@ function toast(message, kind = "ok") {
 // ---------------------------------------------------------------- start
 
 user = await mountSiteHeader("fest");
-await load();
+// The bell heard that the photos/video of the user's review were scanned: show the review as it is now. Listened to
+// before the first load, which may have read the event just before the scan ended.
+let firstLoad = null;
+window.addEventListener("asvsj:notification", async ({ detail }) => {
+    if (detail.link !== `/events/${eventId}`) return;
+    await firstLoad;
+    if (data?.reviews.some((r) => r.mine && r.status === "PROCESSING")) load();
+});
+firstLoad = load();
+await firstLoad;
 announceSaved();
 
 /** Back from "Viết review" (?created=1 / ?edited=1): say whether the review is public or still being scanned. */

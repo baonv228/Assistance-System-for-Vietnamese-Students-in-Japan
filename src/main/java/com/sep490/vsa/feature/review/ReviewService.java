@@ -158,10 +158,12 @@ public class ReviewService {
                           List<Prepared> files, boolean withVideo) {
         long authorId = account.id();
         filter.checkLinks(content, authorId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(files), authorId);
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, JAPAN);
         checkDailyLimit(account, today, true, withVideo, now);
         filter.checkKeywords(content);
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
 
         long target = placeId != null ? activePlace(placeId) : activePlace(places.save(picks, authorId).get(0));
         if (repository.anyReviewOf(target, authorId)) {
@@ -210,12 +212,14 @@ public class ReviewService {
         long authorId = account.id();
         ReviewRow review = editable(account, reviewId, true);
         filter.checkLinks(content, authorId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(files), authorId);
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, JAPAN);
         if (countVideo) {
             checkDailyLimit(account, today, false, true, now);
         }
         filter.checkKeywords(content);
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
         // The first review of the author's own pin waiting for approval can be edited too
         PlaceRef place = repository.place(review.placeId()).orElseThrow(() -> notFound(PLACE_GONE));
         if (!"PENDING".equals(place.status())) {

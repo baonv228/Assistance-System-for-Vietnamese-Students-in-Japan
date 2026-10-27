@@ -3,7 +3,7 @@
 // location", a list of the places in view and the details panel with reviews and phrases.
 // Address: /map, /map?place=12 opens a place, /map?q=ramen runs a search.
 import { apiClient } from "../api/client.js";
-import { mountSiteHeader } from "../components/site-header.js";
+import { checkNotificationsSoon, mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, googleDirectionsUrl, ic, stars, tagChips, timeAgo } from "../lib/ui.js";
 
 const L = window.L;
@@ -93,6 +93,28 @@ if (!L || !L.markerClusterGroup) {
     openPanel();
 } else {
     await start();
+    window.addEventListener("asvsj:notification", onScanResult);
+}
+
+/**
+ * The bell heard that the photos/video of the user's review were scanned: the pins get their new figures, and the
+ * place's panel, when it is open on the reviews, shows the review as it is now (published or refused).
+ */
+async function onScanResult({ detail }) {
+    const m = /^\/map\?place=(\d+)$/.exec(detail.link || "");
+    if (!m || !detail.type.startsWith("CONTENT_")) return;
+    await refreshPlaces();
+    const id = Number(m[1]);
+    if (state.panel !== "detail" || state.detail?.id !== id) return;
+    try {
+        const fresh = await apiClient.mapPlace(id);
+        if (state.panel !== "detail" || state.detail?.id !== id) return;
+        state.detail = fresh;
+    } catch {
+        return;
+    }
+    renderPanel();
+    if (state.tab === "rv") loadReviews(0);
 }
 
 async function start() {
@@ -1108,6 +1130,7 @@ async function submitWrite() {
         toast(saved.status === "PROCESSING"
             ? "Đã gửi. Ảnh/video đang được quét, review hiện cho mọi người sau khi đạt."
             : w.mode === "edit" ? "Đã lưu thay đổi." : "Đã đăng review. +10 điểm.");
+        if (saved.status === "PROCESSING") checkNotificationsSoon();
         await refreshPlaces();
         resultLayer.clearLayers();
         state.results = null;
@@ -1490,6 +1513,7 @@ async function submitPin(force) {
         const saved = await apiClient.createPin(form);
         leavePin();
         toast("Đã gửi ghim kèm review. Chờ Moderator duyệt.");
+        if (saved.reviewStatus === "PROCESSING") checkNotificationsSoon();
         await refreshPlaces();
         openPlace(saved.placeId, { fly: true });
     } catch (error) {

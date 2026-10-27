@@ -30,7 +30,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (`BCryptPasswordEncoder`), never store or log plain passwords. Email verification and password reset use
   one-time tokens stored as SHA-256 hashes. 5 wrong passwords → lock 30 minutes (Admin settings `lock_attempts` /
   `lock_minutes`).
-- Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation.
+- Content (reviews, posts, comments) is moderated automatically: keyword filter + image moderation, and the text and
+  speech that Gemini reads in photos and videos go through the same keyword and link rules (`feature/moderation`).
+  A photo with a QR code counts as a link (BR-22): members without an identity tag cannot post one (read on the server
+  when the photo is uploaded; in videos only Gemini sees a code, so without a Gemini key a code in a video is missed).
   The banned keywords include every prostitution and gambling word the team listed: solicitation and ads in
   `V5__prostitution_gambling_keywords.sql` ("kèo nhà cái", "fb88", "nhận bao nuôi", "パパ活"…) and, decided later, the
   general words in `V6__general_prostitution_gambling_keywords.sql` ("mại dâm", "cờ bạc", "cá cược", "nhà cái",
@@ -90,7 +93,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
   "/", no "://", backslash, space or control character, same origin, not /login, /register or /complete-signup); staff
   and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. Pages Spring Security guards
-  (`/profile`, `/saved`) still send a guest to plain `/login`.
+  (`/profile`, `/saved`, `/notifications`) still send a guest to plain `/login`.
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`
   (`currentUser().catch(() => null)`), so an early Enter never puts the email or password in the URL.
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
@@ -117,7 +120,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`, `/notifications`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
@@ -167,6 +170,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
   `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
   `savedCount` for "Đã lưu (N)" on Tôi. Places are saved from the Map once it is built (`saved_places`).
+- Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
+  CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
+  (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
+  `GET /summary?after=` (unread, latestId, `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5
+  after that id, one read-only snapshot), `POST /read {upToId}`. The header (`site-header.js`) shows a bell with the
+  unread count, asks the summary every 5 s while `processing` > 0 (else every 60 s, never while the tab is hidden),
+  pops up the scan results (`.site-notices`, "Xem" opens the link) and fires `asvsj:notification`, which reloads the post
+  (`blog-detail.js`), event (`event-detail.js`) or place panel (`map.js`) still shown as PROCESSING; the Map, which
+  stays on its page after sending a review or pin with media, calls `checkNotificationsSoon()`. The newest id a tab
+  handled is kept in sessionStorage (`asvsj.notifications.seen.<userId>`). Page `/notifications` (guarded like
+  `/saved`) lists them and marks the shown ones read.
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
@@ -214,7 +228,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   out but a different accented word does not match, "vậy nóng" ≠ "vay nóng", and disguises such as "v.a.y n0ng",
   "vaynong", fullwidth or Cyrillic letters are caught; the list is cached 60 s and `AdminConfigService` clears it when
   a keyword is added or deleted. BR-22: links, VN/JP mobile numbers and Zalo/LINE/Telegram ids only for tagged
-  users, landlines and toll-free numbers allowed, no short links for anyone), `feature/user/PointService`,
+  users, landlines and toll-free numbers allowed, no short links for anyone; a photo holding a QR code counts as a
+  link wherever the code stands: `checkQrCodes` refuses it at once, under "images", for a member without an identity
+  tag ("Ảnh thứ N bạn vừa chọn có mã QR…") and for everyone when the code leads to a short link, `checkQrKeywords` when
+  it holds a banned keyword; posts, questions, edits, place reviews, pins and event reviews all run them),
+  `feature/user/PointService`,
   `feature/notification/NotificationService`,
   `common/settings/SystemSettings`, `common/text/VietnameseText`. Media URLs = `app.media.public-base-url`
   (default `/media/`) + `media.storage_key`.
@@ -227,12 +245,15 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   accepted when there are no files). "Địa điểm liên quan" uses `GET /api/places/search` (see Places below).
   `GET /api/blogs/scam-warnings[?placeId=]` lists places with a published "Cảnh báo lừa đảo" post, for the Map "!".
 - `BlogWriteService.create` checks in the agreed order and stops at the first failing step: fields/lengths and the
-  files (`BlogWriteRules`, outside the DB transaction) → links (`ContentFilter.checkLinks`) → new-account daily
-  limit (usage row locked, MSG44, 429) → banned keywords (`ContentFilter.checkKeywords`, MSG36). No media →
+  files (`BlogWriteRules`, outside the DB transaction) → links (`ContentFilter.checkLinks`, then `checkQrCodes` for
+  the QR codes of the photos) → new-account daily limit (usage row locked, MSG44, 429) → banned keywords
+  (`ContentFilter.checkKeywords`, MSG36, then `checkQrKeywords`). No media →
   PUBLISHED and +`PointService.BLOG_POST` (10, not confirmed in the SRS yet). Media → PROCESSING;
   `BlogPublishService` scans after commit (and a retry job every 2 min, 20 waiting posts a run in id order after the
   previous run's last one, from the oldest again after a short page, so stuck posts never starve newer ones): all PASSED → PUBLISHED + points,
-  any REJECTED → REJECTED, rejected files deleted, author notified (`CONTENT_REJECTED`). `user_daily_usage` counts
+  author notified (`CONTENT_PUBLISHED`: "Bài viết “T” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm.", "Bản sửa
+  bài viết…" without points when it was published before), any REJECTED → REJECTED, rejected files deleted, author
+  notified (`CONTENT_REJECTED`, with the reason); nothing while it waits. `user_daily_usage` counts
   every new post, in Japan dates. Values still "cần chốt" (title 150, QA description optional, photo rules = review
   rules) are constants in `BlogWriteRules`.
 - Edit ("Sửa bài" / "Sửa câu hỏi", `BlogWriteService.update`): `GET /api/blogs/{id}/edit` (and `/api/questions/{id}/edit`)
@@ -246,7 +267,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - `feature/media`: `MediaService` re-encodes photos to JPG ≤ 1600 px (EXIF/GPS dropped; the page also shrinks them
   before upload, HEIC only where the browser opens it; at most 2 photos decoded at once on the server, a photo waits
   20 s for a slot then gets "Máy chủ đang xử lý nhiều ảnh…", and each is read subsampled so the decoded pixels
-  (bytes per pixel counted, e.g. 8 for 16-bit RGBA) stay ≤ 48 MB; all "cần chốt"), checks MP4/MOV length ≤ 30 s from the file itself
+  (bytes per pixel counted, e.g. 8 for 16-bit RGBA) stay ≤ 48 MB; all "cần chốt"; the QR codes of the resized photo
+  are read on the server with ZXing, `com.google.zxing:core`, `QrCodes`, into `Prepared.qrCodes`, no outside service:
+  only codes ZXing can actually read count, several per photo and at an angle too; the search is bounded, 1000 possible
+  corner squares or 3 s, because a photo crafted as a grid of corner squares kept ZXing's multi-code finder busy for
+  minutes or out of memory: such a photo is refused with `MediaService.QR_UNCHECKED`; a new member upload path must call
+  `ContentFilter.checkQrCodes`, photos kept on an edit are not read again), checks MP4/MOV length ≤ 30 s from the file itself
   (`Mp4Duration`, no ffprobe; fragmented MP4 refused; a box size past the end of the file counts as "to the end", so
   crafted 64-bit sizes cannot loop or reach a negative offset, and any parser error is the normal "Không đọc được video"
   message, never a 500). Videos are stored without their metadata, like photos without EXIF: the `udta`, `meta` and
@@ -268,13 +294,33 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
   event is not deleted, and the cover of an event that is not deleted. A Moderator queue adds its rule in
   `MediaAccess`.
-- `feature/moderation`: `MediaScanService` + `ImageModerator`. With `app.moderation.openai.api-key` (or env
-  `OPENAI_API_KEY`) photos go to OpenAI Moderation `omni-moderation-latest` (free); without a key
-  `DevImageModerator` answers `app.moderation.dev-result` (PASS, or FLAG to try the rejected flow). Scanner errors
-  keep the post PROCESSING and retry with a growing pause (1 → 60 min). Videos are not frame-scanned (the free
-  endpoint reads images only); they pass once type, size and length are checked.
+- `feature/moderation`: `MediaScanService` + `ImageModerator` + `MediaReader`. Photos first go to OpenAI Moderation
+  `omni-moderation-latest` (free; `app.moderation.openai.api-key` or env `OPENAI_API_KEY`; without a key
+  `DevImageModerator` answers `app.moderation.dev-result`, PASS or FLAG). Then photos and videos go to
+  `GeminiMediaReader` (`app.moderation.gemini.api-key` or env `GEMINI_API_KEY`, free tier of Google AI Studio, model
+  `app.moderation.gemini.model` = `gemini-3.5-flash-lite`; REST `generateContent` v1beta with a JSON schema, no SDK;
+  files over 5 MB go through the Files API and are deleted after the reading; videos read at MEDIA_RESOLUTION_HIGH).
+  It answers `messageText` (captions, screenshot content without the phone/browser interface, a card or note held up to
+  the camera), `sceneText` (signs, posters and menus where they hang: stored, never checked, because of パチンコ signs),
+  `speech` (no song lyrics or background sound), `qrCode` (any QR code it can see, however small: the second layer
+  after ZXing for photos, the only one for videos) and flags (SEXUAL, MINOR_SEXUAL, GRAPHIC_VIOLENCE, SELF_HARM,
+  GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); ID, bank and card numbers come back as "[số]". A flag or Google's
+  own refusal → REJECTED; then the banned keywords line by line and BR-22 (`ContentFilter.linkProblem`) on messageText
+  and speech for the file's owner; a QR code counts as a link. The Vietnamese reason (naming the keyword,
+  link or number) is stored in `moderation_scans.detail` (`reason`, engine GEMINI, V9) and put into the rejection
+  notification (`MediaScanService.rejectionReason`); pages still show the generic text. A photo OpenAI passed is not
+  sent again when only Gemini failed. Google answered but cannot read the file (a song, too much text, a file it could
+  not process: UNREADABLE) → tried again, refused the third time. PASS rows keep only text lengths; FLAG rows keep the
+  texts and the reason, both removed after 30 days (`forgetOldTexts`, 03:40 Japan time). At most `app.moderation.gemini.requests-per-minute`
+  (10) requests a minute for the server, and no request for 2 minutes after Google failed (BUSY: no row, the next run
+  tries again); other errors keep the post PROCESSING and retry with a growing pause (1 → 60 min). Requests are counted
+  in `api_usage` (`GEMINI_GENERATE`, `GEMINI_FILE_UPLOAD`). Without a Gemini key the step is skipped (videos pass once
+  type, size and length are checked, as before, so a QR code in a video is not caught) or `DevMediaReader` answers
+  `app.moderation.dev-media-text` (e.g. fb88,
+  to try the rejection). Free tier: Google may use what is sent to improve its products, and its reviewers may read it.
 - `BlogWriteFlowTest` runs against its own database `asvsj_test` (created by Flyway on the first run) with the
-  local credentials; it mocks the image scanner.
+  local credentials; it mocks the image scanner. No test calls Gemini: `src/test/resources/config/application-local.properties`
+  blanks the key for every test, `MediaScanFlowTest` mocks the `MediaReader`, `GeminiMediaReaderTest` uses a fake server.
 
 ## Hỏi-Đáp (feature/qa)
 - Questions are `blogs` rows with `blog_type = 'QA'`; answers are top-level `comments`, replies hang under them.
@@ -342,7 +388,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Implementations of `ExternalPlaces` (`ExternalPlacesConfig`): `DevOsmPlaces` (made-up Tokyo/Hanoi places, ids
   `DEV-…`, works offline) when `app.places.dev-fake=true`, `OsmPlaces` when `app.places.osm.enabled` (default true),
   else none (ASVSJ places only). Tests set `app.places.osm.enabled=false` or mock `ExternalPlaces`: no test calls the
-  internet. On Windows the client also trusts the Windows certificate store (antivirus HTTPS scanning).
+  internet. On Windows the client also trusts the Windows certificate store (antivirus HTTPS scanning;
+  `common/http/WindowsTrust`, also used by the OpenAI and Gemini clients).
 - Place chips (Blog, Hỏi-Đáp lists and detail) open the place on openstreetmap.org in a new tab (`ui.js osmUrl`: the
   OSM object from `osmId`, else a marker at lat/lng, else a name search). Post / question detail lists the linked
   places, each with "Chỉ đường" = a Google Maps directions URL (`googleDirectionsUrl`, no key, no Maps Platform call;
@@ -356,8 +403,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Events are posted by Moderators only (UC-M07, page `/moderator/events`, `ModeratorEventController` under
   `/api/moderator/events`): title, dates, place name, optional position (picked on a Leaflet map or from an ASVSJ place
   with coordinates, `GET /api/moderator/events/places?q=`), cost, "Mẹo cho người đi" and an optional cover photo
-  (multipart part `event` + `cover`; re-encoded like any photo, marked PASSED without the scanner because staff upload
-  it). Empty place name → "Vị trí trên bản đồ" / "Chưa gắn vị trí", empty cost → "Chưa rõ". Delete is soft
+  (multipart part `event` + `cover`; re-encoded like any photo, marked PASSED without the scanner and without the QR
+  rule because staff upload it: real event posters carry official QR codes). Empty place name → "Vị trí trên bản đồ" / "Chưa gắn vị trí", empty cost → "Chưa rõ". Delete is soft
   (`deleted_at`): the event, its reviews and their photos are shown nowhere. Create/update/delete go to the activity log
   (`EVENT_CREATED|UPDATED|DELETED`, target EVENT). The answer says whether the pin is on the map yet (30-day window).
 - Public: `GET /api/events?q=` (soonest first, accents ignored; the page groups Đang diễn ra / Trong 30 ngày tới / Sau
@@ -370,8 +417,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   review of this year or edits it. Same order of checks as Write Post: stars 1–5 + text ≤ 2,000 + files (≤ 5 photos,
   1 video ≤ 30 s) → links (BR-22) → new-account limit (counted with posts in `user_daily_usage`) → banned keywords.
   No files → PUBLISHED and `PointService.REVIEW` (+10, reason REVIEW_CREATED, paid once); files → PROCESSING and
-  `EventReviewPublishService` scans them like `BlogPublishService` (keyword check again, retry job, notification
-  `CONTENT_REJECTED` with ref_type REVIEW). Calls under `/api/event-reviews/{id}` (PUT edit with `keepMediaIds`, DELETE
+  `EventReviewPublishService` scans them like `BlogPublishService` (keyword check again, retry job, notifications
+  `CONTENT_PUBLISHED` / `CONTENT_REJECTED` with ref_type REVIEW). Calls under `/api/event-reviews/{id}` (PUT edit with `keepMediaIds`, DELETE
   own: hard delete, points withdrawn, files discarded, open report cases closed; `like`; `report` → HIDDEN past
   `report_hide_threshold`), so place reviews can take `/api/reviews`. Reviews, ratings and album photos of LOCKED or
   DELETED accounts are hidden (`ActiveAuthors.of("r")`); the author still sees their own PROCESSING/REJECTED/HIDDEN one.
@@ -423,8 +470,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Write Post (links, new-account limit shared with posts in `user_daily_usage`, banned keywords). An
   `externalPlaceId` goes through `PlaceService.resolve/save` (the OSM place is added). Without media → PUBLISHED and
   +10 (`PointService.REVIEW`, reason REVIEW_CREATED, paid once); with media → PROCESSING until
-  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it; an edit with new media
-  hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
+  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it and notifies the author
+  (`CONTENT_PUBLISHED` / `CONTENT_REJECTED`; the first review of a PENDING pin: "…sẽ hiển thị cho mọi người khi ghim
+  được Moderator duyệt"); an edit with new media hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
   The form is a panel mode ("write") of map.js; pins are reloaded after a save.
 - "Cắm ghim" (UC-U19, feature/review PinService/PinController): `GET /api/map/pins/compose`, `GET
   /api/map/pins/duplicates?lat=&lng=&names=a|b` (ACTIVE places within 200 m whose squashed name contains / is contained
@@ -442,6 +490,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   from outside Japan; `/api/map` sends it as `devLocation`.
 
 ## Working notes
+- `spring.flyway.out-of-order=true`: migrations are written on several branches at once (V9 here while the HandBook
+  branch has V7/V8), so a database that already ran a higher version still applies a lower one merged later.
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.
