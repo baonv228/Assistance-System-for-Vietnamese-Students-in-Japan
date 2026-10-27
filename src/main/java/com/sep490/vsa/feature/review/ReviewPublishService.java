@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.review;
 
 import com.sep490.vsa.feature.media.MediaService;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.moderation.MediaScanService;
 import com.sep490.vsa.feature.notification.NotificationService;
 import com.sep490.vsa.feature.review.ReviewRepository.AttachedMedia;
@@ -17,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,6 +27,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * in PROCESSING (only its author sees it) while each file is scanned. Then every file passed → PUBLISHED and the
  * author earns the review's points (once); a file failed → REJECTED, the failed files are deleted and the author is
  * notified to edit the review; the scanner could not answer → it stays PROCESSING and the retry job tries again.
+ * The text is checked against the banned keywords as they are now before the files are scanned and again right before
+ * publishing (a keyword may be added while the review waits), like posts and event reviews; a hit → REJECTED without
+ * scanning. Only place reviews: event reviews share the table and have their own job (EventReviewPublishService).
  */
 @Service
 public class ReviewPublishService {
@@ -35,6 +40,7 @@ public class ReviewPublishService {
     private final ReviewRepository repository;
     private final MediaScanService scanner;
     private final MediaService media;
+    private final ContentFilter filter;
     private final PointService points;
     private final NotificationService notifications;
     private final TransactionTemplate tx;
@@ -42,11 +48,12 @@ public class ReviewPublishService {
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     public ReviewPublishService(ReviewRepository repository, MediaScanService scanner, MediaService media,
-                                PointService points, NotificationService notifications,
+                                ContentFilter filter, PointService points, NotificationService notifications,
                                 PlatformTransactionManager transactionManager, Clock clock) {
         this.repository = repository;
         this.scanner = scanner;
         this.media = media;
+        this.filter = filter;
         this.points = points;
         this.notifications = notifications;
         this.tx = new TransactionTemplate(transactionManager);
@@ -77,12 +84,15 @@ public class ReviewPublishService {
             return;
         }
         try {
-            if (!"PROCESSING".equals(repository.status(reviewId))) {
+            ReviewRow review = repository.review(reviewId, false).orElse(null);
+            if (review == null || review.placeId() == null || !"PROCESSING".equals(review.status())) {
                 return;
             }
-            for (AttachedMedia m : repository.media(reviewId)) {
-                if ("PROCESSING".equals(m.scanStatus())) {
-                    scanner.scan(m.id());
+            if (filter.bannedKeyword(review.content()).isEmpty()) {
+                for (AttachedMedia m : repository.media(reviewId)) {
+                    if ("PROCESSING".equals(m.scanStatus())) {
+                        scanner.scan(m.id());
+                    }
                 }
             }
             tx.executeWithoutResult(s -> decide(reviewId));
@@ -93,7 +103,13 @@ public class ReviewPublishService {
 
     private void decide(long reviewId) {
         ReviewRow review = repository.review(reviewId, true).orElse(null);
-        if (review == null || !"PROCESSING".equals(review.status())) {
+        if (review == null || review.placeId() == null || !"PROCESSING".equals(review.status())) {
+            return;
+        }
+        Optional<String> keyword = filter.bannedKeyword(review.content());
+        if (keyword.isPresent()) {
+            repository.setStatus(reviewId, "PROCESSING", "REJECTED");
+            tellRejected(review, "có từ khóa không được phép “" + keyword.get() + "”");
             return;
         }
         List<AttachedMedia> files = repository.media(reviewId);
@@ -103,17 +119,20 @@ public class ReviewPublishService {
             repository.setStatus(reviewId, "PROCESSING", "REJECTED");
             repository.unlinkMedia(reviewId, rejected);
             media.discard(rejected);
-            String place = review.placeId() == null ? "" : repository.place(review.placeId())
-                    .map(p -> " về “" + p.name() + "”").orElse("");
-            notifications.send(review.authorId(), NotificationService.CONTENT_REJECTED,
-                    "Review" + place + " chưa được đăng vì ảnh hoặc video vi phạm Quy tắc cộng đồng. "
-                            + "Bạn có thể sửa review rồi gửi lại.", "REVIEW", reviewId);
+            tellRejected(review, "ảnh hoặc video vi phạm Quy tắc cộng đồng");
             return;
         }
         if (files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()))
                 && repository.setStatus(reviewId, "PROCESSING", "PUBLISHED")) {
             awardOnce(review.authorId(), reviewId);
         }
+    }
+
+    private void tellRejected(ReviewRow review, String reason) {
+        String place = repository.place(review.placeId()).map(p -> " về “" + p.name() + "”").orElse("");
+        notifications.send(review.authorId(), NotificationService.CONTENT_REJECTED,
+                "Review" + place + " chưa được đăng vì " + reason + ". Bạn có thể sửa review rồi gửi lại.",
+                "REVIEW", review.id());
     }
 
     /** +10 the first time the review is published, never again (an edited or re-sent review earns nothing more). */

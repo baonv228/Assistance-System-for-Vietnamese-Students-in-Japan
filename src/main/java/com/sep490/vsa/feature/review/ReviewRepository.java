@@ -138,10 +138,14 @@ public class ReviewRepository {
                 .stream().findFirst().orElse(null);
     }
 
-    /** Reviews still PROCESSING since before {@code before}, oldest first (picked up by the retry job). */
+    /**
+     * Place reviews still PROCESSING since before {@code before}, oldest first (picked up by the retry job). Event
+     * reviews share the table and are left to their own job.
+     */
     public List<Long> processingIds(Instant before, int limit) {
         return jdbc.query("""
-                SELECT id FROM reviews WHERE status = 'PROCESSING' AND updated_at < ? ORDER BY updated_at LIMIT ?""",
+                SELECT id FROM reviews WHERE place_id IS NOT NULL AND status = 'PROCESSING' AND updated_at < ?
+                ORDER BY updated_at LIMIT ?""",
                 (rs, i) -> rs.getLong(1), Timestamp.from(before), limit);
     }
 

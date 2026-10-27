@@ -36,6 +36,7 @@ const SOURCES = { OSM: "OpenStreetMap", GOOGLE: "Google Maps", TEAM: "Nhóm Senp
 const ROUTES = {
     login: () => `/login?${new URLSearchParams({ next: location.pathname + location.search })}`,
     blog: (id) => `/blog/${id}`,
+    event: (id) => `/events/${id}`,
     profile: (id) => `/coming-soon?${new URLSearchParams({ f: "public-profile", id })}`
 };
 
@@ -223,7 +224,8 @@ async function loadEvents() {
                 icon: L.divIcon({ className: "mp-wrap", html: `<span class="mp ev">${ic("celebration")}<span class="tagl">${when}</span></span>`,
                     iconSize: [34, 34], iconAnchor: [17, 17] }),
                 title: `Sự kiện: ${e.title}, ${when}`, alt: e.title
-            }).bindPopup(`<b>${esc(e.title)}</b><br><small>${esc(e.locationName)} · ${esc(when)}</small>`)
+            }).bindPopup(`<b>${esc(e.title)}</b><br><small>${esc(e.locationName)} · ${esc(when)}</small>
+                <br><a class="evlink" href="${ROUTES.event(e.id)}">Xem sự kiện${ic("arrow_forward")}</a>`)
                 .addTo(eventLayer);
         });
     } catch {

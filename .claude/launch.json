@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "asvsj",
-      "runtimeExecutable": "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.3/plugins/maven-plugin/lib/maven3/bin/mvn.cmd",
-      "runtimeArgs": ["-q", "spring-boot:run", "-Dspring-boot.run.profiles=local", "-Dspring-boot.run.arguments=--server.port=8090"],
+      "runtimeExecutable": "C:/Users/Hung Tien/.m2/wrapper/dists/apache-maven-3.9.12-bin/5nmfsn99br87k5d4ajlekdq10k/apache-maven-3.9.12/bin/mvn.cmd",
+      "runtimeArgs": ["-q", "spring-boot:run", "-Dspring-boot.run.profiles=local", "-Dspring-boot.run.arguments=--server.port=8090", "-Dspring-boot.run.jvmArguments=-Djdk.net.unixdomain.tmpdir=D:/tmp/asvsj"],
       "env": { "JAVA_HOME": "C:/Program Files/Java/jdk-17" },
       "port": 8090,
       "autoPort": false

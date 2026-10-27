@@ -53,7 +53,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `AuthorStatusSync` recounts the posts the account commented on when an Admin locks/unlocks it or the user deletes it
   (post rows locked before the users row, same order as comment actions) and refreshes "Bài nổi bật" after commit.
   Home leaves out their reviews too (guest numbers and "Hữu ích" quotes, member "Review mới"; `ActiveAuthors.of("r")`),
-  and so do the event pages (reviews, ratings, album); what else happens to place reviews of such accounts is still open.
+  and so do the event pages (reviews, ratings, album) and the Map (place reviews, pin and detail figures, liking or
+  reporting them → 404, scam "!" posts; `MapRepository`).
 - New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
 - Places: OpenStreetMap places store their `osm_id`, names, address and coordinates (ODbL allows it; credit
   "© OpenStreetMap contributors"); places saved from Google Maps before keep their `google_place_id` (no address or
@@ -396,7 +397,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `/api/map/places/{id}/save`, POST/DELETE `/api/reviews/{id}/like` (not one's own; like_count recounted),
   POST `/api/reviews/{id}/report` (ContentReportService target REVIEW; over the threshold the review becomes HIDDEN).
 - Tools as in the prototype: one card (search "Tìm địa điểm" + "Danh mục" dropdown with "Tất cả danh mục" and
-  counts), then "Sự kiện: Tắt / 15 ngày tới / 30 ngày tới" (lantern pins labelled "Còn N ngày" / "Đang diễn ra").
+  counts), then "Sự kiện: Tắt / 15 ngày tới / 30 ngày tới" (lantern pins labelled "Còn N ngày" / "Đang diễn ra";
+  their popup links "Xem sự kiện" to `/events/{id}`).
   Legend open on desktop, folded while the panel is open and on phones.
 - Shops drawn by the "Gọn" style are clickable (MapLibre layers poi_r1/poi_r7/poi_r20/poi_transit, bus stops
   ignored): OpenFreeMap is built by Planetiler, feature id = OSM id × 10 + 1 node / 2 way / 3 relation (checked against
@@ -413,8 +415,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Pins: bright (round, big, review count) when ACTIVE with ≥ 1 published review and not closed; faded otherwise;
   community pins (source USER) square; pending dashed; closed grey; lantern pins for events. OSM results of a search
   get temporary dark pins and a details panel without an id ("chưa có trên Senpai ơi"); such a place is stored only when
-  someone reviews, saves or links it. "Viết review", "Báo đã đóng cửa" and "Cắm ghim" are disabled until those steps
-  are built. `PlaceOption` (search result) now also carries lat/lng.
+  someone reviews, saves or links it. `PlaceOption` (search result) now also carries lat/lng.
 - Login accepts `?next=/path` (same-site paths only, Users only) so the Map can send guests to sign in and back.
 - Reviews (feature/review, UC-U16..18): `GET /api/reviews/compose?placeId=` (limits, new-account quota, `myReviewId`),
   `POST /api/reviews` (multipart part "review" `{placeId | externalPlaceId, rating, content}` + ≤ 5 "images" + 1
@@ -423,8 +424,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Write Post (links, new-account limit shared with posts in `user_daily_usage`, banned keywords). An
   `externalPlaceId` goes through `PlaceService.resolve/save` (the OSM place is added). Without media → PUBLISHED and
   +10 (`PointService.REVIEW`, reason REVIEW_CREATED, paid once); with media → PROCESSING until
-  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it; an edit with new media
-  hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
+  `ReviewPublishService` (async + retry job, like BlogPublishService; place reviews only, `place_id IS NOT NULL`, event
+  reviews have their own job) publishes or rejects it, checking the banned keywords again before scanning and right
+  before publishing (a hit → REJECTED, author told the keyword); an edit with new media hides it again until the scan
+  passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
   The form is a panel mode ("write") of map.js; pins are reloaded after a save.
 - "Cắm ghim" (UC-U19, feature/review PinService/PinController): `GET /api/map/pins/compose`, `GET
   /api/map/pins/duplicates?lat=&lng=&names=a|b` (ACTIVE places within 200 m whose squashed name contains / is contained
