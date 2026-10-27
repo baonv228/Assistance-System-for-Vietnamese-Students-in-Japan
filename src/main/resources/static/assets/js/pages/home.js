@@ -44,7 +44,7 @@ function renderGuest(data) {
                 ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", "/map")}
                 ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", soon("learn"))}
                 ${feature("contact_support", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/qa")}
-                ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", soon("fest"))}
+                ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", "/events")}
             </div>
             ${phraseCard(phrase)}
             <p class="note">
@@ -85,10 +85,10 @@ async function renderMember() {
                 </div>
                 <div class="card">
                     <div class="row"><span class="badge lan">${ic("celebration")}Sự kiện 2 tuần tới</span><span class="grow"></span>
-                        <a class="link" href="${soon("fest")}">Tất cả</a></div>
+                        <a class="link" href="/events">Tất cả</a></div>
                     ${home.events.map((e) => {
                         const d = formatDay(e.startDate);
-                        return `<a class="mini" href="${soon("fest")}"><span class="when"><b>${d.day}</b>${d.month}</span>
+                        return `<a class="mini" href="/events/${e.id}"><span class="when"><b>${d.day}</b>${d.month}</span>
                             <span><b>${esc(e.title)}</b><br><span class="note">${eventWhen(e)} · ${esc(e.locationName)}</span></span></a>`;
                     }).join("") || '<p class="note">Chưa có sự kiện nào trong 2 tuần tới.</p>'}
                 </div>

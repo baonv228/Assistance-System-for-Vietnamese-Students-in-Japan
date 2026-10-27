@@ -167,12 +167,13 @@ public class HomeService {
     private List<EventItem> events() {
         LocalDate today = LocalDate.now(clock.withZone(JAPAN));
         return jdbc.query("""
-                SELECT title, start_date, end_date, location_name FROM events
+                SELECT id, title, start_date, end_date, location_name FROM events
                 WHERE deleted_at IS NULL AND end_date >= ? AND start_date <= ?
-                ORDER BY start_date LIMIT 3""",
+                ORDER BY start_date, id LIMIT 3""",
                 (rs, i) -> {
-                    LocalDate start = rs.getDate(2).toLocalDate();
-                    return new EventItem(rs.getString(1), start, rs.getDate(3).toLocalDate(), rs.getString(4),
+                    LocalDate start = rs.getDate(3).toLocalDate();
+                    return new EventItem(rs.getLong(1), rs.getString(2), start, rs.getDate(4).toLocalDate(),
+                            rs.getString(5),
                             Math.max(0, ChronoUnit.DAYS.between(today, start)));
                 },
                 Date.valueOf(today), Date.valueOf(today.plusDays(EVENT_DAYS)));
