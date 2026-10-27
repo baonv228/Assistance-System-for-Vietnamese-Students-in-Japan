@@ -111,9 +111,9 @@ public class ModeratorPlaceController {
                                          @RequestParam(required = false) String category,
                                          @RequestParam(required = false) String source,
                                          @RequestParam(required = false) String status,
-                                         @RequestParam(required = false) Long area,
+                                         @RequestParam(required = false) String prefecture,
                                          @RequestParam(defaultValue = "0") int page) {
-        return ApiResponse.ok("OK", admin.list(q, category, source, status, area, page));
+        return ApiResponse.ok("OK", admin.list(q, category, source, status, prefecture, page));
     }
 
     @GetMapping("/api/moderator/places/{id:\\d+}")

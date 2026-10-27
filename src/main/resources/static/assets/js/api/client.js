@@ -112,7 +112,13 @@ export const apiClient = {
     // keepDays, photoMaxMb }; submitTagRequest takes FormData: part "request" (JSON {tagId, proofTypeId, consent}) + "photo"
     tagCompose: () => request("/me/tag-requests/compose"),
     submitTagRequest: (formData) => request("/me/tag-requests", { method: "POST", body: formData }),
-    areas: () => request("/areas"),
+    // Living-area picker (V10). areaPicker → { prefectures: [{ code, nameJa, nameEn, lat, lng }], devLocation };
+    // the others answer areas { id, prefectureCode, nameJa, nameEn, name, lat, lng }
+    areaPicker: () => request("/areas"),
+    areasIn: (prefectureCode) => request(`/areas/prefectures/${encodeURIComponent(prefectureCode)}`),
+    searchAreas: (q) => request(`/areas/search?${toQuery({ q })}`),
+    nearestArea: (lat, lng) => request(`/areas/nearest?${toQuery({ lat, lng })}`),
+    area: (id) => request(`/areas/${encodeURIComponent(id)}`),
 
     // Notifications (bell + "Thông báo"). page → { items, hasMore, unread };
     // summary → { unread, latestId, processing, fresh: notifications after `after`, newest first }

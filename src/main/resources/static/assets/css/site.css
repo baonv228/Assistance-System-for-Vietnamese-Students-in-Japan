@@ -378,3 +378,15 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .tag-form .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
 .tag-form .check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--brand); flex: none; }
 .tag-preview { max-width: 260px; max-height: 200px; border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
+
+/* Living-area picker (components/area-picker.js) */
+.area-picker { display: grid; gap: 10px; }
+.area-tools { flex-wrap: wrap; }
+.area-tools input { min-width: 200px; }
+.area-results { display: grid; gap: 4px; max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px; background: var(--surface); }
+.area-results button { text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; font: inherit; color: var(--ink); }
+.area-results button:hover, .area-results button:focus-visible { background: var(--brand-soft); }
+.area-mapbox { display: grid; gap: 8px; }
+.area-mapbox .row { flex-wrap: wrap; }
+.area-map { height: 300px; border-radius: 10px; border: 1px solid var(--line); }
+.area-credit { font-size: 12px; margin: 0; }

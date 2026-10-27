@@ -1,5 +1,6 @@
 // "Tôi": points and rank, new-account limits, identity tag, area and stage, account actions (as in the prototype).
 import { apiClient } from "../api/client.js";
+import { mountAreaPicker } from "../components/area-picker.js";
 import { logout, mountSiteHeader } from "../components/site-header.js";
 import { esc, ic, LOGO_SVG, STAGES, tagChips } from "../lib/ui.js";
 
@@ -15,11 +16,9 @@ const PERKS = {
 const PROVIDERS = { GOOGLE: "Google", FACEBOOK: "Facebook" };
 
 await mountSiteHeader("me");
-let areas = [];
+let areaPicker = null;
 try {
-    const [profile, areaList] = await Promise.all([apiClient.profile(), apiClient.areas()]);
-    areas = areaList;
-    render(profile);
+    render(await apiClient.profile());
 } catch (error) {
     main.innerHTML = `<div class="alert error">${esc(error.message)}</div>`;
 }
@@ -74,14 +73,10 @@ function render(p) {
         <div class="card">
             <h3>${ic("person_pin_circle")} Khu vực và giai đoạn</h3>
             <p class="note">Không bắt buộc. Dùng để gợi ý việc cần làm, review và sự kiện gần bạn. Chỉ lưu khu vực, không lưu địa chỉ; chỉ mình bạn thấy.</p>
-            <div class="two">
-                <div class="field"><label for="me-area">Khu vực sinh sống</label>
-                    <select class="select" id="me-area"><option value="">Chưa chọn</option>
-                    ${areas.map((a) => `<option value="${a.id}" ${a.id === p.areaId ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div>
-                <div class="field"><label for="me-stage">Giai đoạn</label>
-                    <select class="select" id="me-stage"><option value="">Chưa chọn</option>
-                    ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === p.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-            </div>
+            <div class="field"><label for="me-stage">Giai đoạn</label>
+                <select class="select" id="me-stage"><option value="">Chưa chọn</option>
+                ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === p.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+            <div id="me-area-box"><p class="note">Đang tải danh sách khu vực…</p></div>
             <div class="row"><button class="btn sm" type="button" id="save">Lưu</button><span class="note" id="saved" role="status"></span></div>
         </div>
 
@@ -120,6 +115,22 @@ function render(p) {
     document.querySelector("#delete-ask").addEventListener("click", askDelete);
     bindPassword(p);
     bindHistory();
+    bindArea(p);
+}
+
+/** The area picker (prefecture → area, quick search, map); its label follows the stage chosen above it. */
+async function bindArea(p) {
+    const box = document.querySelector("#me-area-box");
+    const save = document.querySelector("#save");
+    save.disabled = true;                       // no save before the picker shows the current area
+    areaPicker = null;
+    try {
+        areaPicker = await mountAreaPicker(box, { id: "me", areaId: p.areaId, stage: p.stage });
+        document.querySelector("#me-stage").addEventListener("change", (e) => areaPicker.setStage(e.target.value));
+        save.disabled = false;
+    } catch (error) {
+        box.innerHTML = `<p class="alert error">${esc(error.message)}</p>`;
+    }
 }
 
 /** UC-U10 "Lịch sử điểm": newest first, 20 a page; content still visible is a link. */
@@ -217,10 +228,10 @@ function bindPassword(p) {
 
 async function save() {
     const status = document.querySelector("#saved");
-    const areaId = document.querySelector("#me-area").value;
+    const areaId = areaPicker ? areaPicker.value() : null;
     const stage = document.querySelector("#me-stage").value;
     try {
-        const updated = await apiClient.updateProfile({ areaId: areaId ? Number(areaId) : null, stage: stage || null });
+        const updated = await apiClient.updateProfile({ areaId, stage: stage || null });
         render(updated);
         document.querySelector("#saved").textContent = "Đã lưu.";
     } catch (error) {

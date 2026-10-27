@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.place;
 
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.AreaRef;
+import com.sep490.vsa.feature.place.PlaceModerationDtos.PrefectureRef;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.CategoryRef;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.ClosedRow;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceRow;
@@ -254,9 +255,10 @@ public class PlaceModerationRepository {
 
     // ---------------------------------------------------------------- "Địa điểm" (UC-M07, UC-M08)
 
-    public List<AreaRef> areas() {
-        return jdbc.query("SELECT id, display_name FROM areas ORDER BY sort_order, id",
-                (rs, i) -> new AreaRef(rs.getLong(1), rs.getString(2)));
+    /** The prefectures, for the list filter: "Tokyo · 東京都". */
+    public List<PrefectureRef> prefectures() {
+        return jdbc.query("SELECT code, CONCAT(name_en, ' · ', name_ja) FROM prefectures ORDER BY code",
+                (rs, i) -> new PrefectureRef(rs.getString(1), rs.getString(2)));
     }
 
     public Optional<AreaRef> area(long id) {
@@ -265,7 +267,7 @@ public class PlaceModerationRepository {
     }
 
     /** Filters of the places list; null or blank = any. {@code q} matches the three names, accents ignored. */
-    public record PlaceFilter(String q, String categoryId, String source, String status, Long areaId) {
+    public record PlaceFilter(String q, String categoryId, String source, String status, String prefectureCode) {
     }
 
     private static String where(PlaceFilter f, List<Object> args) {
@@ -291,9 +293,9 @@ public class PlaceModerationRepository {
             sql.append(" AND p.status = ?");
             args.add(f.status());
         }
-        if (f.areaId() != null) {
-            sql.append(" AND p.area_id = ?");
-            args.add(f.areaId());
+        if (f.prefectureCode() != null && !f.prefectureCode().isBlank()) {
+            sql.append(" AND p.area_id IN (SELECT id FROM areas WHERE prefecture_code = ?)");
+            args.add(f.prefectureCode());
         }
         return sql.toString();
     }

@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.place;
 
+import com.sep490.vsa.feature.area.AreaService;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceOption;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -209,6 +210,7 @@ public class PlaceRepository {
             return new Saved(existing, false);
         }
         long id = key.getKey().longValue();
+        AreaService.assignPlace(jdbc, id);
         jdbc.update("""
                 INSERT INTO place_history (place_id, action, actor_id, detail)
                 VALUES (?, 'CREATED', ?, JSON_OBJECT('source', 'OSM', 'via', 'BLOG'))""", id, createdBy);

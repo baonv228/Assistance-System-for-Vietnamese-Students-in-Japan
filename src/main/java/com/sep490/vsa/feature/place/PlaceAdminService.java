@@ -7,6 +7,7 @@ import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.feature.admin.ActivityLogService;
 import com.sep490.vsa.feature.notification.NotificationService;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceSearch;
+import com.sep490.vsa.feature.area.AreaService;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.AreaRef;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.CategoryRef;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.Done;
@@ -62,10 +63,12 @@ public class PlaceAdminService {
     private final ActivityLogService activityLog;
     private final ObjectMapper json;
     private final Clock clock;
+    private final AreaService areas;
 
     public PlaceAdminService(PlaceModerationRepository repository, PinModerationService pins, PlaceService places,
                              NotificationService notifications, ActivityLogService activityLog, ObjectMapper json,
-                             Clock clock) {
+                             Clock clock, AreaService areas) {
+        this.areas = areas;
         this.repository = repository;
         this.pins = pins;
         this.places = places;
@@ -78,13 +81,13 @@ public class PlaceAdminService {
     // ---------------------------------------------------------------- list and details
 
     @Transactional(readOnly = true)
-    public PlacePage list(String q, String categoryId, String source, String status, Long areaId, int page) {
+    public PlacePage list(String q, String categoryId, String source, String status, String prefecture, int page) {
         PlaceFilter filter = new PlaceFilter(q == null ? null : q.strip(), categoryId,
                 source != null && SOURCES.contains(source) ? source : null,
-                status != null && STATUSES.contains(status) ? status : null, areaId);
+                status != null && STATUSES.contains(status) ? status : null, prefecture);
         int p = Math.max(0, page);
         return new PlacePage(repository.places(filter, p * PAGE_SIZE, PAGE_SIZE), p, PAGE_SIZE,
-                repository.countPlaces(filter), repository.categories(), repository.areas());
+                repository.countPlaces(filter), repository.categories(), repository.prefectures());
     }
 
     @Transactional(readOnly = true)
@@ -96,7 +99,7 @@ public class PlaceAdminService {
                 categoryOf(p.categoryId()), x.areaId(), x.areaName(), p.source(), p.status(), p.closed(), x.closedAt(),
                 x.removedReason(), x.rejectReason(), x.mergedIntoId(), x.mergedIntoName(), p.createdBy(),
                 p.authorName(), p.createdAt(), x.reviewCount(), x.saveCount(), repository.openClosedReports(id),
-                history, repository.categories(), repository.areas(), repository.reasons("PLACE_REMOVE"));
+                history, repository.categories(), repository.reasons("PLACE_REMOVE"));
     }
 
     // ---------------------------------------------------------------- UC-M07 Thêm địa điểm
@@ -121,7 +124,7 @@ public class PlaceAdminService {
         }
         NewOsmPlace n = picks.fresh().get(0);
         return new OsmPick(null, new PlaceForm(n.osmId(), n.nameVi(), n.nameJa(), n.nameEn(), n.address(),
-                n.categoryId(), null, n.lat(), n.lng(), false));
+                n.categoryId(), n.lat(), n.lng(), false));
     }
 
     /**
@@ -173,8 +176,14 @@ public class PlaceAdminService {
         if (!"ACTIVE".equals(p.status()) && !"REMOVED".equals(p.status())) {
             throw ApiException.conflict("Chỉ sửa được địa điểm đang hoạt động hoặc đã gỡ.");
         }
-        PlaceValues v = check(form);
+        PlaceValues checked = check(form);
         PlaceExtra x = repository.extra(id).orElseThrow();
+        int moved = p.lat() == null ? 0
+                : (int) Math.round(PlaceService.metres(p.lat(), p.lng(), checked.lat(), checked.lng()));
+        boolean newPosition = p.lat() == null || moved >= 1;
+        // The area follows the position, so it is worked out again only when the place was moved
+        PlaceValues v = newPosition ? checked : new PlaceValues(checked.nameVi(), checked.nameJa(), checked.nameEn(),
+                checked.address(), checked.categoryId(), x.areaId(), checked.lat(), checked.lng());
         List<Map<String, String>> changes = new ArrayList<>();
         diff(changes, "Tên tiếng Việt", p.nameVi(), v.nameVi());
         diff(changes, "Tên tiếng Nhật", p.nameJa(), v.nameJa());
@@ -188,8 +197,6 @@ public class PlaceAdminService {
             changes.add(PinModerationService.change("Khu vực", x.areaName(),
                     v.areaId() == null ? null : repository.area(v.areaId()).map(AreaRef::name).orElse(null)));
         }
-        int moved = p.lat() == null ? 0 : (int) Math.round(PlaceService.metres(p.lat(), p.lng(), v.lat(), v.lng()));
-        boolean newPosition = p.lat() == null || moved >= 1;
         if (newPosition) {
             changes.add(PinModerationService.change("Vị trí", p.lat() == null ? "chưa có" : "cũ",
                     p.lat() == null ? "đã đặt" : "dời " + moved + " m"));
@@ -281,17 +288,15 @@ public class PlaceAdminService {
         if (form.categoryId() == null || repository.category(form.categoryId()).isEmpty()) {
             errors.put("categoryId", "Hãy chọn danh mục.");
         }
-        if (form.areaId() != null && repository.area(form.areaId()).isEmpty()) {
-            errors.put("areaId", "Khu vực không hợp lệ.");
-        }
         if (form.lat() == null || form.lng() == null || Math.abs(form.lat()) > 90 || Math.abs(form.lng()) > 180) {
             errors.put("position", "Hãy bấm lên bản đồ để đặt vị trí.");
         }
         if (!errors.isEmpty()) {
             throw ApiException.invalid(errors.values().iterator().next(), errors);
         }
-        return new PlaceValues(nameVi, nameJa, nameEn, address, form.categoryId(), form.areaId(), form.lat(),
-                form.lng());
+        // The area follows the position (nearest area point in Japan, none elsewhere); it is not picked by hand
+        return new PlaceValues(nameVi, nameJa, nameEn, address, form.categoryId(),
+                areas.areaIdAt(form.lat(), form.lng()), form.lat(), form.lng());
     }
 
     private List<NearbyPlace> similar(PlaceValues v, long exceptId) {

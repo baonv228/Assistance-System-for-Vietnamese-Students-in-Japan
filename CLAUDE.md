@@ -9,7 +9,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - **Behaviour and screens:** the clickable prototype, repo https://github.com/baonv228/Prototype_System_Test
   (branch `tienhung`). When a business rule is unclear, check the prototype first.
 - **Database:** Flyway migrations in `src/main/resources/db/migration/` (`V1__init_schema.sql` = MySQL 8,
-  54 tables) and design notes in `docs/database/database-design.md`. Never edit a pushed migration; add the
+  54 tables; V10 adds `prefectures`) and design notes in `docs/database/database-design.md`. Never edit a pushed migration; add the
   next `V<n>__<description>.sql` instead.
 - **Report documents** (table descriptions EN/VI, use case specs, screen specs) are kept in the prototype
   repo under `docs/`, not here. If you change a table, update the schema here and the table dictionary there.
@@ -180,9 +180,25 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
 - Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to 5 published
-  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area, then a topic
-  that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest).
-  Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực
+  của bạn"), then in its prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage
+  (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest). "Review mới" orders the same
+  way (area, prefecture, rest). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+- Living areas (V10, `feature/area`: `AreaService`, `AreaController`, `AreaDtos`): all of Japan, prefecture
+  (`prefectures`, 47) → municipality, the 20 designated cities split into wards (`areas`, 1,892 rows: `code` = 6-digit
+  official code, `prefecture_code`, `name_ja`/`name_kana`/`name_en`, `lat`/`lng` representative point, `display_name`
+  "Arakawa-ku, Tokyo · 東京都荒川区"; no station). Data = Geolonia 住所データ (japanese-addresses-v2 `api/ja.json`, CC BY
+  4.0, from デジタル庁 アドレス・ベース・レジストリ). Users and places keep `area_id`; the seven old sample areas moved to
+  their Tokyo ward. Public GETs: `/api/areas` (prefectures + `devLocation`), `/api/areas/prefectures/{code}`,
+  `/api/areas/search?q=` (romaji, kanji, kana; "-" = space; 12, names starting with it first), `/api/areas/nearest?lat=
+  &lng=` (nearest representative point; outside Japan 400 `NOT_IN_JAPAN`; may give the neighbour near a border, the user
+  confirms), `/api/areas/{id}`. Picker `components/area-picker.js` (Tôi and the Home prompt): prefecture + area selects,
+  quick search, "Chọn trên bản đồ" (click, or "Vị trí của tôi" through the browser's permission prompt /
+  `app.map.dev-location`); only the area id is saved, the point never is. Label by stage: PRE "Khu vực bạn sắp đến",
+  HOME "Khu vực bạn từng sống", else "Khu vực bạn đang sống". Not required: the Home keeps a gentle prompt ("Mong bạn
+  cho Senpai ơi biết khu vực…") until area and stage are set or "Để sau". New places in Japan get the area nearest to
+  their position (`AreaService.assignPlace`: OSM places, pins; Moderator create/update through `areaIdAt`, only when the
+  place is moved); places in Vietnam have none.
 - Points (UC-U10): the Tôi card shows the total, the rank badge, progress, ranks with perks and the point rules;
   "Lịch sử điểm" = `GET /api/me/points?page=` (`feature/user/PointHistoryService`, 20 a page, newest first: delta, reason
   label, the content's title and a link only while it can still be seen; plain SQL over `point_transactions`). The
@@ -472,8 +488,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   to "Chi tiết" = OSM raster tiles when WebGL/CDN fails); the layers button switches, the choice is kept in localStorage.
   CARTO basemaps were tried and need an API key in browsers. Declare module-level `let`s above `await start()` (TDZ).
 - APIs (GET public): `GET /api/map` (categories with counts, every ACTIVE place with a position plus the viewer's own
-  PENDING pins, review count and average, scam "!" flag, map centre = middle of the places of the user's area, else
-  Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
+  PENDING pins, review count and average, scam "!" flag, map centre = the representative point of the user's area,
+  else Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
   get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.search`),
   `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
   PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
@@ -547,13 +563,13 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
     off, reports deleted so people can report again, REOPENED history), `DELETE /api/moderator/places/{id}/closed-reports`
     ("Vẫn mở cửa, xóa các báo cáo").
   - "Địa điểm" `/moderator/places` (UC-M07, UC-M08; `PlaceAdminService`, page `mod-places.js`, `?id=` opens a place,
-    `?new=1` "Thêm địa điểm"): `GET /api/moderator/places?q=&category=&source=&status=&area=&page=` (10 a page, newest
-    first, `q` over the names and address with accents ignored; source MODERATOR also lists TEAM), `GET …/{id}` (details,
-    counts, history as ready text "Sửa thông tin · Danh mục: Quán ăn → Siêu thị", categories, areas, PLACE_REMOVE
-    reasons), `GET /api/moderator/places/osm-search?q=` (= `PlaceService.search`: Senpai ơi places with an id → "Mở",
+    `?new=1` "Thêm địa điểm"): `GET /api/moderator/places?q=&category=&source=&status=&prefecture=&page=` (10 a page,
+    newest first, `q` over the names and address with accents ignored; source MODERATOR also lists TEAM; `prefectures`
+    for the filter), `GET …/{id}` (details, counts, history as ready text "Sửa thông tin · Danh mục: Quán ăn → Siêu
+    thị", categories, PLACE_REMOVE reasons), `GET /api/moderator/places/osm-search?q=` (= `PlaceService.search`: Senpai ơi places with an id → "Mở",
     OSM places → "Chọn"), `GET …/osm/{externalId}` (`PlaceService.resolve`: `existingId`, or a filled-in form with the
     category from `category_osm_tags`), `POST /api/moderator/places` and `PUT …/{id}` `{osmId?, nameVi, nameJa, nameEn,
-    address, categoryId, areaId, lat, lng, confirmDuplicate}` (required: name "Hãy nhập tên hiển thị.", category,
+    address, categoryId, lat, lng, confirmDuplicate}` (the area follows the position; required: name "Hãy nhập tên hiển thị.", category,
     position "Hãy bấm lên bản đồ để đặt vị trí."; a similar ACTIVE name within 200 m answers `duplicates` without
     `placeId` until `confirmDuplicate`; new places are ACTIVE at once, source OSM with `osm_id` or MODERATOR; an OSM id
     Senpai ơi has answers that place; edits keep the OSM id, never write to OpenStreetMap, history `{changes: [{field,

@@ -1,4 +1,4 @@
-// UC-M07 / UC-M08 "Địa điểm" (Moderator). Left: the places list (search, category, source, status, area; 10 a page).
+// UC-M07 / UC-M08 "Địa điểm" (Moderator). Left: the places list (search, category, source, status, prefecture; 10 a page).
 // Right, one of:
 //   view   — the place's details, small map, actions (Sửa thông tin, Gỡ khỏi bản đồ / Khôi phục, nhãn đóng cửa) and
 //            its history ("Danh mục: Quán ăn → Siêu thị", who, when);
@@ -19,9 +19,9 @@ const SOURCE_FILTERS = [["OSM", "OpenStreetMap"], ["MODERATOR", "Nhóm Senpai ơ
     ["GOOGLE", "Google Maps"]];
 
 let main = null;
-let lists = { categories: [], areas: [] };
+let lists = { categories: [], prefectures: [] };
 let page = { items: [], page: 0, size: 10, total: 0 };
-let filters = { q: "", category: "", source: "", status: "ACTIVE", area: "", page: 0 };
+let filters = { q: "", category: "", source: "", status: "ACTIVE", prefecture: "", page: 0 };
 let selected = null;        // id of the place on the right
 let info = null;            // its PlaceInfo
 let mode = "view";          // view | edit | remove | add
@@ -49,7 +49,7 @@ function renderPage() {
                 ${SOURCE_FILTERS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("")}</select>
             <label class="sr-only" for="f-st">Trạng thái</label><select class="input" id="f-st"><option value="">Mọi trạng thái</option>
                 ${Object.entries(STATUS_LABELS).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("")}</select>
-            <label class="sr-only" for="f-area">Khu vực</label><select class="input" id="f-area"><option value="">Mọi khu vực</option></select>
+            <label class="sr-only" for="f-pref">Tỉnh</label><select class="input" id="f-pref"><option value="">Mọi tỉnh</option></select>
         </div>
         <div class="mod-master">
             <div><div class="mod-list" id="list" aria-live="polite"></div><div class="row mod-pager" id="pager"></div></div>
@@ -60,7 +60,7 @@ function renderPage() {
         clearTimeout(listTimer);
         listTimer = setTimeout(() => setFilter("q", event.target.value.trim()), SEARCH_DELAY);
     });
-    [["#f-cat", "category"], ["#f-src", "source"], ["#f-st", "status"], ["#f-area", "area"]].forEach(([sel, key]) =>
+    [["#f-cat", "category"], ["#f-src", "source"], ["#f-st", "status"], ["#f-pref", "prefecture"]].forEach(([sel, key]) =>
         main.querySelector(sel).addEventListener("change", (event) => setFilter(key, event.target.value)));
     main.querySelector("#add-btn").addEventListener("click", startAdd);
     main.querySelector("#list").addEventListener("click", (event) => {
@@ -95,9 +95,9 @@ function renderLists() {
     if (cat.options.length === 1) {
         cat.insertAdjacentHTML("beforeend", lists.categories.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join(""));
     }
-    const area = main.querySelector("#f-area");
-    if (area.options.length === 1) {
-        area.insertAdjacentHTML("beforeend", lists.areas.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join(""));
+    const pref = main.querySelector("#f-pref");
+    if (pref.options.length === 1) {
+        pref.insertAdjacentHTML("beforeend", lists.prefectures.map((p) => `<option value="${esc(p.code)}">${esc(p.name)}</option>`).join(""));
     }
 }
 
@@ -260,7 +260,7 @@ async function pickOsm(externalId) {
             await openPlace(pick.existingId);
             return;
         }
-        draft = { ...pick.prefill, areaId: "", confirmDuplicate: false };
+        draft = { ...pick.prefill, confirmDuplicate: false };
         duplicates = [];
         add.step = "form";
         renderDetail();
@@ -282,7 +282,7 @@ function startAdd() {
 // ---------------------------------------------------------------- the form (add, edit)
 
 function emptyDraft() {
-    return { osmId: null, nameVi: "", nameJa: "", nameEn: "", address: "", categoryId: "", areaId: "", lat: null,
+    return { osmId: null, nameVi: "", nameJa: "", nameEn: "", address: "", categoryId: "", lat: null,
         lng: null, confirmDuplicate: false };
 }
 
@@ -312,9 +312,7 @@ function formHtml() {
                 <div class="field"><label for="p-cat">Danh mục <span class="req" aria-hidden="true">*</span></label>
                     <select class="input" id="p-cat" data-bind="categoryId"><option value="">Chọn danh mục</option>
                         ${lists.categories.map((c) => option(c.id, c.name, d.categoryId)).join("")}</select></div>
-                <div class="field"><label for="p-area">Khu vực</label>
-                    <select class="input" id="p-area" data-bind="areaId"><option value="">Không chọn</option>
-                        ${lists.areas.map((a) => option(a.id, a.name, d.areaId)).join("")}</select></div>
+                <p class="note">${ic("location_city")} Khu vực (quận, thành phố) tự lấy theo vị trí trên bản đồ khi lưu.</p>
             </div>
             <div class="col">
                 <span class="label-like"><b>Vị trí trên bản đồ</b> <span class="req" aria-hidden="true">*</span></span>
@@ -357,7 +355,7 @@ function onDetailInput(event) {
 async function savePlace(confirm) {
     if (busy) return;
     const body = { osmId: draft.osmId || null, nameVi: draft.nameVi, nameJa: draft.nameJa, nameEn: draft.nameEn,
-        address: draft.address, categoryId: draft.categoryId || null, areaId: draft.areaId ? Number(draft.areaId) : null,
+        address: draft.address, categoryId: draft.categoryId || null,
         lat: draft.lat, lng: draft.lng, confirmDuplicate: confirm };
     busy = true;
     try {
@@ -411,7 +409,7 @@ async function onDetailClick(event) {
             mode = "edit";
             duplicates = [];
             draft = { osmId: info.osmId, nameVi: info.nameVi, nameJa: info.nameJa, nameEn: info.nameEn,
-                address: info.address, categoryId: info.category.id, areaId: info.areaId ?? "", lat: info.lat,
+                address: info.address, categoryId: info.category.id, lat: info.lat,
                 lng: info.lng, confirmDuplicate: false };
             renderDetail();
             break;
@@ -496,12 +494,12 @@ async function openPlace(id) {
 async function loadList() {
     try {
         page = await apiClient.modPlaces({ q: filters.q, category: filters.category, source: filters.source,
-            status: filters.status, area: filters.area, page: filters.page });
+            status: filters.status, prefecture: filters.prefecture, page: filters.page });
     } catch (error) {
         main.querySelector("#list").innerHTML = `<div class="alert error" role="alert">${esc(error.message || "Không tải được danh sách địa điểm.")}</div>`;
         return;
     }
-    lists = { categories: page.categories, areas: page.areas };
+    lists = { categories: page.categories, prefectures: page.prefectures };
     renderLists();
     renderList();
 }

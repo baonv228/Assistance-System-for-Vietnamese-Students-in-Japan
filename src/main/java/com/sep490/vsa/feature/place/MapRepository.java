@@ -116,13 +116,13 @@ public class MapRepository {
     public record AreaCenter(String name, Double lat, Double lng) {
     }
 
-    /** The viewer's area and the middle of the approved places in it (areas have no position of their own). */
+    /** The viewer's area and its representative point (V10; an area without one: the middle of its approved places). */
     public Optional<AreaCenter> areaCenter(long userId) {
         return jdbc.query("""
-                SELECT a.display_name, AVG(p.lat), AVG(p.lng)
+                SELECT a.display_name, COALESCE(a.lat, AVG(p.lat)), COALESCE(a.lng, AVG(p.lng))
                 FROM users u JOIN areas a ON a.id = u.area_id
                 LEFT JOIN places p ON p.area_id = a.id AND p.status = 'ACTIVE' AND p.lat IS NOT NULL
-                WHERE u.id = ? GROUP BY a.id, a.display_name""",
+                WHERE u.id = ? GROUP BY a.id, a.display_name, a.lat, a.lng""",
                 (rs, i) -> new AreaCenter(rs.getString(1), decimal(rs.getBigDecimal(2)), decimal(rs.getBigDecimal(3))),
                 userId).stream().findFirst();
     }

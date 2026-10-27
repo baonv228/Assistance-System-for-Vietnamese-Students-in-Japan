@@ -87,13 +87,17 @@ public final class PlaceModerationDtos {
     public record AreaRef(long id, String name) {
     }
 
+    /** A prefecture of the list filter; {@code name} = "Tokyo · 東京都". */
+    public record PrefectureRef(String code, String name) {
+    }
+
     /** One line of the places list (10 a page). */
     public record PlaceRow(long id, String nameVi, String nameJa, CategoryRef category, String source, String status,
                            boolean closed, String areaName, int reviewCount, Instant createdAt) {
     }
 
     public record PlacePage(List<PlaceRow> items, int page, int size, long total, List<CategoryRef> categories,
-                            List<AreaRef> areas) {
+                            List<PrefectureRef> prefectures) {
     }
 
     /** One line of the place's "Lịch sử": {@code text} is ready to show ("Danh mục: Quán ăn → Siêu thị"). */
@@ -111,8 +115,7 @@ public final class PlaceModerationDtos {
                             String status, boolean closed, Instant closedAt, String removedReason, String rejectReason,
                             Long mergedIntoId, String mergedIntoName, long createdBy, String authorName,
                             Instant createdAt, int reviewCount, int saveCount, int closedReports,
-                            List<HistoryItem> history, List<CategoryRef> categories, List<AreaRef> areas,
-                            List<Reason> removeReasons) {
+                            List<HistoryItem> history, List<CategoryRef> categories, List<Reason> removeReasons) {
     }
 
     /**
@@ -120,7 +123,7 @@ public final class PlaceModerationDtos {
      * {@code confirmDuplicate} = "Vẫn lưu" after the "Có thể trùng" warning.
      */
     public record PlaceForm(String osmId, String nameVi, String nameJa, String nameEn, String address,
-                            String categoryId, Long areaId, Double lat, Double lng, boolean confirmDuplicate) {
+                            String categoryId, Double lat, Double lng, boolean confirmDuplicate) {
     }
 
     /**
