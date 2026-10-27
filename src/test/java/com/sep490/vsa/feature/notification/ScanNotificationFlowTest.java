@@ -12,6 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
@@ -38,17 +39,21 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * The author hears the result of every photo/video scan (posts, questions, place reviews, the first review of a pin,
  * event reviews): CONTENT_PUBLISHED when it passed, CONTENT_REJECTED with the reason when it did not, and nothing
- * while it waits.
+ * while it waits. Then the bell's API (/api/me/notifications): list, summary, read, links, and who may call it.
  * Against MySQL ({@code asvsj_test}, like BlogWriteFlowTest); the image scanner is a mock and no reader is configured,
  * so a photo passes or fails on the image scan alone.
  */
@@ -69,12 +74,15 @@ class ScanNotificationFlowTest {
     private MockMvc mvc;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private NotificationService notifications;
     @MockBean
     private ImageModerator moderator;
     @MockBean
     private MediaReader reader;
 
     private long owner;        // 30 days old
+    private long other;
     private long staff;        // Moderator: creates places and events
     private long postTopic;    // "Kinh nghiệm"
     private long qaTopic;      // "Visa và cư trú"
@@ -86,6 +94,7 @@ class ScanNotificationFlowTest {
         when(reader.engine()).thenReturn("GEMINI");
         when(reader.enabled()).thenReturn(false);
         owner = user("USER");
+        other = user("USER");
         staff = user("MODERATOR");
         postTopic = jdbc.queryForObject("SELECT id FROM blog_topics WHERE name = 'Kinh nghiệm'", Long.class);
         qaTopic = jdbc.queryForObject("SELECT id FROM blog_topics WHERE name = 'Visa và cư trú'", Long.class);
@@ -103,6 +112,12 @@ class ScanNotificationFlowTest {
         assertThat(rows(owner)).containsExactly("CONTENT_PUBLISHED BLOG " + id
                 + " Bài viết “Hoa anh đào ở Ueno” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm.");
         assertThat(points(owner)).isEqualTo(10);
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].type").value("CONTENT_PUBLISHED"))
+                .andExpect(jsonPath("$.data.items[0].link").value("/blog/" + id))
+                .andExpect(jsonPath("$.data.items[0].read").value(false))
+                .andExpect(jsonPath("$.data.unread").value(1));
     }
 
     @Test
@@ -113,6 +128,8 @@ class ScanNotificationFlowTest {
 
         assertThat(rows(owner)).containsExactly("CONTENT_PUBLISHED QUESTION " + id
                 + " Câu hỏi “Gia hạn visa cần ảnh gì?” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm.");
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].link").value("/qa/" + id));
     }
 
     @Test
@@ -125,6 +142,10 @@ class ScanNotificationFlowTest {
         assertThat(rows(owner)).containsExactly("CONTENT_REJECTED BLOG " + id + " Bài viết “Ảnh bị chặn” chưa được"
                 + " đăng vì ảnh hoặc video vi phạm Quy tắc cộng đồng. Bạn có thể sửa bài rồi gửi lại.");
         assertThat(points(owner)).isZero();
+        // The author still opens it (the page says why it is not public)
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].type").value("CONTENT_REJECTED"))
+                .andExpect(jsonPath("$.data.items[0].link").value("/blog/" + id));
     }
 
     @Test
@@ -136,7 +157,7 @@ class ScanNotificationFlowTest {
     }
 
     @Test
-    void aScanThatCannotAnswerKeepsThePostWaitingWithoutANotification() throws Exception {
+    void aScanThatCannotAnswerKeepsThePostWaitingWithoutANotificationAndTheBellAsksAgainSoon() throws Exception {
         when(moderator.check(any(byte[].class))).thenReturn(new Verdict("ERROR", "{\"error\":\"down\"}"));
         long id = created(send(owner, multipart("/api/blogs").file(blogPart("post", "Đang chờ quét", postTopic))
                 .file(photo())));
@@ -146,6 +167,9 @@ class ScanNotificationFlowTest {
 
         assertThat(blogStatus(id)).isEqualTo("PROCESSING");
         assertThat(rows(owner)).isEmpty();
+        mvc.perform(get("/api/me/notifications/summary").session(session(owner)))
+                .andExpect(jsonPath("$.data.processing").value(1))
+                .andExpect(jsonPath("$.data.unread").value(0));
     }
 
     @Test
@@ -186,6 +210,8 @@ class ScanNotificationFlowTest {
 
         assertThat(rows(owner)).containsExactly("CONTENT_PUBLISHED REVIEW " + id + " Review về “" + name
                 + "” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm.");
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].link").value("/map?place=" + place));
     }
 
     @Test
@@ -243,9 +269,122 @@ class ScanNotificationFlowTest {
 
             assertThat(rows(owner)).containsExactly("CONTENT_PUBLISHED REVIEW " + id + " Review “" + title
                     + "” đã qua kiểm duyệt ảnh/video và đã được đăng. +10 điểm.");
+            mvc.perform(get("/api/me/notifications").session(session(owner)))
+                    .andExpect(jsonPath("$.data.items[0].link").value("/events/" + event));
+
+            // The event deleted: the notification stays, with nothing to open
+            jdbc.update("UPDATE events SET deleted_at = UTC_TIMESTAMP() WHERE id = ?", event);
+            mvc.perform(get("/api/me/notifications").session(session(owner)))
+                    .andExpect(jsonPath("$.data.items[0].link").value(nullValue()));
         } finally {
             jdbc.update("UPDATE events SET deleted_at = UTC_TIMESTAMP() WHERE id = ? AND deleted_at IS NULL", event);
         }
+    }
+
+    // ---------------------------------------------------------------- the bell's API
+
+    @Test
+    void theListIsTheUsersOwnNewestFirstTwentyAPage() throws Exception {
+        for (int i = 1; i <= 23; i++) {
+            notifications.send(owner, NotificationService.NEW_COMMENT, "Thông báo " + i, "BLOG", null);
+        }
+        notifications.send(other, NotificationService.NEW_COMMENT, "Của người khác", "BLOG", null);
+
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items.length()").value(20))
+                .andExpect(jsonPath("$.data.items[0].content").value("Thông báo 23"))
+                .andExpect(jsonPath("$.data.items[19].content").value("Thông báo 4"))
+                .andExpect(jsonPath("$.data.hasMore").value(true))
+                .andExpect(jsonPath("$.data.unread").value(23));
+        mvc.perform(get("/api/me/notifications").param("page", "1").session(session(owner)))
+                .andExpect(jsonPath("$.data.items.length()").value(3))
+                .andExpect(jsonPath("$.data.items[2].content").value("Thông báo 1"))
+                .andExpect(jsonPath("$.data.hasMore").value(false));
+        mvc.perform(get("/api/me/notifications").param("page", "-3").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].content").value("Thông báo 23"));
+        mvc.perform(get("/api/me/notifications").session(session(other)))
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].content").value("Của người khác"));
+    }
+
+    @Test
+    void theSummaryGivesTheCountTheNewestIdAndWhatCameAfterTheIdAsked() throws Exception {
+        mvc.perform(get("/api/me/notifications/summary").session(session(owner)))
+                .andExpect(jsonPath("$.data.unread").value(0))
+                .andExpect(jsonPath("$.data.latestId").value(0))
+                .andExpect(jsonPath("$.data.processing").value(0))
+                .andExpect(jsonPath("$.data.fresh.length()").value(0));
+
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Cũ", "BLOG", null);
+        long seen = latestId(owner);
+        for (int i = 1; i <= 7; i++) {
+            notifications.send(owner, NotificationService.CONTENT_PUBLISHED, "Mới " + i, "BLOG", null);
+        }
+        // Without "after" (a new tab): only counted
+        mvc.perform(get("/api/me/notifications/summary").session(session(owner)))
+                .andExpect(jsonPath("$.data.unread").value(8))
+                .andExpect(jsonPath("$.data.latestId").value(latestId(owner)))
+                .andExpect(jsonPath("$.data.fresh.length()").value(0));
+        // After the id the tab has seen: the newest five, newest first
+        mvc.perform(get("/api/me/notifications/summary").param("after", String.valueOf(seen)).session(session(owner)))
+                .andExpect(jsonPath("$.data.fresh.length()").value(5))
+                .andExpect(jsonPath("$.data.fresh[0].content").value("Mới 7"))
+                .andExpect(jsonPath("$.data.fresh[4].content").value("Mới 3"))
+                .andExpect(jsonPath("$.data.fresh[0].type").value("CONTENT_PUBLISHED"));
+        mvc.perform(get("/api/me/notifications/summary").param("after", String.valueOf(latestId(owner)))
+                        .session(session(owner)))
+                .andExpect(jsonPath("$.data.fresh.length()").value(0));
+    }
+
+    @Test
+    void readMarksOnlyTheUsersOwnUpToTheIdShown() throws Exception {
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Một", "BLOG", null);
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Hai", "BLOG", null);
+        long shown = latestId(owner);
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Ba (đến sau khi trang tải)", "BLOG", null);
+        notifications.send(other, NotificationService.NEW_COMMENT, "Của người khác", "BLOG", null);
+
+        mvc.perform(withCsrf(post("/api/me/notifications/read")).session(session(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"upToId\":" + shown + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unread").value(1));
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].read").value(false))
+                .andExpect(jsonPath("$.data.items[1].read").value(true))
+                .andExpect(jsonPath("$.data.items[2].read").value(true));
+        assertThat(unread(other)).isEqualTo(1);
+
+        // Without an id (or a body): all of them
+        mvc.perform(withCsrf(post("/api/me/notifications/read")).session(session(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unread").value(0));
+        assertThat(unread(other)).isEqualTo(1);
+    }
+
+    @Test
+    void onlyASignedInUserReadsTheirNotificationsAndReadNeedsTheCsrfToken() throws Exception {
+        mvc.perform(get("/api/me/notifications")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/me/notifications/summary")).andExpect(status().isUnauthorized());
+        mvc.perform(withCsrf(post("/api/me/notifications/read"))).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/notifications/read").session(session(owner))).andExpect(status().isForbidden());
+
+        // A locked account is signed out by the session check
+        long locked = user("USER");
+        jdbc.update("UPDATE users SET status = 'LOCKED' WHERE id = ?", locked);
+        mvc.perform(get("/api/me/notifications").session(session(locked))).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void linksFollowThePostThatStillExists() throws Exception {
+        long id = created(send(owner, multipart("/api/blogs").file(blogPart("post", "Sẽ xóa", postTopic))));
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Có bình luận", "BLOG", id);
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].link").value("/blog/" + id));
+
+        mvc.perform(withCsrf(delete("/api/blogs/" + id)).session(session(owner))).andExpect(status().isOk());
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].content").value("Có bình luận"))
+                .andExpect(jsonPath("$.data.items[0].link").value(nullValue()));
     }
 
     // ---------------------------------------------------------------- helpers
@@ -255,6 +394,15 @@ class ScanNotificationFlowTest {
         return jdbc.queryForList("""
                 SELECT CONCAT(type, ' ', ref_type, ' ', ref_id, ' ', content) FROM notifications
                 WHERE user_id = ? ORDER BY id""", String.class, userId);
+    }
+
+    private long latestId(long userId) {
+        return jdbc.queryForObject("SELECT MAX(id) FROM notifications WHERE user_id = ?", Long.class, userId);
+    }
+
+    private int unread(long userId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = FALSE",
+                Integer.class, userId);
     }
 
     private MockMultipartFile blogPart(String part, String title, long topic) {

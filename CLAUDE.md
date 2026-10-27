@@ -170,6 +170,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
   `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
   `savedCount` for "Đã lưu (N)" on Tôi. Places are saved from the Map once it is built (`saved_places`).
+- Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
+  CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
+  (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
+  `GET /summary?after=` (unread, latestId, `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5
+  after that id, one read-only snapshot), `POST /read {upToId}`.
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
