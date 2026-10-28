@@ -72,6 +72,17 @@ spring.flyway.baseline-on-migrate=true
 # app.moderation.dev-result=FLAG
 
 # ---------------------------------------------------------------------------------------------
+# Reading text in photos and videos (optional)
+# Gemini Flash-Lite has a free tier (no card needed). Create a key at https://aistudio.google.com/apikey
+# and paste it here (or set the GEMINI_API_KEY environment variable). Gemini reads the text in each photo
+# and video and the words spoken in a video; that text then goes through the banned keywords and the link
+# rule. Without a key, photos are only checked by the photo scan above and videos are not checked;
+# app.moderation.dev-media-text then makes every photo and video "contain" that text (to see the rejection).
+# ---------------------------------------------------------------------------------------------
+# app.moderation.gemini.api-key=YOUR_GEMINI_API_KEY
+# app.moderation.dev-media-text=fb88
+
+# ---------------------------------------------------------------------------------------------
 # Uploaded media (optional). Files are saved in this folder and served at /media/**.
 # ---------------------------------------------------------------------------------------------
 # app.media.local-dir=uploads

@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Second half of writing an event review with photos or a video, like {@code BlogPublishService} for posts. The review
  * waits in PROCESSING (only its author sees it) while each file is scanned ({@link MediaScanService}). Then:
  * <ul>
- *   <li>every file passed → PUBLISHED, and the author earns the review's points now;</li>
+ *   <li>every file passed → PUBLISHED, the author earns the review's points now and is notified;</li>
  *   <li>a file failed → REJECTED, the failed files are deleted and the author is notified;</li>
  *   <li>the scanner could not answer → it stays PROCESSING and the retry job tries again.</li>
  * </ul>
@@ -124,28 +124,47 @@ public class EventReviewPublishService {
         List<MediaState> files = repository.mediaStates(reviewId);
         List<Long> rejected = files.stream().filter(m -> "REJECTED".equals(m.scanStatus())).map(MediaState::id).toList();
         if (!rejected.isEmpty()) {
+            String reason = scanner.rejectionReason(rejected).orElse("ảnh hoặc video vi phạm Quy tắc cộng đồng");
             repository.setStatus(reviewId, "PROCESSING", "REJECTED");
             media.discard(rejected);
-            tellRejected(review, "ảnh hoặc video vi phạm Quy tắc cộng đồng");
+            tellRejected(review, reason);
             return;
         }
         if (files.stream().allMatch(m -> "PASSED".equals(m.scanStatus()))
                 && repository.setStatus(reviewId, "PROCESSING", "PUBLISHED")) {
-            awardOnce(review.authorId(), reviewId);
+            tellPublished(review, awardOnce(review.authorId(), reviewId));
         }
     }
 
     private void tellRejected(ReviewState review, String reason) {
-        String title = repository.event(review.eventId()).map(EventRepository.EventRow::title).orElse("sự kiện");
         notifications.send(review.authorId(), NotificationService.CONTENT_REJECTED,
-                "Review “" + title + "” chưa được đăng vì " + reason + ". Bạn có thể sửa review rồi gửi lại.",
+                "Review “" + eventTitle(review) + "” chưa được đăng vì " + reason + ". Bạn có thể sửa review rồi gửi lại.",
                 "REVIEW", review.id());
     }
 
-    /** The review's points ({@link PointService#REVIEW}), paid the first time it is published and never again. */
-    void awardOnce(long authorId, long reviewId) {
-        if (!repository.reviewAwarded(reviewId)) {
-            points.add(authorId, PointService.REVIEW, AWARD_REASON, "REVIEW", reviewId);
+    /** {@code paid}: first publication; otherwise an edit of a review that was published before went through. */
+    private void tellPublished(ReviewState review, boolean paid) {
+        String text = paid
+                ? "Review “" + eventTitle(review) + "” đã qua kiểm duyệt ảnh/video và đã được đăng. +"
+                        + PointService.REVIEW + " điểm."
+                : "Bản sửa review “" + eventTitle(review) + "” đã qua kiểm duyệt ảnh/video và đã được đăng.";
+        notifications.send(review.authorId(), NotificationService.CONTENT_PUBLISHED, text, "REVIEW", review.id());
+    }
+
+    private String eventTitle(ReviewState review) {
+        return repository.event(review.eventId()).map(EventRepository.EventRow::title).orElse("sự kiện");
+    }
+
+    /**
+     * The review's points ({@link PointService#REVIEW}), paid the first time it is published and never again.
+     *
+     * @return true when the points were paid now
+     */
+    boolean awardOnce(long authorId, long reviewId) {
+        if (repository.reviewAwarded(reviewId)) {
+            return false;
         }
+        points.add(authorId, PointService.REVIEW, AWARD_REASON, "REVIEW", reviewId);
+        return true;
     }
 }

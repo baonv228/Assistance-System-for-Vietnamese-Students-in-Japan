@@ -150,16 +150,18 @@ public class EventReviewService {
         // The event may have been deleted, or moved to a later date, while the files were read
         EventCard event = startedEvent(eventId);
 
-        // 2. Links (BR-22)
+        // 2. Links (BR-22); a QR code in a photo counts as a link
         filter.checkLinks(content, authorId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(files), authorId);
 
         // 3. New-account daily limit (BR-07, MSG44); the usage row stays locked until the review is saved
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, EventService.JAPAN);
         checkDailyLimit(account, today, true, withVideo, now);
 
-        // 4. Banned keywords (MSG36)
+        // 4. Banned keywords (MSG36), then what the photos' QR codes hold
         filter.checkKeywords(content);
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
 
         // Save
         boolean withMedia = !files.isEmpty();
@@ -207,12 +209,14 @@ public class EventReviewService {
         ReviewState review = editable(account, reviewId, true);
 
         filter.checkLinks(content, authorId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(files), authorId);
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, EventService.JAPAN);
         if (countVideo) {
             checkDailyLimit(account, today, false, true, now);
         }
         filter.checkKeywords(content);
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
 
         // Files the author removed (or the scan deleted meanwhile) go; the kept ones stay in the chosen order
         List<Media> attached = repository.attachedMedia(reviewId);

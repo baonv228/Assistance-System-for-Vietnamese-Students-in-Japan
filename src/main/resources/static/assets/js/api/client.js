@@ -109,6 +109,12 @@ export const apiClient = {
     saved: () => request("/me/saved"),
     areas: () => request("/areas"),
 
+    // Notifications (bell + "Thông báo"). page → { items, hasMore, unread };
+    // summary → { unread, latestId, processing, fresh: notifications after `after`, newest first }
+    notifications: (page = 0) => request(`/me/notifications?${toQuery({ page })}`),
+    notificationSummary: (after) => request(`/me/notifications/summary?${toQuery({ after })}`),
+    readNotifications: (upToId) => post("/me/notifications/read", { upToId: upToId ?? null }),
+
     // Blog Feed (UC-09), posts only. params: { q, topicIds: [..], sort, page, size }
     blogs: (params = {}) => request(`/blogs?${toQuery(params)}`),
     blogOverview: () => request("/blogs/overview"),

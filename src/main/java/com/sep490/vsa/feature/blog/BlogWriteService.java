@@ -193,18 +193,20 @@ public class BlogWriteService {
     private Created save(Account account, Draft d, List<Prepared> files, boolean withVideo, PlacePicks picks) {
         long authorId = account.id();
 
-        // 2. Links (BR-22)
+        // 2. Links (BR-22); a QR code in a photo counts as a link
         filter.checkLinks(d.title(), authorId);
         filter.checkLinks(d.content(), authorId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(files), authorId);
 
         // 3. New-account daily limit (BR-07, MSG44). The usage row stays locked until the post is saved.
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, JAPAN);
         checkDailyLimit(account, today, true, withVideo, now);
 
-        // 4. Banned keywords (MSG36), title and content checked separately
+        // 4. Banned keywords (MSG36), title and content checked separately, then what the photos' QR codes hold
         filter.checkKeywords(d.title());
         filter.checkKeywords(d.content());
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
 
         // 5. Save. New map places are added first; then every place must still be on the map (a Moderator may
         // have removed one since step 1)
@@ -290,9 +292,10 @@ public class BlogWriteService {
         long authorId = account.id();
         EditableBlog blog = editable(account, kind, blogId, true);
 
-        // 2. Links (BR-22)
+        // 2. Links (BR-22); a QR code in a new photo counts as a link
         filter.checkLinks(d.title(), authorId);
         filter.checkLinks(d.content(), authorId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(checked.files()), authorId);
 
         // 3. New-account limit: only a newly added video counts (BR-07, MSG44)
         Instant now = clock.instant();
@@ -304,6 +307,7 @@ public class BlogWriteService {
         // 4. Banned keywords (MSG36)
         filter.checkKeywords(d.title());
         filter.checkKeywords(d.content());
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(checked.files()));
 
         // 5. Save
         Set<Long> placeSet = new LinkedHashSet<>(d.placeIds());

@@ -142,7 +142,9 @@ public class PinService {
         long userId = account.id();
         Stream.of(nameVi, nameJa, nameEn, address).filter(Objects::nonNull).forEach(filter::checkKeywords);
         filter.checkLinks(content, userId);
+        filter.checkQrCodes(MediaService.qrCodesOfPhotos(files), userId);
         filter.checkKeywords(content);
+        filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
 
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, JAPAN);

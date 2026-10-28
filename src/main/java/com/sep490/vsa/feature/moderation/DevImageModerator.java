@@ -19,7 +19,7 @@ public class DevImageModerator implements ImageModerator {
 
     @Override
     public String engine() {
-        // moderation_scans only accepts KEYWORD or OPENAI; the detail says this was the stand-in
+        // moderation_scans only accepts KEYWORD, OPENAI or GEMINI; the detail says this was the stand-in
         return "OPENAI";
     }
 
