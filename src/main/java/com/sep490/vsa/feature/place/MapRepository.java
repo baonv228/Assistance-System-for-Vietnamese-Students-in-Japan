@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.place;
 
+import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.place.MapDtos.MapCategory;
 import com.sep490.vsa.feature.place.MapDtos.MapEvent;
 import com.sep490.vsa.feature.place.MapDtos.MapPlace;
@@ -32,7 +33,8 @@ import java.util.Set;
 /**
  * Plain SQL for the Map: places with their review figures, place details, reviews, phrases of a category and event
  * pins. Reviews, phrases and events belong to other parts of the app; this class only reads them, except review
- * likes and saved places, which the Map owns.
+ * likes and saved places, which the Map owns. Reviews and scam-warning posts of LOCKED or DELETED accounts are left
+ * out of every read ({@link ActiveAuthors}), like everywhere else: pins, figures, the review list and its actions.
  */
 @Repository
 public class MapRepository {
@@ -69,11 +71,11 @@ public class MapRepository {
                 SELECT p.id, p.name_vi, p.name_ja, p.name_en, p.category_id, p.lat, p.lng, p.source, p.status,
                        p.is_closed, p.osm_id, COUNT(r.id) AS reviews, AVG(r.rating) AS rating
                 FROM places p
-                LEFT JOIN reviews r ON r.place_id = p.id AND r.status = 'PUBLISHED'
+                LEFT JOIN reviews r ON r.place_id = p.id AND r.status = 'PUBLISHED' AND %s
                 WHERE p.lat IS NOT NULL AND p.lng IS NOT NULL
                   AND (p.status = 'ACTIVE' OR (p.status = 'PENDING' AND p.created_by = ?))
                 GROUP BY p.id
-                ORDER BY p.id""",
+                ORDER BY p.id""".formatted(ActiveAuthors.of("r")),
                 (rs, i) -> new MapPlace(rs.getLong("id"), rs.getString("name_vi"), rs.getString("name_ja"),
                         rs.getString("name_en"), rs.getString("category_id"), rs.getDouble("lat"),
                         rs.getDouble("lng"), rs.getString("source"), rs.getString("status"),
@@ -92,7 +94,8 @@ public class MapRepository {
                 JOIN blog_place_links bpl ON bpl.blog_id = b.id
                 JOIN places p ON p.id = bpl.place_id
                 JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
-                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND shown.status = 'ACTIVE'""",
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND shown.status = 'ACTIVE' AND %s"""
+                        .formatted(ActiveAuthors.of("b")),
                 (rs, i) -> rs.getLong(1), SCAM_WARNING_TOPIC);
     }
 
@@ -104,22 +107,22 @@ public class MapRepository {
                 JOIN blog_topics t ON t.id = btl.topic_id AND t.name = ? AND t.is_active
                 JOIN blog_place_links bpl ON bpl.blog_id = b.id
                 JOIN places p ON p.id = bpl.place_id
-                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST'
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND %s
                   AND (p.id = ? OR (p.status = 'MERGED' AND p.merged_into_id = ?))
-                ORDER BY b.created_at DESC, b.id DESC""",
+                ORDER BY b.created_at DESC, b.id DESC""".formatted(ActiveAuthors.of("b")),
                 (rs, i) -> new ScamWarningRef(rs.getLong(1), rs.getString(2)), SCAM_WARNING_TOPIC, placeId, placeId);
     }
 
     public record AreaCenter(String name, Double lat, Double lng) {
     }
 
-    /** The viewer's area and the middle of the approved places in it (areas have no position of their own). */
+    /** The viewer's area and its representative point (V10; an area without one: the middle of its approved places). */
     public Optional<AreaCenter> areaCenter(long userId) {
         return jdbc.query("""
-                SELECT a.display_name, AVG(p.lat), AVG(p.lng)
+                SELECT a.display_name, COALESCE(a.lat, AVG(p.lat)), COALESCE(a.lng, AVG(p.lng))
                 FROM users u JOIN areas a ON a.id = u.area_id
                 LEFT JOIN places p ON p.area_id = a.id AND p.status = 'ACTIVE' AND p.lat IS NOT NULL
-                WHERE u.id = ? GROUP BY a.id, a.display_name""",
+                WHERE u.id = ? GROUP BY a.id, a.display_name, a.lat, a.lng""",
                 (rs, i) -> new AreaCenter(rs.getString(1), decimal(rs.getBigDecimal(2)), decimal(rs.getBigDecimal(3))),
                 userId).stream().findFirst();
     }
@@ -148,7 +151,8 @@ public class MapRepository {
 
     public ReviewFigures reviewFigures(long placeId) {
         return jdbc.queryForObject("""
-                SELECT COUNT(*), AVG(rating) FROM reviews WHERE place_id = ? AND status = 'PUBLISHED'""",
+                SELECT COUNT(*), AVG(r.rating) FROM reviews r WHERE r.place_id = ? AND r.status = 'PUBLISHED' AND %s"""
+                        .formatted(ActiveAuthors.of("r")),
                 (rs, i) -> new ReviewFigures(rs.getInt(1), rating(rs.getBigDecimal(2))), placeId);
     }
 
@@ -196,12 +200,15 @@ public class MapRepository {
                             boolean edited, String status, int likeCount) {
     }
 
-    /** Published reviews of the place, newest first, plus the viewer's own review still being scanned. */
+    /**
+     * Published reviews of the place by active accounts, newest first, plus the viewer's own review still being
+     * scanned.
+     */
     public List<ReviewRow> reviews(long placeId, Long viewerId, int offset, int size) {
         return jdbc.query("""
                 SELECT r.id, r.author_id, u.display_name, u.avatar_url, u.role, u.deleted_at IS NOT NULL, u.points,
                        r.rating, r.content, r.created_at, r.is_edited, r.status, r.like_count
-                FROM reviews r JOIN users u ON u.id = r.author_id
+                FROM reviews r JOIN users u ON u.id = r.author_id AND u.status = 'ACTIVE'
                 WHERE r.place_id = ? AND (r.status = 'PUBLISHED' OR (r.status = 'PROCESSING' AND r.author_id = ?))
                 ORDER BY r.created_at DESC, r.id DESC
                 LIMIT ? OFFSET ?""",
@@ -213,8 +220,9 @@ public class MapRepository {
 
     public long reviewCount(long placeId, Long viewerId) {
         Long n = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM reviews
-                WHERE place_id = ? AND (status = 'PUBLISHED' OR (status = 'PROCESSING' AND author_id = ?))""",
+                SELECT COUNT(*) FROM reviews r
+                WHERE r.place_id = ? AND (r.status = 'PUBLISHED' OR (r.status = 'PROCESSING' AND r.author_id = ?))
+                  AND %s""".formatted(ActiveAuthors.of("r")),
                 Long.class, placeId, viewerId == null ? -1L : viewerId);
         return n == null ? 0 : n;
     }
@@ -279,7 +287,8 @@ public class MapRepository {
     public Optional<ReviewTarget> reviewTarget(long reviewId) {
         return jdbc.query("""
                 SELECT r.id, r.author_id, r.status, r.place_id, p.status
-                FROM reviews r LEFT JOIN places p ON p.id = r.place_id WHERE r.id = ?""",
+                FROM reviews r LEFT JOIN places p ON p.id = r.place_id WHERE r.id = ? AND %s"""
+                        .formatted(ActiveAuthors.of("r")),
                 (rs, i) -> new ReviewTarget(rs.getLong(1), rs.getLong(2), rs.getString(3), (Long) rs.getObject(4),
                         rs.getString(5)),
                 reviewId).stream().findFirst();

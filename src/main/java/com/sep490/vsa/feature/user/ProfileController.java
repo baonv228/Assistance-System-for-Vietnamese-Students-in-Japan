@@ -2,7 +2,6 @@ package com.sep490.vsa.feature.user;
 
 import com.sep490.vsa.common.dto.ApiResponse;
 import com.sep490.vsa.common.security.AppUserPrincipal;
-import com.sep490.vsa.feature.user.ProfileDtos.AreaResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.UpdateProfileRequest;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,10 +48,5 @@ public class ProfileController {
         }
         SecurityContextHolder.clearContext();
         return ApiResponse.ok("Đã xóa tài khoản.", null);
-    }
-
-    @GetMapping("/api/areas")
-    public ApiResponse<List<AreaResponse>> areas() {
-        return ApiResponse.ok("OK", profileService.areas());
     }
 }

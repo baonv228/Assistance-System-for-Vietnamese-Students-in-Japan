@@ -44,6 +44,7 @@ public class HomeService {
     private static final int FOR_YOU_SIZE = 5;
     private static final int FOR_YOU_DAYS = 30;
     static final String REASON_AREA = "Gần khu vực của bạn";
+    static final String REASON_PREFECTURE = "Cùng tỉnh với bạn";
     static final String REASON_STAGE = "Hợp giai đoạn của bạn";
     /** Blog topics that suit each stage, by name so the ids do not matter. */
     static final Map<String, List<String>> STAGE_TOPICS = Map.of(
@@ -89,38 +90,48 @@ public class HomeService {
 
     public MemberHome member(Long userId) {
         var me = jdbc.queryForMap("""
-                SELECT u.display_name, u.stage, u.area_id, a.display_name AS area_name, u.points
+                SELECT u.display_name, u.stage, u.area_id, a.display_name AS area_name, a.prefecture_code, u.points
                 FROM users u LEFT JOIN areas a ON a.id = u.area_id WHERE u.id = ?""", userId);
         String stage = (String) me.get("stage");
         Long areaId = me.get("area_id") == null ? null : ((Number) me.get("area_id")).longValue();
+        Area area = areaId == null ? null : new Area(areaId, (String) me.get("prefecture_code"));
         int points = ((Number) me.get("points")).intValue();
         String rankName = jdbc.query("SELECT name FROM ranks WHERE min_points <= ? ORDER BY min_points DESC LIMIT 1",
                 (rs, i) -> rs.getString(1), points).stream().findFirst().orElse("Người mới");
 
-        return new MemberHome((String) me.get("display_name"), stage, (String) me.get("area_name"), points, rankName,
-                phraseOfToday(), guide(userId, stage == null ? "ARR" : stage), events(), reviews(userId, areaId),
-                featured(), forYou(userId, areaId, stage));
+        return new MemberHome((String) me.get("display_name"), stage, areaId, (String) me.get("area_name"), points,
+                rankName,
+                phraseOfToday(), guide(userId, stage == null ? "ARR" : stage), events(), reviews(userId, area),
+                featured(), forYou(userId, area, stage));
+    }
+
+    /** The user's area and its prefecture (null for an area without one). */
+    private record Area(long id, String prefectureCode) {
     }
 
     /**
      * Published posts (not questions) by other people for "Dành cho bạn", never those of a locked or deleted account
      * ({@link ActiveAuthors}). Posts of the last 30 days come first and older ones only fill the list; within each
-     * group: linked to a place in the user's area, then a topic that suits the user's stage, then likes + 2 × comments,
-     * then newest.
+     * group: linked to a place in the user's area, then in the same prefecture, then a topic that suits the user's
+     * stage, then likes + 2 × comments, then newest.
      */
-    private List<FeedPost> forYou(Long userId, Long areaId, String stage) {
+    private List<FeedPost> forYou(Long userId, Area area, String stage) {
         List<String> topics = stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
-        String near = areaId == null ? "FALSE" : """
-                EXISTS (SELECT 1 FROM blog_place_links bpl JOIN places p ON p.id = bpl.place_id
-                        JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
-                        WHERE bpl.blog_id = b.id AND shown.status = 'ACTIVE' AND shown.area_id = ?)""";
+        // 2 = a linked place in the user's area, 1 = in the same prefecture, 0 = elsewhere or no place
+        String near = area == null ? "0" : """
+                COALESCE((SELECT MAX(CASE WHEN shown.area_id = ? THEN 2 WHEN sa.prefecture_code = ? THEN 1 ELSE 0 END)
+                          FROM blog_place_links bpl JOIN places p ON p.id = bpl.place_id
+                          JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
+                          LEFT JOIN areas sa ON sa.id = shown.area_id
+                          WHERE bpl.blog_id = b.id AND shown.status = 'ACTIVE'), 0)""";
         String fits = topics.isEmpty() ? "FALSE" : """
                 EXISTS (SELECT 1 FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
                         WHERE btl.blog_id = b.id AND t.is_active AND t.name IN (%s))"""
                 .formatted(String.join(", ", Collections.nCopies(topics.size(), "?")));
         List<Object> params = new ArrayList<>();
-        if (areaId != null) {
-            params.add(areaId);
+        if (area != null) {
+            params.add(area.id());
+            params.add(area.prefectureCode());
         }
         params.addAll(topics);
         params.add(userId);
@@ -142,7 +153,8 @@ public class HomeService {
                         excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
                         rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
                         rs.getTimestamp("created_at").toInstant(),
-                        rs.getBoolean("near") ? REASON_AREA : rs.getBoolean("fits") ? REASON_STAGE : null),
+                        rs.getInt("near") == 2 ? REASON_AREA : rs.getInt("near") == 1 ? REASON_PREFECTURE
+                                : rs.getBoolean("fits") ? REASON_STAGE : null),
                 params.toArray());
     }
 
@@ -180,20 +192,21 @@ public class HomeService {
     }
 
     /**
-     * "Review mới": newest reviews by other people, those in the user's area first; never those of a locked or deleted
-     * account ({@link ActiveAuthors}).
+     * "Review mới": newest reviews by other people, those in the user's area first, then its prefecture; never those of
+     * a locked or deleted account ({@link ActiveAuthors}).
      */
-    private List<ReviewItem> reviews(Long userId, Long areaId) {
+    private List<ReviewItem> reviews(Long userId, Area area) {
         return jdbc.query("""
                 SELECT p.name_vi, c.icon, r.rating, u.display_name, r.content FROM reviews r
                 JOIN places p ON p.id = r.place_id JOIN place_categories c ON c.id = p.category_id
-                JOIN users u ON u.id = r.author_id
+                JOIN users u ON u.id = r.author_id LEFT JOIN areas pa ON pa.id = p.area_id
                 WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND r.author_id <> ? AND %s
-                ORDER BY CASE WHEN p.area_id = ? THEN 0 ELSE 1 END, r.created_at DESC LIMIT 3"""
+                ORDER BY CASE WHEN p.area_id = ? THEN 0 WHEN pa.prefecture_code = ? THEN 1 ELSE 2 END,
+                         r.created_at DESC LIMIT 3"""
                         .formatted(ActiveAuthors.of("r")),
                 (rs, i) -> new ReviewItem(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getString(4),
                         excerpt(rs.getString(5), 80)),
-                userId, areaId);
+                userId, area == null ? null : area.id(), area == null ? null : area.prefectureCode());
     }
 
     /**

@@ -41,7 +41,7 @@ public final class HomeDtos {
                            int readMinutes, String period) {
     }
 
-    public record MemberHome(String displayName, String stage, String areaName, int points, String rankName,
+    public record MemberHome(String displayName, String stage, Long areaId, String areaName, int points, String rankName,
                              Phrase phrase, GuideProgress guide, List<EventItem> events, List<ReviewItem> reviews,
                              Featured featured, List<FeedPost> forYou) {
     }

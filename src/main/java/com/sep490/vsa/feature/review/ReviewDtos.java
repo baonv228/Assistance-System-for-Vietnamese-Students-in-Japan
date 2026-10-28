@@ -19,8 +19,15 @@ public final class ReviewDtos {
     public record UpdateRequest(Integer rating, String content, List<Long> keepMediaIds) {
     }
 
-    /** @param status PUBLISHED, or PROCESSING while photos/video are scanned (only the author sees it) */
-    public record Saved(long id, long placeId, String status) {
+    /**
+     * @param status  PUBLISHED, or PROCESSING while photos/video are scanned (only the author sees it)
+     * @param changed false when an edit changed nothing (nothing saved, no "đã sửa")
+     */
+    public record Saved(long id, long placeId, String status, boolean changed) {
+
+        public Saved(long id, long placeId, String status) {
+            this(id, placeId, status, true);
+        }
     }
 
     public record Limits(int contentMin, int contentMax, int imagesMax, int imageMaxMb, int videosMax,

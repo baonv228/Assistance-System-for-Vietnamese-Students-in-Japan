@@ -8,7 +8,7 @@ SET @acad    = (SELECT id FROM users WHERE email = 'academic@gmail.com');
 SET @minh    = (SELECT id FROM users WHERE email = 'user@gmail.com');
 SET @lananh  = (SELECT id FROM users WHERE email = 'mentor@gmail.com');
 SET @hoang   = (SELECT id FROM users WHERE email = 'kouhai@gmail.com');
-SET @nippori = (SELECT id FROM areas WHERE station = 'Nippori');
+SET @nippori = (SELECT id FROM areas WHERE code = '131181');  -- Arakawa-ku, Tokyo (V10)
 
 -- ---------------------------------------------------------------- places
 INSERT INTO places (osm_id, name_vi, name_ja, name_en, category_id, area_id, address, lat, lng, source, status, created_by, reviewed_by, reviewed_at) VALUES

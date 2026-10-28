@@ -5,13 +5,10 @@ import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
 import java.util.List;
 
-/** Bodies of /api/me (the "Tôi" page) and /api/areas. */
+/** Bodies of /api/me (the "Tôi" page); the area picker is feature/area. */
 public final class ProfileDtos {
 
     private ProfileDtos() {
-    }
-
-    public record AreaResponse(Long id, String name) {
     }
 
     public record TagResponse(String name, String color) {

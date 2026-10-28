@@ -6,7 +6,6 @@ import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.AuthorStatusSync;
 import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.saved.SavedRepository;
-import com.sep490.vsa.feature.user.ProfileDtos.AreaResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.DailyUsage;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.RankResponse;
@@ -106,7 +105,8 @@ public class ProfileService {
     @Transactional
     public ProfileResponse update(Long userId, Long areaId, String stage) {
         User user = load(userId);
-        if (areaId != null && areas().stream().noneMatch(a -> a.id().equals(areaId))) {
+        if (areaId != null && jdbc.queryForObject("SELECT COUNT(*) FROM areas WHERE id = ? AND is_active",
+                Integer.class, areaId) == 0) {
             throw ApiException.badRequest("Khu vực không hợp lệ");
         }
         user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
@@ -151,11 +151,6 @@ public class ProfileService {
         // Write the DELETED status now, so the recount (plain SQL in this transaction) sees it
         users.flush();
         authorStatusSync.afterStatusChange(userId);
-    }
-
-    public List<AreaResponse> areas() {
-        return jdbc.query("SELECT id, display_name FROM areas WHERE is_active = TRUE ORDER BY sort_order, id",
-                (rs, i) -> new AreaResponse(rs.getLong(1), rs.getString(2)));
     }
 
     private User load(Long userId) {

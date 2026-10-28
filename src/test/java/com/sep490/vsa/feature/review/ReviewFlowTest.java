@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.review;
 
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.moderation.ImageModerator;
 import com.sep490.vsa.feature.moderation.ImageModerator.Verdict;
 import com.sep490.vsa.feature.place.ExternalPlaces;
@@ -73,6 +74,10 @@ class ReviewFlowTest {
     private ExternalPlaces map;
     @MockBean
     private ImageModerator moderator;
+    @Autowired
+    private ReviewPublishService publisher;
+    @Autowired
+    private ContentFilter contentFilter;
 
     private String word;
     private long author;
@@ -110,6 +115,11 @@ class ReviewFlowTest {
                 .andExpect(jsonPath("$.data.myReviewId").value((int) id));
         send(post("/api/reviews"), author, "{\"placeId\":" + place + ",\"rating\":5,\"content\":\"Lần hai thử xem sao.\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(ReviewService.ALREADY));
+
+        // Saved without changing anything: nothing saved, no "đã sửa" (UC-U17 AF3)
+        send(put("/api/reviews/" + id), author, "{\"rating\":4,\"content\":\"Quán ngon, chủ quán dễ thương.\",\"keepMediaIds\":[]}")
+                .andExpect(jsonPath("$.message").value("Không có thay đổi nào."));
+        assertThat(jdbc.queryForObject("SELECT is_edited FROM reviews WHERE id = ?", Boolean.class, id)).isFalse();
 
         // Edit: stars and text change, "đã sửa", no new points
         send(put("/api/reviews/" + id), author, "{\"rating\":2,\"content\":\"Đổi ý rồi, hôm nay phục vụ chậm.\"}")
@@ -205,6 +215,42 @@ class ReviewFlowTest {
     }
 
     @Test
+    void aKeywordBannedWhileTheReviewWaitsRejectsIt() throws Exception {
+        String keyword = "chokhoa" + word.replaceAll("[^a-z]", "");
+        long id = waitingReview(place, null, "Quán này có " + keyword + " nhé, mọi người ghé thử.");
+        jdbc.update("INSERT INTO banned_keywords (keyword) VALUES (?)", keyword);
+        contentFilter.keywordsChanged();
+        try {
+            publisher.process(id);
+            assertThat(jdbc.queryForObject("SELECT status FROM reviews WHERE id = ?", String.class, id))
+                    .isEqualTo("REJECTED");
+            assertThat(points(author)).isZero();
+            assertThat(jdbc.queryForObject("""
+                    SELECT content FROM notifications WHERE user_id = ? AND type = 'CONTENT_REJECTED' AND ref_id = ?""",
+                    String.class, author, id))
+                    .isEqualTo("Review về “Quán " + word + "” chưa được đăng vì có từ khóa không được phép “" + keyword
+                            + "”. Bạn có thể sửa review rồi gửi lại.");
+        } finally {
+            jdbc.update("DELETE FROM banned_keywords WHERE keyword = ?", keyword);
+            contentFilter.keywordsChanged();
+        }
+    }
+
+    @Test
+    void eventReviewsAreLeftToTheirOwnJob() {
+        long moderator = user("MODERATOR", 30);
+        jdbc.update("""
+                INSERT INTO events (title, start_date, end_date, location_name, created_by)
+                VALUES (?, CURRENT_DATE, CURRENT_DATE, 'Ueno', ?)""", "Lễ hội " + word, moderator);
+        long event = jdbc.queryForObject("SELECT id FROM events WHERE title = ?", Long.class, "Lễ hội " + word);
+        long id = waitingReview(null, event, "Lễ hội vui, đồ ăn ngon và rẻ.");
+        publisher.retryPending();
+        publisher.process(id);
+        assertThat(jdbc.queryForObject("SELECT status FROM reviews WHERE id = ?", String.class, id))
+                .isEqualTo("PROCESSING");
+    }
+
+    @Test
     void theRetryJobOfPlaceReviewsLeavesEventReviewsToTheirOwnJob() {
         String title = "Lễ hội " + word;
         jdbc.update("""
@@ -236,6 +282,17 @@ class ReviewFlowTest {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** A review without files still PROCESSING since 10 minutes ago, of a place or of an event. */
+    private long waitingReview(Long placeId, Long eventId, String content) {
+        Timestamp sent = Timestamp.from(Instant.now().minus(Duration.ofMinutes(10)));
+        jdbc.update("""
+                INSERT INTO reviews (author_id, place_id, event_id, event_year, rating, content, status, created_at,
+                                     updated_at)
+                VALUES (?, ?, ?, ?, 4, ?, 'PROCESSING', ?, ?)""",
+                author, placeId, eventId, eventId == null ? null : java.time.Year.now().getValue(), content, sent, sent);
+        return jdbc.queryForObject("SELECT MAX(id) FROM reviews WHERE author_id = ?", Long.class, author);
+    }
 
     private static MockMultipartFile photo() throws Exception {
         BufferedImage img = new BufferedImage(64, 48, BufferedImage.TYPE_INT_RGB);
