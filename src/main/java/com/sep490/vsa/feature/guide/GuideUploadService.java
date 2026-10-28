@@ -55,7 +55,7 @@ public class GuideUploadService {
             }
         }
         for (var section : request.sections()) {
-            if (section.imageUrl() != null && !section.imageUrl().isBlank()) {
+            if (id == null && section.imageUrl() != null && !section.imageUrl().isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Vui lòng chọn ảnh từ máy tính.");
             }
             if (section.imageIndex() != null && (section.imageIndex() >= files.size()

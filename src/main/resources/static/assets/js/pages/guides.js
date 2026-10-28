@@ -6,6 +6,10 @@ const form = $("#guide-form"), filters = $("#filters");
 const query = new URLSearchParams(location.search);
 const state = { q: query.get("q") || "", category: query.get("category") || "", topicCode: query.get("topicCode") || "", status: query.get("status") || "ALL", page: /^\d{1,9}$/.test(query.get("page") || "") ? Number(query.get("page")) : 0, size: 10 };
 let sequence = 0, editingId = null, coverFile = null, coverUrl = null, savedCover = null, removeCover = false, busy = false;
+let sectionReaders = [];
+const sectionImages = new Map();
+const sectionEditor = document.createElement("div"); sectionEditor.id = "guide-existing-sections"; sectionEditor.hidden = true;
+$(".guide-rich-editor").after(sectionEditor);
 const message = text => { $("#message").textContent = text; };
 function el(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text ?? ""; return node; }
 function button(text, action) { const node = el("button", "btn", text); node.type = "button"; node.addEventListener("click", action); return node; }
@@ -19,15 +23,42 @@ function selectCover(file) {
  if (!["image/jpeg", "image/png"].includes(file.type) || file.size > 5 * 1024 * 1024) return message("Ảnh bìa phải là JPG/PNG, tối đa 5 MB.");
  revokeCover(); coverFile = file; coverUrl = URL.createObjectURL(file); removeCover = false; displayCover(); message("");
 }
+function setupSections(guide) {
+ sectionReaders = []; sectionImages.clear(); sectionEditor.replaceChildren();
+ const sections = guide?.sections || [];
+ const structured = sections.length > 1 || sections.some(section => section.heading !== "Nội dung" || section.mediaId || section.imageUrl || section.referenceUrl);
+ sectionEditor.hidden = !structured; $(".guide-rich-editor").hidden = structured;
+ if (!structured) return;
+ for (const section of sections) {
+  const box = el("fieldset"); box.append(el("legend", null, "Mục hướng dẫn"));
+  const fields = {};
+  for (const [key, label, max, area] of [["heading", "Tiêu đề mục", 200], ["content", "Nội dung", 20000, true], ["referenceUrl", "Tài liệu tham khảo (tùy chọn)", 2000]]) {
+   const labelNode = el("label", null, label), input = el(area ? "textarea" : "input");
+   input.value = section[key] || ""; input.maxLength = max; if (key === "referenceUrl") input.type = "url";
+   fields[key] = input; labelNode.append(input); box.append(labelNode);
+  }
+  let mediaId = section.mediaId || null, imageUrl = section.imageUrl || null;
+  if (mediaId && imageUrl) sectionImages.set(mediaId, imageUrl);
+  if (imageUrl && safeUrl(imageUrl)) {
+   const image = el("img", "guide-thumbnail"); image.src = safeUrl(imageUrl); image.alt = section.heading || "Ảnh minh họa";
+   const remove = button("Bỏ ảnh trong mục", () => { mediaId = null; imageUrl = null; image.remove(); remove.remove(); });
+   box.append(image, remove);
+  }
+  sectionReaders.push(() => ({ heading: fields.heading.value, content: fields.content.value,
+   referenceUrl: fields.referenceUrl.value || null, imageUrl: mediaId ? null : imageUrl, mediaId }));
+  sectionEditor.append(box);
+ }
+}
 function resetEditor(guide = null) {
  revokeCover(); form.reset(); coverFile = null; savedCover = guide?.coverImageUrl || null; removeCover = false; editingId = guide?.id || null;
  form.elements.title.value = guide?.title || ""; form.elements.summary.value = guide?.summary || "";
  form.elements.category.value = guide?.category || ""; form.elements.topicCode.value = guide?.topicCode || "";
  form.elements.sourceUrl.value = guide?.sourceUrl || ""; form.elements.status.value = guide?.status || "PUBLISHED";
  form.elements.content.value = guide?.sections.map(section => section.heading === "Nội dung" ? section.content : "## " + section.heading + "\n" + section.content).join("\n\n") || "";
+ setupSections(guide); $("#publish").textContent = guide?.published ? "Cập nhật công khai" : "Đăng công khai";
  $("#editor-title").textContent = guide ? "Chỉnh sửa cẩm nang" : "Tạo mới cẩm nang"; displayCover(); show("editor"); setUrl(editingId, true); message("");
 }
-async function editGuide(id) { try { const guide = await apiClient.moderatorGuide(id); if (guide.published) throw new Error("Cẩm nang đã công khai. Chức năng này dùng để tiếp tục soạn bản nháp."); resetEditor(guide); } catch (error) { message(error.message); } }
+async function editGuide(id) { if (busy) return; try { const guide = await apiClient.moderatorGuide(id); resetEditor(guide); } catch (error) { message(error.message); } }
 function pager(result) {
  const target = $("#guide-pager"); target.replaceChildren(); target.hidden = result.totalPages <= 1;
  if (target.hidden) return;
@@ -48,7 +79,7 @@ async function loadList(page = state.page) {
   $("#guide-list").replaceChildren(...result.items.map(guide => {
    const card = el("article", "list-item card");
    card.append(el("span", "badge", guide.published ? "Công khai" : "Nháp"), el("h2", null, guide.title), el("p", "note", [guide.stageName, guide.topicName].filter(Boolean).join(" · ")), el("p", null, guide.summary), el("p", "guide-meta", new Date(guide.createdAt).toLocaleString("vi-VN")));
-   const actions = el("div", "guide-actions"); actions.append(button("Xem chi tiết", async () => { try { renderGuide(await apiClient.moderatorGuide(guide.id)); setUrl(guide.id); } catch (error) { message(error.message); } })); if (!guide.published) actions.append(button("Tiếp tục soạn", () => editGuide(guide.id))); card.append(actions); return card;
+   const actions = el("div", "guide-actions"); actions.append(button("Xem chi tiết", async () => { try { renderGuide(await apiClient.moderatorGuide(guide.id)); setUrl(guide.id); } catch (error) { message(error.message); } })); actions.append(button("Chỉnh sửa", () => editGuide(guide.id)), deleteButton(guide)); card.append(actions); return card;
   }));
   if (!result.items.length) $("#guide-list").append(el("p", null, "Không có cẩm nang phù hợp.")); pager(result);
  } catch (error) { if (request === sequence) { $("#guide-list").replaceChildren(); message(error.message); } }
@@ -58,36 +89,50 @@ function renderGuide(guide, preview = false) {
  const cover = safeUrl(guide.coverImageUrl); if (cover || (preview && coverUrl)) { const image = el("img"); image.src = preview && coverUrl ? coverUrl : cover; image.alt = guide.title; target.append(image); }
  for (const section of guide.sections) {
   if (section.heading !== "Nội dung") target.append(el("h3", null, section.heading)); target.append(guideContent(section.content));
-  const imageUrl = safeUrl(section.imageUrl); if (section.imageUrl && imageUrl) { const image = el("img"); image.src = imageUrl; image.alt = section.heading; target.append(image); }
+  const imageUrl = safeUrl(section.imageUrl || sectionImages.get(section.mediaId)); if (imageUrl) { const image = el("img"); image.src = imageUrl; image.alt = section.heading; target.append(image); }
   if (section.referenceUrl && safeUrl(section.referenceUrl)) { const a = el("a", "link", "Tài liệu tham khảo"); a.href = safeUrl(section.referenceUrl); a.target = "_blank"; a.rel = "noopener noreferrer"; target.append(a); }
  }
  if (guide.sourceUrl && safeUrl(guide.sourceUrl)) { const a = el("a", "link", "Đường dẫn gốc ↗"); a.href = safeUrl(guide.sourceUrl); a.target = "_blank"; a.rel = "noopener noreferrer"; target.append(a); }
  if (preview) target.append(button("Tiếp tục chỉnh sửa", () => show("editor")), button("Lưu nháp", () => save("DRAFT")), button("Đăng công khai", () => save("PUBLISHED")));
- else { if (!guide.published) target.append(button("Tiếp tục soạn", () => editGuide(guide.id))); target.append(el("p", "note", "Người tạo: " + (guide.creatorName || "Chưa có thông tin") + " · " + new Date(guide.createdAt).toLocaleString("vi-VN")), button("Quay lại danh sách", () => { show("listing"); setUrl(); })); }
+ else { target.append(button("Chỉnh sửa", () => editGuide(guide.id)), deleteButton(guide)); target.append(el("p", "note", "Người tạo: " + (guide.creatorName || "Chưa có thông tin") + " · " + new Date(guide.createdAt).toLocaleString("vi-VN")), button("Quay lại danh sách", () => { show("listing"); setUrl(); })); }
  show("detail");
+}
+function deleteButton(guide) {
+ const node = button("Xóa", () => deleteGuide(guide, node)); node.classList.add("dan"); return node;
+}
+async function deleteGuide(guide, node) {
+ if (busy || !window.confirm('Xóa cẩm nang “' + guide.title + '”? Cẩm nang sẽ không còn hiển thị trong danh sách và trang người dùng.')) return;
+ busy = true; node.disabled = true;
+ try {
+  await apiClient.deleteGuide(guide.id);
+  if (editingId === guide.id) { editingId = null; revokeCover(); }
+  show("listing"); setUrl(); await loadList(state.page); message("Đã xóa cẩm nang.");
+ } catch (error) { message(error.message); }
+ finally { busy = false; node.disabled = false; }
 }
 function collect(status) {
  const data = Object.fromEntries(new FormData(form));
  if (!data.title.trim()) throw new Error("Vui lòng nhập tiêu đề cẩm nang.");
- if (status === "PUBLISHED" && (!data.category || !data.topicCode || !data.content.trim())) throw new Error("Đăng công khai cần chọn giai đoạn, chủ đề và nhập nội dung.");
+ const sections = sectionReaders.length ? sectionReaders.map(read => read()) : [{ heading: "Nội dung", content: data.content }];
+ if (status === "PUBLISHED" && (!data.category || !data.topicCode || sections.some(section => !section.heading.trim() || !section.content.trim()))) throw new Error("Đăng công khai cần chọn giai đoạn, chủ đề và nhập nội dung.");
  if (data.sourceUrl && !safeUrl(data.sourceUrl)) throw new Error("Đường dẫn gốc phải dùng HTTP hoặc HTTPS.");
  return { title: data.title.trim(), summary: data.summary, category: data.category, topicCode: data.topicCode, sourceUrl: data.sourceUrl, status,
-  sections: [{ heading: "Nội dung", content: data.content }], coverImageIndex: coverFile ? 0 : null, removeCover };
+  sections, coverImageIndex: coverFile ? 0 : null, removeCover };
 }
 async function save(status) {
  if (busy) return;
  try {
-  const data = collect(status); busy = true; document.querySelectorAll("#editor button, #detail button").forEach(node => node.disabled = true);
+  const wasEditing = Boolean(editingId); const data = collect(status); busy = true; document.querySelectorAll("#editor button, #detail button").forEach(node => node.disabled = true);
   const body = new FormData(); body.append("guide", new Blob([JSON.stringify(data)], { type: "application/json" })); if (coverFile) body.append("images", coverFile);
   const guide = editingId ? await apiClient.updateGuide(editingId, body) : await apiClient.createGuide(body);
   editingId = guide.id; savedCover = guide.coverImageUrl; revokeCover(); coverFile = null; removeCover = false; $("#cover-input").value = ""; displayCover(); form.elements.status.value = guide.status;
   if (status === "DRAFT") { show("editor"); $("#editor-title").textContent = "Chỉnh sửa cẩm nang"; setUrl(guide.id, true); }
   else { renderGuide(guide); setUrl(guide.id); }
-  await loadList(0); message(status === "DRAFT" ? "Đã lưu nháp. Bạn có thể mở lại để tiếp tục chỉnh sửa." : "Đã đăng cẩm nang công khai.");
+  await loadList(wasEditing ? state.page : 0); message(status === "DRAFT" ? "Đã lưu nháp. Bạn có thể mở lại để tiếp tục chỉnh sửa." : wasEditing ? "Đã cập nhật cẩm nang công khai." : "Đã đăng cẩm nang công khai.");
  } catch (error) { message(error.message); }
  finally { busy = false; document.querySelectorAll("#editor button, #detail button").forEach(node => node.disabled = false); }
 }
-$("#create").addEventListener("click", () => resetEditor());
+$("#create").addEventListener("click", () => { if (!busy) resetEditor(); });
 $("#cancel").addEventListener("click", () => { show("listing"); setUrl(); message(""); });
 $("#save-draft").addEventListener("click", () => save("DRAFT")); $("#publish").addEventListener("click", () => save("PUBLISHED"));
 form.addEventListener("submit", event => { event.preventDefault(); save(form.elements.status.value); });

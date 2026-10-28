@@ -22,9 +22,13 @@ public record GuideRequest(
                           @Size(max = 20000) String content,
                           @Size(max = 2000) String imageUrl,
                           @Size(max = 2000) String referenceUrl,
-                          @Min(0) @Max(4) Integer imageIndex) {
+                          @Min(0) @Max(4) Integer imageIndex,
+                          @Positive Long mediaId) {
+        public Section(String heading, String content, String imageUrl, String referenceUrl, Integer imageIndex) {
+            this(heading, content, imageUrl, referenceUrl, imageIndex, null);
+        }
         public Section(String heading, String content, String imageUrl, String referenceUrl) {
-            this(heading, content, imageUrl, referenceUrl, null);
+            this(heading, content, imageUrl, referenceUrl, null, null);
         }
     }
 }

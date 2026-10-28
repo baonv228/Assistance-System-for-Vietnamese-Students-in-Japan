@@ -166,6 +166,83 @@ class GuideFlowTest {
     }
 
     @Test
+    void moderatorUpdatesPublishedGuideKeepsSectionImagesAndDeletesItFromAllReaders() throws Exception {
+        var moderator = session("MODERATOR");
+        var original = new GuideRequest("Update-delete " + UUID.randomUUID(), "Summary", "PRE",
+                List.of(new GuideRequest.Section("First", "Original content", null, null, 0),
+                        new GuideRequest.Section("Second", "Second content", null, "https://example.org/reference")));
+        var createdResponse = mvc.perform(multipart("/api/moderator/guides")
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(original)))
+                        .file(photo()).session(moderator).cookie(new Cookie("XSRF-TOKEN", "token"))
+                        .header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isCreated()).andReturn().getResponse();
+        var created = json.readTree(createdResponse.getContentAsByteArray()).get("data");
+        long id = created.get("id").asLong();
+        long imageId = created.get("sections").get(0).get("mediaId").asLong();
+        String imageUrl = created.get("sections").get(0).get("imageUrl").asText();
+        var edited = new GuideRequest(original.title() + " edited", "Updated summary", "ARR",
+                List.of(new GuideRequest.Section("First edited", "New content", null, null, null, imageId),
+                        original.sections().get(1)), "LIVING", "https://example.org/source", "PUBLISHED", null, false);
+        var updatedResponse = mvc.perform(multipart("/api/moderator/guides/" + id)
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(edited)))
+                        .with(request -> { request.setMethod("PUT"); return request; }).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.sections.length()").value(2))
+                .andExpect(jsonPath("$.data.sections[0].imageUrl").value(imageUrl))
+                .andExpect(jsonPath("$.data.sections[1].referenceUrl").value("https://example.org/reference"))
+                .andReturn().getResponse();
+        var updated = json.readTree(updatedResponse.getContentAsByteArray()).get("data");
+        assertThat(updated.get("createdBy")).isEqualTo(created.get("createdBy"));
+        assertThat(updated.get("createdAt")).isEqualTo(created.get("createdAt"));
+        mvc.perform(get(imageUrl)).andExpect(status().isOk());
+        mvc.perform(get("/api/guides/" + id)).andExpect(jsonPath("$.data.title").value(edited.title()));
+
+        var user = session("USER");
+        mvc.perform(delete("/api/moderator/guides/" + id).session(user)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/moderator/guides/" + id)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(delete("/api/moderator/guides/" + id).session(moderator))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/moderator/guides/" + id).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isOk());
+        for (String path : List.of("/api/guides/" + id, "/api/moderator/guides/" + id)) {
+            mvc.perform(get(path).session(moderator)).andExpect(status().isNotFound());
+        }
+        mvc.perform(get(imageUrl)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/guides/browse").param("q", edited.title()))
+                .andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get("/api/moderator/guides/browse").session(moderator).param("q", edited.title()))
+                .andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(multipart("/api/moderator/guides/" + id)
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(edited)))
+                        .with(request -> { request.setMethod("PUT"); return request; }).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM guide_items WHERE id=?", Boolean.class, id)).isTrue();
+    }
+
+    @Test
+    void updateCannotAttachAnotherGuidesPrivateImage() throws Exception {
+        var moderator = session("MODERATOR");
+        var principal = (AppUserPrincipal) ((SecurityContextImpl) moderator.getAttribute("SPRING_SECURITY_CONTEXT"))
+                .getAuthentication().getPrincipal();
+        var first = guideService.create(request("PRE", null), principal);
+        var invalid = new GuideRequest(first.title(), "Summary", "PRE",
+                List.of(new GuideRequest.Section("Step", "New content", null, null, null, Long.MAX_VALUE)));
+        mvc.perform(multipart("/api/moderator/guides/" + first.id())
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(invalid)))
+                        .with(request -> { request.setMethod("PUT"); return request; }).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/guides/" + first.id()))
+                .andExpect(jsonPath("$.data.sections[0].heading").value("Step one"));
+    }
+
+    @Test
     void draftCanBeResumedAndPublishedWithoutChangingCreationAuditOrLosingCover() throws Exception {
         var moderator = session("MODERATOR");
         String title = "Draft " + UUID.randomUUID();

@@ -78,6 +78,7 @@ export const apiClient = {
     guideTopics: () => request("/guides/topics"),
     guideSubjects: () => request("/guides/subjects"),
     moderatorGuide: (id) => request(`/moderator/guides/${id}`),
+    deleteGuide: (id) => request(`/moderator/guides/${id}`, { method: "DELETE" }),
     updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),
     browseGuides: (params = {}) => request(`/guides/browse?${toQuery(params)}`),
     moderatorGuides: (params = {}) => request(`/moderator/guides/browse?${toQuery(params)}`),

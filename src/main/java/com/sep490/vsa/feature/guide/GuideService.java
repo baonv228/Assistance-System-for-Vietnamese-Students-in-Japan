@@ -53,7 +53,7 @@ public class GuideService {
     }
 
     public GuideResponse moderatorDetail(long id) {
-        return jdbc.query(SELECT + " WHERE g.id = ?", (rs, n) -> map(rs, true), id).stream().findFirst()
+        return jdbc.query(SELECT + " WHERE g.id = ? AND g.deleted_at IS NULL", (rs, n) -> map(rs, true), id).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy cẩm nang."));
     }
 
@@ -64,14 +64,14 @@ public class GuideService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Từ khóa tối đa 200 ký tự.");
         }
         return jdbc.query(SELECT + """
-                WHERE g.published = TRUE AND (? = '' OR g.stage_code = ?)
+                WHERE g.deleted_at IS NULL AND g.published = TRUE AND (? = '' OR g.stage_code = ?)
                   AND (? = '' OR LOCATE(LOWER(?), LOWER(CONCAT(g.title, ' ', COALESCE(g.summary, '')))) > 0)
                 ORDER BY g.created_at DESC, g.id DESC
                 """, (rs, n) -> map(rs, false), topic, topic, search, search);
     }
 
     public GuideResponse detail(long id) {
-        return jdbc.query(SELECT + " WHERE g.id = ? AND g.published = TRUE",
+        return jdbc.query(SELECT + " WHERE g.id = ? AND g.published = TRUE AND g.deleted_at IS NULL",
                         (rs, n) -> map(rs, true), id).stream().findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy cẩm nang."));
     }
@@ -98,7 +98,7 @@ public class GuideService {
             default -> throw new ApiException(HttpStatus.BAD_REQUEST, "Thứ tự sắp xếp không hợp lệ.");
         };
         String where = """
-                WHERE (? = TRUE OR g.published = TRUE)
+                WHERE g.deleted_at IS NULL AND (? = TRUE OR g.published = TRUE)
                   AND (? = 'ALL' OR g.published = ?)
                   AND (? = '' OR g.stage_code = ?)
                   AND (? = '' OR g.topic_code = ?)
@@ -124,11 +124,11 @@ public class GuideService {
                 SELECT s.heading, s.content,
                        CASE WHEN m.deleted_at IS NULL AND m.scan_status = 'PASSED'
                             THEN CONCAT(?, m.storage_key) ELSE s.image_url END AS image_url,
-                       s.reference_url
+                       s.reference_url, s.media_id
                 FROM guide_sections s LEFT JOIN media m ON m.id = s.media_id
                 WHERE s.guide_id = ? ORDER BY s.sort_order
                 """, (row, n) -> new GuideRequest.Section(row.getString(1), row.getString(2),
-                row.getString(3), row.getString(4)), mediaBaseUrl, id) : List.of();
+                row.getString(3), row.getString(4), null, row.getObject(5, Long.class)), mediaBaseUrl, id) : List.of();
         return new GuideResponse(id, rs.getString("title"), rs.getString("summary"),
                 rs.getString("stage_code"), rs.getString("topic_name"), rs.getBoolean("published"),
                 rs.getObject("created_by", Long.class), rs.getString("creator_name"),
@@ -194,7 +194,11 @@ public class GuideService {
 
         long id;
         List<Long> removedMedia = new java.util.ArrayList<>();
+        var retainedMedia = new java.util.HashSet<Long>();
         if (existingId == null) {
+            if (request.sections().stream().anyMatch(section -> section.mediaId() != null)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Ảnh được giữ lại không hợp lệ.");
+            }
             GeneratedKeyHolder key = new GeneratedKeyHolder();
             jdbc.update(connection -> {
                 var statement = connection.prepareStatement("""
@@ -209,10 +213,22 @@ public class GuideService {
             }, key);
             id = Objects.requireNonNull(key.getKey()).longValue();
         } else {
-            var rows = jdbc.query("SELECT id FROM guide_items WHERE id = ? FOR UPDATE", (rs, n) -> rs.getLong(1), existingId);
+            var rows = jdbc.query("SELECT id FROM guide_items WHERE id = ? AND deleted_at IS NULL FOR UPDATE", (rs, n) -> rs.getLong(1), existingId);
             if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy cẩm nang.");
             id = existingId;
             removedMedia.addAll(jdbc.query("SELECT media_id FROM guide_sections WHERE guide_id = ? AND media_id IS NOT NULL", (rs, n) -> rs.getLong(1), id));
+            var existingUrls = jdbc.query("SELECT image_url FROM guide_sections WHERE guide_id = ? AND image_url IS NOT NULL", (rs, n) -> rs.getString(1), id);
+            for (var section : request.sections()) {
+                if (section.mediaId() != null) {
+                    if (section.imageIndex() != null || !removedMedia.contains(section.mediaId())) {
+                        throw new ApiException(HttpStatus.BAD_REQUEST, "Ảnh phải thuộc cẩm nang đang chỉnh sửa.");
+                    }
+                    retainedMedia.add(section.mediaId());
+                }
+                if (blankToNull(section.imageUrl()) != null && !existingUrls.contains(section.imageUrl())) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "Ảnh cũ không thuộc cẩm nang đang chỉnh sửa.");
+                }
+            }
             jdbc.update("DELETE FROM guide_sections WHERE guide_id = ?", id);
             jdbc.update("""
                     UPDATE guide_items SET stage_code=?, title=?, summary=?, published=?, updated_by=?, topic_code=?, source_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
@@ -239,11 +255,25 @@ public class GuideService {
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, id, i, section.heading() == null ? "" : section.heading().trim(), section.content() == null ? "" : section.content().trim(),
                     section.imageUrl(), section.referenceUrl(),
-                    section.imageIndex() == null ? null : mediaIds.get(section.imageIndex()));
+                    section.imageIndex() == null ? section.mediaId() : mediaIds.get(section.imageIndex()));
         }
+        removedMedia.removeAll(retainedMedia);
         media.discard(removedMedia);
         return moderatorDetail(id);
     }
 
     private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+
+    @Transactional
+    public void delete(long id, AppUserPrincipal me) {
+        if (me == null || !"MODERATOR".equals(me.role())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Chỉ Moderator được xóa cẩm nang.");
+        }
+        var rows = jdbc.query("SELECT id FROM guide_items WHERE id=? AND deleted_at IS NULL FOR UPDATE",
+                (rs, n) -> rs.getLong(1), id);
+        if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy cẩm nang.");
+        // Preserve content and progress history; all readers exclude deleted guides.
+        jdbc.update("UPDATE guide_items SET deleted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP, updated_by=? WHERE id=?",
+                me.id(), id);
+    }
 }

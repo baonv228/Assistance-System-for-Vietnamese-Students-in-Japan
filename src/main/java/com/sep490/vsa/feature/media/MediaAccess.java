@@ -82,9 +82,9 @@ public class MediaAccess {
                            SELECT 1 FROM events ce WHERE ce.cover_media_id = m.id AND ce.deleted_at IS NULL)
                          OR EXISTS (
                            SELECT 1 FROM guide_sections gs JOIN guide_items g ON g.id = gs.guide_id
-                           WHERE gs.media_id = m.id AND g.published = TRUE)
+                           WHERE gs.media_id = m.id AND g.published = TRUE AND g.deleted_at IS NULL)
                          OR EXISTS (
-                           SELECT 1 FROM guide_items g WHERE g.cover_media_id = m.id AND g.published = TRUE)) AS shown,
+                           SELECT 1 FROM guide_items g WHERE g.cover_media_id = m.id AND g.published = TRUE AND g.deleted_at IS NULL)) AS shown,
 
                        EXISTS (SELECT 1 FROM users o WHERE o.id = m.owner_id AND o.status = 'ACTIVE') AS owner_active
                 FROM media m WHERE m.storage_key = ? AND m.deleted_at IS NULL"""

@@ -50,4 +50,9 @@ import java.util.List;
      @RequestPart(value="images", required=false) List<MultipartFile> images, @AuthenticationPrincipal AppUserPrincipal me) {
   return ApiResponse.ok(request.publishing() ? "Đã đăng công khai." : "Đã lưu nháp.", uploads.update(id, request, images, me));
  }
+ @DeleteMapping("/api/moderator/guides/{id}")
+ public ApiResponse<Void> delete(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
+  service.delete(id, me);
+  return ApiResponse.ok("Đã xóa cẩm nang.", null);
+ }
 }
