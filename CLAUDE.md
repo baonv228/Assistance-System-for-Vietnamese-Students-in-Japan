@@ -311,6 +311,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
     and refreshes the list for other conversations. A text message shows at once as "Đang gửi…" (`room.outbox`), the
     box is free for the next one (sent right after, "Gửi" queues), a failed one puts its text back in the box; polls wait
     while an outbox message is on its way so it never shows twice. Photos, video and voice keep the old flow.
+  - New-message notifications (`feature/chat/notify`, never the message text): e-mail digest every 5 min for messages
+    unread 10 min, one per conversation in 6 h (`ChatEmailNotifier`, link `app.public-url`); Web Push (`ChatPushNotifier`
+    on `ChatMessageSent` after commit: RFC 8291 + VAPID written with the JDK, VAPID key pair in `web_push_keys` — never
+    change that row; only https endpoints of known push services, `app.push.allowed-hosts`; 30 s spacing; no push while
+    the member's page is reading that conversation, `ChatViewers`) with `static/sw.js` (always shows what it gets) and
+    `lib/push.js`; "Cài đặt thông báo" dialog (`pages/chat-notify.js`) with "Thông báo qua e-mail" and "Thông báo trên
+    trình duyệt" (`chat_notify_settings`, no row = on). iPhone push only in the home-screen app (`manifest.webmanifest`,
+    PNG icons `/apple-touch-icon.png`, `assets/img/icon-192|512.png`; that app signs in and unlocks the key on its own).
   - Phones (`lib/device.js`: `touchOnly`, `appleMobile`, `homeScreenApp`, `inAppBrowser`): on a touch screen Enter makes a
     new line and only the button sends; while typing the tab bar is hidden and, on an iPhone, the page takes the height
     the keyboard leaves (`visualViewport`, `fitToWindow`, class `chat-keyboard`; `interactive-widget=resizes-content` for
