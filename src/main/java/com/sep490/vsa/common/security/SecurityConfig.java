@@ -1,5 +1,6 @@
 package com.sep490.vsa.common.security;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -72,6 +73,9 @@ public class SecurityConfig {
                 // Role and status are read again on every request: a lock or role change applies at once
                 .addFilterAfter(new SessionUserRefreshFilter(jdbc, contextRepository), SecurityContextHolderFilter.class)
                 .authorizeHttpRequests(auth -> auth
+                        // The live stream (/api/me/live) ends with an async dispatch of the request already allowed;
+                        // checking it again would fail once the session ended meanwhile, on a response already sent
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         // API
                         .requestMatchers("/api/auth/**", "/api/legal/**").permitAll()
                         .requestMatchers("/api/me/**").authenticated()

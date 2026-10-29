@@ -596,6 +596,18 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Working notes
 - `spring.flyway.out-of-order=true`: migrations are written on several branches at once (V9 here while the HandBook
   branch has V7/V8), so a database that already ran a higher version still applies a lower one merged later.
+- Live updates (`common/live`): `GET /api/me/live` (any signed-in role) is a Server-Sent Events stream (`LiveEvents`,
+  in memory, so one server only, "cần chốt" for several): `LiveEvents.publish(userId, type, data)` sends after the commit
+  (never for a rollback) on two threads of its own; events carry ids and kinds only, never a text: `chat` (see "Tin
+  nhắn") and `notification` (`NotificationService.send`). A stream lasts 5 min, then the browser reconnects (session
+  checked again); 5 streams per user (oldest closed); a comment every 25 s keeps tunnels and proxies from closing it
+  (`X-Accel-Buffering: no` for nginx); an Admin lock or "Xóa tài khoản" closes the account's streams. SecurityConfig
+  permits ASYNC dispatches (the stream's end, already authorised). `assets/js/lib/live.js` (started by `site-header.js`)
+  holds one EventSource only while the tab is in front (browsers allow 6 connections per site over HTTP/1.1), retries
+  with a growing wait after the browser gives up, stops at "Đăng xuất"; `onLive("open")` fires on every (re)connect so
+  pages catch up. Pages keep polling as a slower safety net. Measured on the dev PC: a message reaches the other page in
+  under 0.1 s locally; through the free Pinggy tunnel every request still costs 0.3–1.5 s (the relay), so a deployed
+  server with its own https address is much faster than the tunnel.
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.
