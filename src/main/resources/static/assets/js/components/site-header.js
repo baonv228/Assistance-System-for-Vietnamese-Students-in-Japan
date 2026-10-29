@@ -1,6 +1,7 @@
 // Top navigation (desktop) and bottom tab bar (phone), as in the prototype.
 // Usage: const user = await mountSiteHeader("home");  → returns the signed-in user or null.
 import { apiClient, currentUser } from "../api/client.js";
+import { onLive, startLive } from "../lib/live.js";
 import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
 
 /** Features other members are building link to a placeholder page for now. */
@@ -48,6 +49,7 @@ export async function mountSiteHeader(active) {
     login?.addEventListener("click", refresh);
     if (user) {
         watchNotifications(header, user);
+        startLive();
     }
     return user;
 }
@@ -77,8 +79,9 @@ export async function logout() {
 // The bell shows the unread count. While one of the user's own posts, questions or reviews waits for its photo/video
 // scan, the count is asked again every few seconds; the result (CONTENT_PUBLISHED: published, CONTENT_REJECTED: refused
 // with the reason) then pops up on whatever page the user is on, and the page hears of every new notification through
-// an "asvsj:notification" event (the post, event or place it is about reloads what it shows). Otherwise the bell asks
-// once a minute, and at once when the tab comes back to the front; never while the tab is hidden.
+// an "asvsj:notification" event (the post, event or place it is about reloads what it shows). A new notification is
+// asked for at once when the live stream announces it (lib/live.js); otherwise the bell asks once a minute, and at once
+// when the tab comes back to the front; never while the tab is hidden.
 
 const FAST_MS = 5000;
 const SLOW_MS = 60000;
@@ -162,6 +165,8 @@ function watchNotifications(header, user) {
     document.addEventListener("visibilitychange", () => {
         if (!document.hidden && !timer) check();
     });
+    onLive("notification", check);
+    onLive("open", check);                          // (re)connected: what came while it was down
     checkNow = check;
     check();
 }

@@ -230,7 +230,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
   `GET /summary?after=` (unread, latestId, `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5
   after that id, one read-only snapshot), `POST /read {upToId}`. The header (`site-header.js`) shows a bell with the
-  unread count, asks the summary every 5 s while `processing` > 0 (else every 60 s, never while the tab is hidden),
+  unread count, asks the summary at once when the live stream announces a notification (see "Live updates" below),
+  every 5 s while `processing` > 0 (else every 60 s, never while the tab is hidden),
   pops up the scan results (`.site-notices`, "Xem" opens the link) and fires `asvsj:notification`, which reloads the post
   (`blog-detail.js`), event (`event-detail.js`) or place panel (`map.js`) still shown as PROCESSING; the Map, which
   stays on its page after sending a review or pin with media, calls `checkNotificationsSoon()`. The newest id a tab
