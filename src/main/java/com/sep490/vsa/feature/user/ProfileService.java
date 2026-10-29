@@ -125,7 +125,8 @@ public class ProfileService {
      * <p>
      * As the "Xóa tài khoản" box says: the profile is anonymized, the points go to 0, the identity tags are revoked,
      * pending tag requests are closed (REJECTED, "Tài khoản đã xóa") and every tag proof photo is discarded (file
-     * removed after commit). Point and tag history rows stay. Its live update streams close after the commit.
+     * removed after commit). Point and tag history rows stay. The chat encryption key is revoked and the Web Push
+     * subscriptions are deleted; its live update streams close after the commit.
      * <p>
      * READ COMMITTED like an Admin's lock ({@code AdminUserService.updateUserStatus}): the comment recount then locks
      * only the posts it changes, not every post row it reads, so a member commenting at the same time waits for no
@@ -142,6 +143,10 @@ public class ProfileService {
         providers.deleteByUserId(userId);
         jdbc.update("UPDATE user_tags SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
                 Timestamp.from(now), userId);
+        // "Tin nhắn": nobody can encrypt to the account any more, and no browser gets its notifications
+        jdbc.update("UPDATE chat_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                Timestamp.from(now), userId);
+        jdbc.update("DELETE FROM push_subscriptions WHERE user_id = ?", userId);
         media.discard(jdbc.queryForList("""
                 SELECT proof_media_id FROM tag_requests WHERE user_id = ? AND proof_media_id IS NOT NULL""",
                 Long.class, userId));

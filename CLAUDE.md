@@ -240,6 +240,93 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   stays on its page after sending a review or pin with media, calls `checkNotificationsSoon()`. The newest id a tab
   handled is kept in sessionStorage (`asvsj.notifications.seen.<userId>`). Page `/notifications` (guarded like
   `/saved`) lists them and marks the shown ones read.
+- "Tin nhắn" (one-to-one chat between Members, `feature/chat`, V14 + V15; there is no chat in the prototype, rules decided
+  in this repo, "cần chốt" constants in `ChatService`, `ChatKeyService`, `ChatTyping`, `ChatViewers`):
+  - Who: signed-in ACTIVE Members (role USER) with other ACTIVE Members; staff get MSG18 (403) and have no "Tin nhắn"
+    button; guests 401. API `/api/me/chats/**` (`ChatController`); page `/messages`, `/messages/{id}`,
+    `/messages?to={userId}` (`pages/messages.html`, `assets/js/pages/messages.js`, `assets/css/messages.css`; loads
+    blog.css + blog-detail.css for avatars, dialogs, toast, and `assets/css/chat-media.css`). Text ≤ 2,000 characters.
+  - One conversation per pair (`chat_conversations` UQ(user_low_id, user_high_id); two first messages at the same moment
+    share it). The first message to someone is a request ("Lời mời" tab): the writer may send `PENDING_MAX` (3) messages
+    in all until the member asked accepts or answers (answering accepts), and sees no "Đã xem" before that. "Từ chối":
+    the request leaves the asked member's lists (DECLINED + cleared) and the writer gets WAITING_FULL without being told
+    it was declined, until the member writes back. "Xóa cuộc trò chuyện" hides the messages so far for that member only
+    (`cleared_id`); deleting a request declines it.
+  - "Chặn" (`chat_blocks`): while either blocks the other, neither can send; the blocked member reads "Bạn không thể nhắn
+    tin cho thành viên này." (same as for a locked or staff account); blocking from a request declines it. "Người đã
+    chặn" list on the page with "Bỏ chặn". A message can be reported (`ContentReportService`, target MESSAGE, V14 widens
+    `ck_case_target`; one possible reporter, so never auto-hidden), optionally blocking its writer.
+  - Every message goes through the comment rules: banned keywords (MSG36 wording "Chưa gửi được: tin nhắn chứa…") and
+    BR-22 (`ContentFilter.linkProblem`: links, mobile numbers, Zalo/LINE ids only with an identity tag, no short links).
+    Limits: 30 messages a minute per member, new conversations a Japan day 20 (5 for accounts younger than
+    `new_account_days`), the same text (≥ 30 letters after `VietnameseText.squash`) in at most 3 other conversations in
+    24 h. Order: may write to this member now (deleted → blocked by me → unavailable → request limit) → keywords → links →
+    new-conversation limit → per-minute → repeated text.
+  - Messages of LOCKED or DELETED accounts are hidden from the other member (`ChatRepository.SHOWN`), like posts; a request
+    whose writer is locked leaves the list; nothing is deleted. Sending locks the writer's `user_daily_usage` row, then
+    the conversation row (READ COMMITTED); block, accept, decline, delete and report lock the conversation row.
+  - Header (`site-header.js`): "Tin nhắn" button (Members only) with the number of conversations with unread messages,
+    asked at once on a live "chat" event, else every 25 s (60 s while the live stream is open; not on /messages, which
+    asks at once on events and otherwise every 4 s for the open conversation and ~16 s for the list, 15 s / 60 s while
+    the stream is open, and sets it); "(n) " in front of the tab title; on every other page an in-app notice "Tin nhắn mới từ <tên>" / "<tên> muốn
+    nhắn tin với bạn" with "Xem" from `GET /counts` `latest` (sessionStorage `asvsj.chat.seen.<userId>`). On phones the
+    header's "Tôi" button is hidden (the tab bar has it) to make room. "Nhắn tin" next to the author of a post or question
+    (guests: to sign in with `next`) and on others' comments and answers (Members only, `blog-detail.js`); "Tin nhắn" on
+    "Tôi". "Đăng xuất" first drops this browser's push subscription and forgets the chat key kept in it (shared
+    computers): the next sign-in asks once for the "mật khẩu khôi phục".
+  - **End-to-end encryption once a request is accepted** (decided with the user): requests stay plain text, text only,
+    filtered as above. When both members are ACCEPTED and both have a key, the conversation is E2EE (`Status.encryption`
+    mode E2EE, a lock "Đã mã hóa đầu cuối"): the server accepts only envelopes (plain `content` → 400) and can no longer
+    filter keywords/links in them (accepted trade-off); one member without a key → PLAIN with the notice NO_KEY_ME /
+    NO_KEY_PEER. Keys: one ECDH P-256 identity key per member, made in the browser (`lib/chat-crypto.js`), public key +
+    private key wrapped with PBKDF2-SHA256 600,000 of the "mật khẩu khôi phục" (≥ 8 characters, never sent) in
+    `chat_keys` (`ChatKeyService`: point-on-curve check, a new key revokes the old, 5 a Japan day); kept in IndexedDB
+    "asvsj-chat"; a new browser unlocks with the passphrase, "Quên mật khẩu? Tạo khóa mới" loses older encrypted messages.
+    Conversation key = ECDH → HKDF per key pair; message = AES-GCM of fk ‖ body with AAD
+    `conversationId|senderId|senderKeyId|recipientKeyId`; key ids must be the current ones (409 → the page reloads and
+    retries once); franking tag HMAC-SHA256(fk, "asvsj-frank-v1|conv|sender|" ‖ body) stored in clear, so a report of an
+    encrypted message sends the decrypted body + fk, the server checks the tag (constant time) and keeps it in
+    `chat_report_evidence` for the Moderator. Shared test vector in `ChatEncryptionFlowTest` and
+    `src/test/js/chat-crypto.test.mjs`. No forward secrecy (no ratchet); reactions, reply ids and file sizes are not
+    encrypted. Web Crypto needs a secure context: on `http://<LAN IP>` the page says encryption needs HTTPS.
+  - Photos (≤ 5, re-encoded to JPEG ≤ 1600 px in the browser), one video (MP4/MOV ≤ 30 s, metadata removed in the
+    browser by `lib/mp4-strip.js`, a port of `Mp4Duration.stripMetadata`) or one voice message (MediaRecorder ≤ 120 s),
+    only in E2EE conversations (`pages/chat-media.js`): each file encrypted with its own key, uploaded to
+    `POST /{id}/files` (IMAGE ≤ 10 MB, VIDEO ≤ 50 MB, AUDIO ≤ 5 MB, 100 files a Japan day, 20 for new accounts), stored as
+    `chat_files` + `MediaStorage` key `chat/yyyy/MM/uuid.bin` (never in `media`, never scanned, never public), served by
+    `GET /{id}/files/{fileId}` to the two members only; the keys travel inside the encrypted message.
+  - Edit (own, ≤ 15 min, ≤ 5 times, earlier versions in `chat_message_edits`, plain edits re-filtered), "Thu hồi" (own,
+    any time; files deleted at once, text/ciphertext emptied 30 days later by `ChatCleanup` at 03:50 Japan time, which
+    also deletes files never sent after 24 h), reactions (👍 ❤️ 😂 😮 😢 🙏, one per member), quoted replies
+    (`reply_to_id`), "đang soạn tin" (`ChatTyping`, in memory, 6 s), search in a conversation (in the browser over the
+    decrypted history, accents ignored, `lib/chat-text.js`). `GET /{id}/updates?after=&changedSince=` also returns the
+    messages edited, recalled or reacted to (`changed_at`) and `serverTime`; the page asks "after" the newest message the
+    server gave it, never after one it just sent.
+  - Live: `ChatService.announce` publishes `chat` events (`kind` message, changed, read, typing, status; ids only) to the
+    members a change shows for: a message and an accept to both, an edit/recall/reaction to the other member only when
+    the message shows for them, a read to the other member only once the reader accepted (as "Đã xem"), typing to the
+    other member, a decline, clear or block to its author's own pages only (the other member is never told). The page
+    asks `updates` at once (one poll at a time, again right after if more came), shows "đang soạn tin" without asking,
+    and refreshes the list for other conversations. A text message shows at once as "Đang gửi…" (`room.outbox`), the
+    box is free for the next one (sent right after, "Gửi" queues), a failed one puts its text back in the box; polls wait
+    while an outbox message is on its way so it never shows twice. Photos, video and voice keep the old flow.
+  - Phones (`lib/device.js`: `touchOnly`, `appleMobile`, `homeScreenApp`, `inAppBrowser`): on a touch screen Enter makes a
+    new line and only the button sends; while typing the tab bar is hidden and, on an iPhone, the page takes the height
+    the keyboard leaves (`visualViewport`, `fitToWindow`, class `chat-keyboard`; `interactive-widget=resizes-content` for
+    Android). Drafts are kept in sessionStorage `asvsj.chatDrafts` (`{userId, drafts}`) when the tab is hidden or left and
+    on a 401, restored for the same member only, dropped on "Đăng xuất" (`asvsj:signing-out` event of `site-header.js`).
+    Voice is recorded as MP4/AAC where the browser can (plays on every iPhone), else WebM/Opus; a file the device cannot
+    play says so under the player. "Lưu ảnh" opens the share sheet on phones (Photos on an iPhone), else downloads.
+    The recovery-password fields have `autocomplete` new-/current-password and a hidden username "<email> (mật khẩu khôi
+    phục tin nhắn)", so password managers keep it apart from the sign-in password; on an iPhone the dialogs mention
+    Safari's 7-day storage rule. Inside Facebook/Messenger/Zalo/LINE/Instagram browsers the page advises opening Safari
+    or Chrome (no microphone or push there). `tokens.css` gives every field 16 px on iOS (`@supports
+    (-webkit-touch-callout: none)`), so Safari does not zoom in on focus.
+  - Tests: `ChatFlowTest`, `ChatEncryptionFlowTest`, `ChatUtilitiesFlowTest`, `ChatFilesFlowTest`, `ChatLiveFlowTest`
+    (who is told what on the live stream), `common/live/LiveEventsTest`, `notify/*Test`; the
+    browser libraries with `node --test src/test/js/` (Node ≥ 20, no npm packages).
+  - Not built yet: group chat, Moderator reading of reported messages, "Nhắn tin" on Map and event reviews (Tiến's / the
+    events team's pages), a privacy-policy line saying reported messages are read by Moderators, `pushsubscriptionchange`.
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
