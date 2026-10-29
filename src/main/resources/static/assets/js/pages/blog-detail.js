@@ -14,6 +14,7 @@ const ROUTES = {
     listName: QUESTION ? "Hỏi-Đáp" : "Blog",
     topic: (id) => `${QUESTION ? "/qa" : "/blog"}?topics=${id}`,
     profile: (id) => soon("public-profile", { id }),
+    message: (userId) => `/messages?to=${userId}`,
     edit: (id) => `${QUESTION ? "/qa" : "/blog"}/${id}/edit`,
     login: loginUrl                     // back to this post after signing in
 };
@@ -175,6 +176,7 @@ function render(data) {
                 <span class="note">·</span>
                 <time class="note" datetime="${esc(data.createdAt)}" title="${esc(fullDate(data.createdAt))}">${timeAgo(data.createdAt)}</time>
                 ${data.edited ? `<span class="note">· đã sửa</span>` : ""}
+                ${v.author ? "" : messageButton(data.author, true)}
             </div>
             ${data.topics.length || data.places.length ? `<div class="row tags">
                 ${data.topics.map((t) => `<a class="badge topic" href="${ROUTES.topic(t.id)}">${esc(t.name)}</a>`).join("")}
@@ -199,6 +201,17 @@ function authorHtml(author) {
     return `<a class="author" href="${ROUTES.profile(author.id)}">${avatar(author)}<b>${esc(author.displayName)}</b></a>
         ${tagChips(author.tags)}
         ${author.rankName ? `<span class="badge rank" title="Cấp bậc">${ic("workspace_premium")}${esc(author.rankName)}</span>` : ""}`;
+}
+
+/**
+ * "Nhắn tin": a private message to the writer, for questions that do not belong in the comments (page /messages).
+ * Members only: staff accounts do not chat. Guests see it on the post (it sends them to sign in and on to the
+ * conversation), not on every comment.
+ */
+function messageButton(author, forGuests = false) {
+    if (user ? user.role !== "USER" || user.id === author.id : !forGuests) return "";
+    const href = user ? ROUTES.message(author.id) : ROUTES.login(ROUTES.message(author.id));
+    return `<a class="btn sm ghost" href="${esc(href)}" title="Nhắn tin riêng cho ${esc(author.displayName)}">${ic("chat")}Nhắn tin</a>`;
 }
 
 function mediaHtml(media) {
@@ -396,6 +409,7 @@ function commentHtml(c, depth) {
         }
         actions.push(`<button class="btn sm ghost dan" type="button" data-act="delete-comment">${ic("delete")}Xóa</button>`);
     } else {
+        actions.push(messageButton(c.author));
         actions.push(actionButton({ act: "report-comment", icon: "flag", label: "Báo cáo", disabled: user && !canAct }));
     }
     // The asker picks the best answer among direct answers written by other people
