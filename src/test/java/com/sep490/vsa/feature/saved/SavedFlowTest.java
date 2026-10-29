@@ -39,6 +39,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -194,7 +195,7 @@ class SavedFlowTest {
     @Test
     void savedPageHasACleanAddressForSignedInUsers() throws Exception {
         mvc.perform(get("/saved")).andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrlPattern("**/login"));
+                .andExpect(redirectedUrl("/login?next=%2Fsaved"));
         mvc.perform(get("/saved").session(session(member, "USER")))
                 .andExpect(status().isOk())
                 .andExpect(forwardedUrl("/pages/saved.html"));

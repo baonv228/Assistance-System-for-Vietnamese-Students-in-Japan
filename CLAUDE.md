@@ -93,8 +93,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   header button reads the address when pressed; "Viết bài" / "Đặt câu hỏi" go on to the form). `login.js` follows `next`
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
   "/", no "://", backslash, space or control character, same origin, not /login, /register or /complete-signup); staff
-  and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. Pages Spring Security guards
-  (`/profile`, `/saved`, `/notifications`) still send a guest to plain `/login`. Sessions last 14 days without activity
+  and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. The Member pages Spring Security
+  guards (`/profile`, `/saved`, `/notifications`) send a guest to `/login?next=<that page and query>` too
+  (`SecurityConfig.loginThenBack`, GET only; staff pages stay plain `/login`). Sessions last 14 days without activity
   and the cookie survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env
   `SESSION_TIMEOUT`, "cần chốt").
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`

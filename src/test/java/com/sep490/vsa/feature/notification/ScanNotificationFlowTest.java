@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -377,7 +377,7 @@ class ScanNotificationFlowTest {
 
         // The page: guests go to sign in, members get the page
         mvc.perform(get("/notifications")).andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrlPattern("**/login"));
+                .andExpect(redirectedUrl("/login?next=%2Fnotifications"));
         mvc.perform(get("/notifications").session(session(owner))).andExpect(status().isOk())
                 .andExpect(forwardedUrl("/pages/notifications.html"));
     }

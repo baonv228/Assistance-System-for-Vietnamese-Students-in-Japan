@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
@@ -25,7 +26,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Session-based security for the same-origin HTML/JS frontend.
@@ -41,6 +46,29 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 public class SecurityConfig {
 
     private static final RequestMatcher API = new AntPathRequestMatcher("/api/**");
+    /** Member pages a guest is sent away from: after signing in they come back here (?next=, followed by login.js). */
+    private static final RequestMatcher MEMBER_PAGES = new OrRequestMatcher(
+            new AntPathRequestMatcher("/profile"), new AntPathRequestMatcher("/saved"),
+            new AntPathRequestMatcher("/notifications"));
+
+    /**
+     * Not signed in on a page: to the sign-in page. From a Member page (e.g. /saved) the sign-in page gets ?next= so
+     * the member lands back on it; staff pages stay plain.
+     */
+    static AuthenticationEntryPoint loginThenBack() {
+        LoginUrlAuthenticationEntryPoint plain = new LoginUrlAuthenticationEntryPoint("/login");
+        return (request, response, exception) -> {
+            if (!"GET".equals(request.getMethod()) || !MEMBER_PAGES.matches(request)) {
+                plain.commence(request, response, exception);
+                return;
+            }
+            String path = request.getRequestURI().substring(request.getContextPath().length());
+            String query = request.getQueryString();
+            String next = query == null ? path : path + "?" + query;
+            response.sendRedirect(request.getContextPath() + "/login?next="
+                    + URLEncoder.encode(next, StandardCharsets.UTF_8));
+        };
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -95,8 +123,7 @@ public class SecurityConfig {
                         // Not signed in: API gets 401, pages go to the login page
                         .defaultAuthenticationEntryPointFor(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), API)
-                        .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"), AnyRequestMatcher.INSTANCE)
+                        .defaultAuthenticationEntryPointFor(loginThenBack(), AnyRequestMatcher.INSTANCE)
                         // Signed in with the wrong role: API gets 403, pages go to the user's own home page
                         .accessDeniedHandler((request, response, denied) -> {
                             if (API.matches(request)) {
