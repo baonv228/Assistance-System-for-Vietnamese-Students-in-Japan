@@ -56,6 +56,7 @@ export async function mountSiteHeader(active) {
         // The "Tin nhắn" page asks for its own counts more often and updates the button itself
         if (user.role === "USER") {
             watchChats(header, user, active === "messages");
+            refreshPushSoon(user);
         }
         startLive();
     }
@@ -91,13 +92,15 @@ export async function logout() {
 }
 
 /**
- * Before signing out: the chat encryption key kept in this browser is forgotten, as on a shared computer. Signing in
- * again asks once for the "mật khẩu khôi phục". Never makes the member wait more than 3 s.
+ * Before signing out (still signed in, so the server can drop the subscription): this browser stops getting the
+ * account's chat notifications, and the chat encryption key kept in it is forgotten, as on a shared computer. Signing
+ * in again asks once for the "mật khẩu khôi phục". Never makes the member wait more than 3 s.
  */
 async function forgetThisBrowser() {
     const userId = signedInId;
     if (userId == null) return;
     const tasks = [
+        import("../lib/push.js").then((push) => push.disablePush()),
         import("../lib/chat-crypto.js").then((crypto) => crypto.forgetLocalIdentity(userId))
     ];
     await Promise.race([Promise.allSettled(tasks), new Promise((resolve) => setTimeout(resolve, 3000))]);
@@ -319,6 +322,36 @@ function watchChats(header, user, onMessagesPage) {
     });
     onLive("open", check);
     check();
+}
+
+/** Seconds after the page loads before the push subscription is renewed (the page's own requests go first). */
+const PUSH_REFRESH_MS = 4000;
+
+/**
+ * Once per tab session, on a browser where this Member turned Web Push on: hands the current subscription to the server
+ * again (enablePush asks nothing when the permission is already granted). Push services replace subscriptions now and
+ * then and sw.js does not handle "pushsubscriptionchange", so without this the server would keep pushing to a dead one.
+ * Skipped while the member-wide switch is off, because enablePush would turn it back on. Errors are ignored.
+ */
+function refreshPushSoon(user) {
+    const store = `asvsj.push.refreshed.${user.id}`;
+    try {
+        if (sessionStorage.getItem(store)) return;
+        sessionStorage.setItem(store, "1");           // set first: a failure is not tried again on every page
+    } catch {
+        return;                                     // storage blocked: not on every page load either
+    }
+    if (!globalThis.isSecureContext || !("serviceWorker" in navigator)) return;
+    setTimeout(async () => {
+        try {
+            const push = await import("../lib/push.js");
+            if (!push.pushSupported() || (await push.pushState()) !== "on") return;
+            if ((await apiClient.chatNotifySettings())?.pushEnabled !== true) return;
+            await push.enablePush();
+        } catch {
+            // offline, push service down, signed out: the next tab session tries again
+        }
+    }, PUSH_REFRESH_MS);
 }
 
 /** "Tin nhắn mới từ Lan" / "Lan muốn nhắn tin với bạn." with "Xem"; a newer one of the same conversation replaces it. */

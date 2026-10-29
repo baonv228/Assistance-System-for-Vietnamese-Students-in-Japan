@@ -22,7 +22,10 @@
      page encrypts and decrypts (lib/chat-crypto.js), the server only stores what it cannot read. -->
 <main class="chatpage" id="chat">
     <aside class="chat-side" aria-label="Các cuộc trò chuyện">
-        <div class="chat-side-head"><h2>Tin nhắn</h2></div>
+        <div class="chat-side-head"><h2>Tin nhắn</h2>
+            <button class="btn sm ghost" type="button" id="notify-settings" title="Cài đặt thông báo tin nhắn" hidden>
+                <span class="ic" aria-hidden="true">settings</span><span class="sr-only">Cài đặt thông báo tin nhắn</span></button>
+        </div>
         <div class="chat-key-banner" id="key-banner" role="status" hidden></div>
         <div class="chat-tabs" role="tablist" aria-label="Hộp thư">
             <button type="button" role="tab" id="tab-INBOX" data-box="INBOX" aria-selected="true" aria-controls="list">

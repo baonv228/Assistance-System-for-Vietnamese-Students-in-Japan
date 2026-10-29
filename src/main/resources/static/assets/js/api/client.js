@@ -172,6 +172,14 @@ export const apiClient = {
     chatMyKey: () => request("/me/chats/keys/me"),
     createChatKey: (body) => post("/me/chats/keys", body),
     chatKey: (keyId) => request(`/me/chats/keys/${keyId}`),
+    // New-message notifications: { emailEnabled, pushEnabled }; push key → { publicKey } (base64url VAPID key)
+    chatNotifySettings: () => request("/me/chats/notify/settings"),
+    updateChatNotifySettings: (body) => request("/me/chats/notify/settings", { method: "PUT", body: JSON.stringify(body) }),
+    pushPublicKey: () => request("/me/chats/notify/push-key"),
+    // subscription = PushSubscription.toJSON(): { endpoint, keys: { p256dh, auth } }
+    savePushSubscription: (subscription) => post("/me/chats/notify/push-subscriptions", subscription),
+    deletePushSubscription: (endpoint) =>
+        request("/me/chats/notify/push-subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
     readChat: (id, upToId) => post(`/me/chats/${id}/read`, { upToId: upToId ?? null }),
     acceptChat: (id) => post(`/me/chats/${id}/accept`),
     declineChat: (id) => post(`/me/chats/${id}/decline`),

@@ -58,6 +58,7 @@ const $ = (selector) => document.querySelector(selector);
 const els = {
     list: $("#list"), note: $("#list-note"), more: $("#more"), requests: $("#count-REQUESTS"),
     blocksToggle: $("#blocks-toggle"), blocks: $("#blocks"), keyBanner: $("#key-banner"),
+    notifyBtn: $("#notify-settings"),
     empty: $("#empty"), room: $("#room"), head: $("#room-head"), thread: $("#thread"), older: $("#older"),
     msgs: $("#msgs"), notice: $("#notice"), typing: $("#typing"), compose: $("#compose"), text: $("#text"),
     send: $("#send"), counter: $("#counter"), sendError: $("#send-error"), progress: $("#progress"),
@@ -96,6 +97,7 @@ let toastTimer;
 const drafts = new Map();   // "c{id}" or "u{userId}" → text being typed
 
 let media = null;           // pages/chat-media.js, null when it could not be loaded (text still works)
+let notify = null;          // pages/chat-notify.js
 // Encryption: "unsupported" (no WebCrypto: plain-http address), "none" (encryption not turned on), "locked" (on, but
 // this browser has no key yet), "ready", "error" (the key could not be read)
 let keyState = "unknown";
@@ -206,16 +208,23 @@ function fitToWindow() {
 }
 
 /**
- * Photos/videos/voice messages come from their own module; when it cannot be loaded the page still sends and reads
- * text, and says what is missing.
+ * Photos/videos/voice messages and the notification settings come from their own modules; when one cannot be loaded
+ * the page still sends and reads text, and says what is missing.
  */
 async function loadModules() {
-    try {
-        media = await import("./chat-media.js");
-    } catch (error) {
-        console.error("chat-media.js", error);
+    const [mediaModule, notifyModule] = await Promise.allSettled([import("./chat-media.js"), import("./chat-notify.js")]);
+    if (mediaModule.status === "fulfilled") {
+        media = mediaModule.value;
+    } else {
+        console.error("chat-media.js", mediaModule.reason);
         toast("Không tải được phần ảnh, video, ghi âm của trang. Tin nhắn chữ vẫn dùng được.", "error");
     }
+    if (notifyModule.status === "fulfilled" && typeof notifyModule.value.openNotifySettings === "function") {
+        notify = notifyModule.value;
+    } else if (notifyModule.status === "rejected") {
+        console.error("chat-notify.js", notifyModule.reason);
+    }
+    els.notifyBtn.hidden = !notify;
 }
 
 /** Sets the tab title; the header puts the unread count in front of it again. */
@@ -2339,6 +2348,14 @@ function wire() {
         } else if (event.key === "Enter") {
             event.preventDefault();
             runSearch();
+        }
+    });
+    els.notifyBtn.addEventListener("click", () => {
+        try {
+            notify?.openNotifySettings();
+        } catch (error) {
+            console.error("chat-notify.js", error);
+            toast("Không mở được cài đặt thông báo.", "error");
         }
     });
     els.blocksToggle.addEventListener("click", toggleBlocks);
