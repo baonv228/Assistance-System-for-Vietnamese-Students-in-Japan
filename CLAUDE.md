@@ -94,10 +94,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
   "/", no "://", backslash, space or control character, same origin, not /login, /register or /complete-signup); staff
   and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. The Member pages Spring Security
-  guards (`/profile`, `/saved`, `/notifications`) send a guest to `/login?next=<that page and query>` too
-  (`SecurityConfig.loginThenBack`, GET only; staff pages stay plain `/login`). Sessions last 14 days without activity
-  and the cookie survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env
-  `SESSION_TIMEOUT`, "cần chốt").
+  guards (`/profile`, `/saved`, `/notifications`, `/messages`, `/messages/**`) send a guest to `/login?next=<that page
+  and query>` too (`SecurityConfig.loginThenBack`, GET only; staff pages stay plain `/login`), so a chat notification
+  tapped after the session ended lands on the conversation. Sessions last 14 days without activity and the cookie
+  survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env `SESSION_TIMEOUT`, "cần chốt").
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`
   (`currentUser().catch(() => null)`), so an early Enter never puts the email or password in the URL.
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
@@ -142,6 +142,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`,
+  `/messages`, `/messages/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean

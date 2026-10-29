@@ -22,6 +22,15 @@ Khi chạy với profile `local` (mặc định), lần đầu khởi động ap
 | `admin@gmail.com` | Admin | `/admin` |
 | `mentor@gmail.com`, `kouhai@gmail.com` | Người dùng viết review, bài viết mẫu | Trang chủ `/` |
 
+"Tin nhắn" mã hóa đầu cuối sau khi lời mời được chấp nhận: lần đầu mở Tin nhắn, mỗi tài khoản đặt một "mật khẩu khôi
+phục" (chỉ lưu trên trình duyệt, server không biết). Khi thử trên máy dev, `user@gmail.com` và `mentor@gmail.com` đã dùng
+`senpai-test-2026`; mở trên trình duyệt hoặc máy khác thì nhập lại mật khẩu này. Mã hóa, ghi âm và thông báo đẩy cần
+HTTPS (hoặc `localhost`): mở bằng `http://<IP máy>:8090` từ điện thoại thì các phần đó không chạy.
+Thử trên điện thoại: mở một đường hầm HTTPS tới cổng của app (ví dụ `ssh -p 443 -R0:localhost:8080 a.pinggy.io`, hoặc
+Cloudflare Tunnel) rồi mở link `https://…` nó in ra bằng Safari/Chrome (không mở trong Facebook, Zalo, LINE). Link `http://`
+của đường hầm tự chuyển sang `https://`.
+Thử thư viện mã hóa trên trình duyệt: `node --test src/test/js/` (Node ≥ 20).
+
 Cùng lúc đó app nạp dữ liệu mẫu từ prototype (địa điểm, review, sự kiện, blog, cẩm nang, mẫu câu) trong
 `src/main/resources/dev/sample-data.sql`, chỉ khi bảng `places` còn trống.
 **Không bao giờ bật profile `local` trên server deploy**: khi deploy, đặt `SPRING_PROFILES_ACTIVE=prod`.

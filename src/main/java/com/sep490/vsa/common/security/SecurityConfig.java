@@ -49,11 +49,12 @@ public class SecurityConfig {
     /** Member pages a guest is sent away from: after signing in they come back here (?next=, followed by login.js). */
     private static final RequestMatcher MEMBER_PAGES = new OrRequestMatcher(
             new AntPathRequestMatcher("/profile"), new AntPathRequestMatcher("/saved"),
-            new AntPathRequestMatcher("/notifications"));
+            new AntPathRequestMatcher("/notifications"), new AntPathRequestMatcher("/messages"),
+            new AntPathRequestMatcher("/messages/**"));
 
     /**
-     * Not signed in on a page: to the sign-in page. From a Member page (e.g. /saved) the sign-in page gets ?next= so
-     * the member lands back on it; staff pages stay plain.
+     * Not signed in on a page: to the sign-in page. From a Member page (e.g. a chat notification tapped after the
+     * session ended: /messages/12) the sign-in page gets ?next= so the member lands back on it; staff pages stay plain.
      */
     static AuthenticationEntryPoint loginThenBack() {
         LoginUrlAuthenticationEntryPoint plain = new LoginUrlAuthenticationEntryPoint("/login");
@@ -117,7 +118,8 @@ public class SecurityConfig {
                         .requestMatchers("/academic", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
                         .requestMatchers("/admin", "/admin/**", "/pages/admin/**").hasRole("ADMIN")
                         .requestMatchers("/profile", "/pages/profile.html", "/saved", "/pages/saved.html",
-                                "/notifications", "/pages/notifications.html").authenticated()
+                                "/notifications", "/pages/notifications.html",
+                                "/messages", "/messages/**", "/pages/messages.html").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e
                         // Not signed in: API gets 401, pages go to the login page

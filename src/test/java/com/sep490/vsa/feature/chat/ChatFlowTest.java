@@ -54,7 +54,9 @@ import static org.springframework.security.web.context.HttpSessionSecurityContex
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -139,6 +141,14 @@ class ChatFlowTest {
                 .andExpect(jsonPath("$.data.counts.unread").value(0))
                 .andExpect(jsonPath("$.data.counts.requests").value(0));
         mvc.perform(get(API).param("box", "SPAM").session(session(member, "USER"))).andExpect(status().isBadRequest());
+
+        // The page: guests go to sign in, members get the page (with or without a conversation open)
+        // ... and come back to the same page afterwards (a chat notification tapped after the session ended)
+        mvc.perform(get("/messages")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login?next=%2Fmessages"));
+        mvc.perform(get("/messages/5?to=7")).andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?next=%2Fmessages%2F5%3Fto%3D7"));
+        mvc.perform(get("/messages").session(session(member, "USER"))).andExpect(forwardedUrl("/pages/messages.html"));
+        mvc.perform(get("/messages/5").session(session(member, "USER"))).andExpect(forwardedUrl("/pages/messages.html"));
     }
 
     @Test

@@ -340,6 +340,8 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 @media (max-width: 860px) {
     .site-top { padding: 10px 16px; }
     .site-nav, .site-account .who { display: none; }
+    /* "Tôi" is in the tab bar: room for "Tin nhắn", the bell and "Đăng xuất" */
+    .site-account .me-link { display: none; }
     .site-notices { top: 62px; left: 16px; right: 16px; width: auto; }
     .tabbar {
         display: flex;

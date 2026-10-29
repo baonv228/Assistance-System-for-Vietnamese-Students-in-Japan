@@ -36,6 +36,7 @@ public final class CleanUrls {
         PAGES.put("/profile", "/pages/profile.html");
         PAGES.put("/saved", "/pages/saved.html");
         PAGES.put("/notifications", "/pages/notifications.html");
+        PAGES.put("/messages", "/pages/messages.html");
         PAGES.put("/map", "/pages/map.html");
         PAGES.put("/coming-soon", "/pages/coming-soon.html");
         PAGES.put("/guides", "/pages/guides.html");
@@ -70,6 +71,9 @@ public final class CleanUrls {
             "/qa", "/pages/qa-detail.html",
             "/events", "/pages/event-detail.html");
 
+    /** "Tin nhắn" with one conversation open (/messages/{id}): the same page as /messages. */
+    static final String MESSAGES_PAGE = "/pages/messages.html";
+
     /** Edit forms (/blog/{id}/edit, /qa/{id}/edit) reuse the write pages; the script reads the id from the path. */
     private static final Map<String, String> EDIT_PAGES = Map.of(
             "/blog", "/pages/blog-write.html",
@@ -93,6 +97,7 @@ public final class CleanUrls {
             EDIT_PAGES.forEach((path, file) ->
                     registry.addViewController(path + "/{id:\\d+}/edit").setViewName("forward:" + file));
             registry.addViewController("/events/{id:\\d+}/review").setViewName("forward:" + EVENT_REVIEW_PAGE);
+            registry.addViewController("/messages/{id:\\d+}").setViewName("forward:" + MESSAGES_PAGE);
         }
     }
 
