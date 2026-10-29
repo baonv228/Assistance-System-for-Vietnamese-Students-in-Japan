@@ -1,4 +1,5 @@
 import { apiClient } from "../api/client.js";
+import { preparationTabs } from "../lib/guide-preparation.js";
 import { guideContent } from "../lib/guide-content.js";
 await import("./staff.js");
 const $ = selector => document.querySelector(selector);
@@ -10,6 +11,47 @@ let sectionReaders = [];
 const sectionImages = new Map();
 const sectionEditor = document.createElement("div"); sectionEditor.id = "guide-existing-sections"; sectionEditor.hidden = true;
 $(".guide-rich-editor").after(sectionEditor);
+// Reuse the existing rich/section editors as the first panel; checklist editing has its own tab.
+const contentPanel = document.createElement("section"); contentPanel.id = "editor-content-panel";
+contentPanel.setAttribute("role", "tabpanel"); contentPanel.setAttribute("aria-labelledby", "editor-content-tab");
+const contentLabel = form.querySelector('label[for="guide-content-input"]');
+contentLabel.before(contentPanel); contentPanel.append(contentLabel, $(".guide-rich-editor"), sectionEditor);
+$("#editor-preparation-panel").before($(".guide-editor-tabs"), contentPanel);
+let savedTaskCount = 0;
+function editorTab(preparation = false) {
+ contentPanel.hidden = preparation; $("#editor-preparation-panel").hidden = !preparation;
+ for (const [selector, active] of [["#editor-content-tab", !preparation], ["#editor-preparation-tab", preparation]]) {
+  $(selector).classList.toggle("on", active); $(selector).setAttribute("aria-selected", String(active)); $(selector).tabIndex = active ? 0 : -1;
+ }
+}
+function addPreparationTask(task = {}) {
+ if ($("#preparation-rows").children.length >= 100) return message("Tối đa 100 công việc.");
+ const row = el("fieldset", "guide-preparation-row"); if (task.id) row.dataset.taskId = task.id;
+ const titleLabel = el("label", null, "Công việc *"), title = el("input"); title.dataset.taskTitle = ""; title.maxLength = 255; title.value = task.title || ""; title.placeholder = "Ví dụ: Chuẩn bị hộ chiếu và visa"; titleLabel.append(title);
+ const notesLabel = el("label", null, "Ghi chú (tùy chọn)"), notes = el("textarea"); notes.dataset.taskNotes = ""; notes.maxLength = 2000; notes.value = task.notes || ""; notesLabel.append(notes);
+ const actions = el("div", "guide-actions"); actions.append(button("↑ Lên", () => { if (row.previousElementSibling) row.before(row.previousElementSibling); }), button("↓ Xuống", () => { if (row.nextElementSibling) row.after(row.nextElementSibling); }), button("Xóa công việc", () => { if (!task.id || window.confirm("Xóa công việc này? Tiến độ đã tick của công việc sẽ bị xóa khi lưu cẩm nang.")) row.remove(); }));
+ row.append(titleLabel, notesLabel, actions); $("#preparation-rows").append(row);
+}
+function setupPreparation(guide) {
+ $("#preparation-enabled").checked = !!guide?.preparationEnabled;
+ $("#editor-preparation-tab").hidden = !guide?.preparationEnabled;
+ $("#preparation-rows").replaceChildren(); savedTaskCount = guide?.preparationTasks?.length || 0;
+ for (const task of guide?.preparationTasks || []) addPreparationTask(task);
+ editorTab(false);
+}
+$("#preparation-enabled").addEventListener("change", event => {
+ const enabled = event.target.checked;
+ if (!enabled && savedTaskCount && !window.confirm("Bỏ danh sách chuẩn bị? Các công việc và tiến độ của người đọc sẽ bị xóa khi lưu.")) { event.target.checked = true; return; }
+ $("#editor-preparation-tab").hidden = !enabled;
+ if (enabled && !$("#preparation-rows").children.length) addPreparationTask();
+ editorTab(enabled);
+});
+$("#editor-content-tab").addEventListener("click", () => editorTab(false));
+$("#editor-preparation-tab").addEventListener("click", () => editorTab(true));
+$("#add-preparation-task").addEventListener("click", () => addPreparationTask());
+for (const tab of document.querySelectorAll(".guide-editor-tabs [role=tab]")) tab.addEventListener("keydown", event => {
+ if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) && !$("#editor-preparation-tab").hidden) { event.preventDefault(); const next = event.key === "Home" ? false : event.key === "End" ? true : tab.id === "editor-content-tab"; editorTab(next); $(next ? "#editor-preparation-tab" : "#editor-content-tab").focus(); }
+});
 const message = text => { $("#message").textContent = text; };
 function el(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text ?? ""; return node; }
 function button(text, action) { const node = el("button", "btn", text); node.type = "button"; node.addEventListener("click", action); return node; }
@@ -55,7 +97,7 @@ function resetEditor(guide = null) {
  form.elements.category.value = guide?.category || ""; form.elements.topicCode.value = guide?.topicCode || "";
  form.elements.sourceUrl.value = guide?.sourceUrl || ""; form.elements.status.value = guide?.status || "PUBLISHED";
  form.elements.content.value = guide?.sections.map(section => section.heading === "Nội dung" ? section.content : "## " + section.heading + "\n" + section.content).join("\n\n") || "";
- setupSections(guide); $("#publish").textContent = guide?.published ? "Cập nhật công khai" : "Đăng công khai";
+ setupSections(guide); setupPreparation(guide); $("#publish").textContent = guide?.published ? "Cập nhật công khai" : "Đăng công khai";
  $("#editor-title").textContent = guide ? "Chỉnh sửa cẩm nang" : "Tạo mới cẩm nang"; displayCover(); show("editor"); setUrl(editingId, true); message("");
 }
 async function editGuide(id) { if (busy) return; try { const guide = await apiClient.moderatorGuide(id); resetEditor(guide); } catch (error) { message(error.message); } }
@@ -93,6 +135,7 @@ function renderGuide(guide, preview = false) {
   if (section.referenceUrl && safeUrl(section.referenceUrl)) { const a = el("a", "link", "Tài liệu tham khảo"); a.href = safeUrl(section.referenceUrl); a.target = "_blank"; a.rel = "noopener noreferrer"; target.append(a); }
  }
  if (guide.sourceUrl && safeUrl(guide.sourceUrl)) { const a = el("a", "link", "Đường dẫn gốc ↗"); a.href = safeUrl(guide.sourceUrl); a.target = "_blank"; a.rel = "noopener noreferrer"; target.append(a); }
+ if (guide.preparationEnabled) preparationTabs(target, guide);
  if (preview) target.append(button("Tiếp tục chỉnh sửa", () => show("editor")), button("Lưu nháp", () => save("DRAFT")), button("Đăng công khai", () => save("PUBLISHED")));
  else { target.append(button("Chỉnh sửa", () => editGuide(guide.id)), deleteButton(guide)); target.append(el("p", "note", "Người tạo: " + (guide.creatorName || "Chưa có thông tin") + " · " + new Date(guide.createdAt).toLocaleString("vi-VN")), button("Quay lại danh sách", () => { show("listing"); setUrl(); })); }
  show("detail");
@@ -116,7 +159,11 @@ function collect(status) {
  const sections = sectionReaders.length ? sectionReaders.map(read => read()) : [{ heading: "Nội dung", content: data.content }];
  if (status === "PUBLISHED" && (!data.category || !data.topicCode || sections.some(section => !section.heading.trim() || !section.content.trim()))) throw new Error("Đăng công khai cần chọn giai đoạn, chủ đề và nhập nội dung.");
  if (data.sourceUrl && !safeUrl(data.sourceUrl)) throw new Error("Đường dẫn gốc phải dùng HTTP hoặc HTTPS.");
- return { title: data.title.trim(), summary: data.summary, category: data.category, topicCode: data.topicCode, sourceUrl: data.sourceUrl, status,
+ const preparationEnabled = $("#preparation-enabled").checked;
+ const preparationTasks = preparationEnabled ? [...$("#preparation-rows").children].map(row => ({ id: row.dataset.taskId ? Number(row.dataset.taskId) : null, title: row.querySelector("[data-task-title]").value.trim(), notes: row.querySelector("[data-task-notes]").value.trim() })) : [];
+ if (preparationEnabled && status === "PUBLISHED" && !preparationTasks.length) throw new Error("Danh sách chuẩn bị cần ít nhất một công việc.");
+ if (preparationTasks.some(task => !task.title)) throw new Error("Vui lòng nhập tên cho từng công việc.");
+ return { preparationEnabled, preparationTasks, title: data.title.trim(), summary: data.summary, category: data.category, topicCode: data.topicCode, sourceUrl: data.sourceUrl, status,
   sections, coverImageIndex: coverFile ? 0 : null, removeCover };
 }
 async function save(status) {
@@ -125,7 +172,7 @@ async function save(status) {
   const wasEditing = Boolean(editingId); const data = collect(status); busy = true; document.querySelectorAll("#editor button, #detail button").forEach(node => node.disabled = true);
   const body = new FormData(); body.append("guide", new Blob([JSON.stringify(data)], { type: "application/json" })); if (coverFile) body.append("images", coverFile);
   const guide = editingId ? await apiClient.updateGuide(editingId, body) : await apiClient.createGuide(body);
-  editingId = guide.id; savedCover = guide.coverImageUrl; revokeCover(); coverFile = null; removeCover = false; $("#cover-input").value = ""; displayCover(); form.elements.status.value = guide.status;
+  editingId = guide.id; setupPreparation(guide); savedCover = guide.coverImageUrl; revokeCover(); coverFile = null; removeCover = false; $("#cover-input").value = ""; displayCover(); form.elements.status.value = guide.status;
   if (status === "DRAFT") { show("editor"); $("#editor-title").textContent = "Chỉnh sửa cẩm nang"; setUrl(guide.id, true); }
   else { renderGuide(guide); setUrl(guide.id); }
   await loadList(wasEditing ? state.page : 0); message(status === "DRAFT" ? "Đã lưu nháp. Bạn có thể mở lại để tiếp tục chỉnh sửa." : wasEditing ? "Đã cập nhật cẩm nang công khai." : "Đã đăng cẩm nang công khai.");

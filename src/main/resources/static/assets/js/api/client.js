@@ -77,6 +77,8 @@ export const apiClient = {
     getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
     guideTopics: () => request("/guides/topics"),
     guideSubjects: () => request("/guides/subjects"),
+    guidePreparation: (id) => request(`/guides/${id}/preparation`),
+    checkGuideTask: (id, taskId, completed) => request(`/guides/${id}/preparation/${taskId}`, { method: "PUT", body: JSON.stringify({ completed }) }),
     moderatorGuide: (id) => request(`/moderator/guides/${id}`),
     deleteGuide: (id) => request(`/moderator/guides/${id}`, { method: "DELETE" }),
     updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),

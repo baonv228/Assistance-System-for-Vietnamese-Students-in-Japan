@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:mysql://localhost:3306/asvsj_test?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
+        "spring.datasource.url=jdbc:mysql://localhost:3306/${guide.test.database:asvsj_test}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
         "app.places.osm.enabled=false", "app.moderation.retry-initial-delay-ms=3600000",
         "app.media.local-dir=target/test-guide-uploads"
 })
@@ -163,6 +163,94 @@ class GuideFlowTest {
         var bytes = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(10, 10, BufferedImage.TYPE_INT_RGB), "png", bytes);
         return new MockMultipartFile("images", "photo.png", "image/png", bytes.toByteArray());
+    }
+
+    private AppUserPrincipal principal(MockHttpSession session) {
+        return (AppUserPrincipal) ((SecurityContextImpl) session.getAttribute("SPRING_SECURITY_CONTEXT")).getAuthentication().getPrincipal();
+    }
+
+    private GuideRequest preparationRequest(String title, List<GuideRequest.PreparationTask> tasks, boolean enabled) {
+        return new GuideRequest(title, "Summary", "PRE", List.of(new GuideRequest.Section("Nội dung", "Content", null, null)),
+                "LIVING", null, "PUBLISHED", null, false, enabled, tasks);
+    }
+
+    @Test
+    void preparationProgressIsPersistentIdempotentAndPrivatePerUser() throws Exception {
+        var moderator = session("MODERATOR");
+        var guide = guideService.create(preparationRequest("Checklist", List.of(
+                new GuideRequest.PreparationTask(null, "Passport", "Check expiration"),
+                new GuideRequest.PreparationTask(null, "Visa", null)), true), principal(moderator));
+        long firstTask = guide.preparationTasks().get(0).id(), secondTask = guide.preparationTasks().get(1).id();
+        mvc.perform(get("/api/guides/" + guide.id()))
+                .andExpect(jsonPath("$.data.preparationEnabled").value(true))
+                .andExpect(jsonPath("$.data.preparationTasks.length()").value(2));
+        String base = "/api/guides/" + guide.id() + "/preparation";
+        mvc.perform(get(base)).andExpect(status().isOk()).andExpect(jsonPath("$.signedIn").doesNotExist())
+                .andExpect(jsonPath("$.data.signedIn").value(false)).andExpect(jsonPath("$.data.completed").value(0));
+        mvc.perform(put(base + "/" + firstTask).cookie(new Cookie("XSRF-TOKEN", "token"))
+                        .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}"))
+                .andExpect(status().isUnauthorized());
+        var user = session("USER");
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(put(base + "/" + firstTask).session(user).cookie(new Cookie("XSRF-TOKEN", "token"))
+                            .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.completed").value(1))
+                    .andExpect(jsonPath("$.data.percent").value(50));
+        }
+        mvc.perform(get(base).session(session("USER"))).andExpect(jsonPath("$.data.completed").value(0));
+        mvc.perform(get(base).session(user)).andExpect(jsonPath("$.data.completed").value(1));
+        mvc.perform(put(base + "/" + secondTask).session(user).cookie(new Cookie("XSRF-TOKEN", "token"))
+                        .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}"))
+                .andExpect(jsonPath("$.data.percent").value(100));
+        mvc.perform(put(base + "/" + firstTask).session(user).cookie(new Cookie("XSRF-TOKEN", "token"))
+                        .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content("{\"completed\":false}"))
+                .andExpect(jsonPath("$.data.percent").value(50));
+        mvc.perform(put(base + "/9223372036854775807").session(user).cookie(new Cookie("XSRF-TOKEN", "token"))
+                        .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}"))
+                .andExpect(status().isNotFound());
+        guideService.delete(guide.id(), principal(moderator));
+        mvc.perform(get(base).session(user)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void editingTaskOrderKeepsProgressAndDisablingChecklistRestoresOrdinaryGuide() throws Exception {
+        var moderator = session("MODERATOR");
+        var guide = guideService.create(preparationRequest("Checklist edit", List.of(
+                new GuideRequest.PreparationTask(null, "First", null), new GuideRequest.PreparationTask(null, "Second", null)), true), principal(moderator));
+        var user = session("USER");
+        long first = guide.preparationTasks().get(0).id(), second = guide.preparationTasks().get(1).id();
+        String base = "/api/guides/" + guide.id() + "/preparation";
+        mvc.perform(put(base + "/" + first).session(user).cookie(new Cookie("XSRF-TOKEN", "token"))
+                        .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}"))
+                .andExpect(status().isOk());
+        guideService.updateWithImages(guide.id(), preparationRequest("Checklist edit", List.of(
+                new GuideRequest.PreparationTask(second, "Second renamed", null),
+                new GuideRequest.PreparationTask(first, "First renamed", "Notes")), true), principal(moderator), List.of());
+        mvc.perform(get(base).session(user)).andExpect(jsonPath("$.data.completed").value(1))
+                .andExpect(jsonPath("$.data.tasks[0].id").value(second))
+                .andExpect(jsonPath("$.data.tasks[1].completed").value(true));
+        assertThatThrownBy(() -> guideService.updateWithImages(guide.id(), preparationRequest("Bad", List.of(
+                new GuideRequest.PreparationTask(Long.MAX_VALUE, "Foreign task", null)), true), principal(moderator), List.of()))
+                .isInstanceOf(com.sep490.vsa.common.exception.ApiException.class);
+        guideService.updateWithImages(guide.id(), preparationRequest("No checklist", List.of(), false), principal(moderator), List.of());
+        mvc.perform(get(base).session(user)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/guides/" + guide.id())).andExpect(jsonPath("$.data.preparationEnabled").value(false));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM guide_preparation_progress WHERE user_id=?", Integer.class, principal(user).id())).isZero();
+    }
+
+    @Test
+    void ordinaryGuidesHaveNoChecklistAndEnabledPublicChecklistsNeedTasks() throws Exception {
+        var moderator = session("MODERATOR");
+        var normal = guideService.create(request("PRE", null), principal(moderator));
+        mvc.perform(get("/api/guides/" + normal.id())).andExpect(jsonPath("$.data.preparationEnabled").value(false))
+                .andExpect(jsonPath("$.data.preparationTasks.length()").value(0));
+        mvc.perform(get("/api/guides/" + normal.id() + "/preparation")).andExpect(status().isNotFound());
+        for (var invalid : List.of(preparationRequest("Empty", List.of(), true),
+                preparationRequest("Blank", List.of(new GuideRequest.PreparationTask(null, " ", null)), true))) {
+            mvc.perform(post("/api/moderator/guides").session(moderator).cookie(new Cookie("XSRF-TOKEN", "token"))
+                            .header("X-XSRF-TOKEN", "token").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(invalid)))
+                    .andExpect(status().isBadRequest());
+        }
     }
 
     @Test

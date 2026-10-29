@@ -1,3 +1,4 @@
+import { preparationTabs } from "../lib/guide-preparation.js";
 import { guideContent } from "../lib/guide-content.js";
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
@@ -119,6 +120,7 @@ async function detail() {
    target.append(block);
   }
   if (!guide.sections.length) target.append(el("p", "note", "Nội dung hướng dẫn đang được cập nhật."));
+  if (guide.preparationEnabled) preparationTabs(target, guide, true);
  } catch (error) { target.hidden = true; showError(error); }
 }
 

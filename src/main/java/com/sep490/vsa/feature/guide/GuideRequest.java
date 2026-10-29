@@ -13,7 +13,15 @@ public record GuideRequest(
         @Size(max = 2000) String sourceUrl,
         @Pattern(regexp = "DRAFT|PUBLISHED") String status,
         @Min(0) @Max(4) Integer coverImageIndex,
-        boolean removeCover) {
+        boolean removeCover,
+        boolean preparationEnabled,
+        @Size(max = 100) List<@NotNull @Valid PreparationTask> preparationTasks) {
+    public GuideRequest(String title, String summary, String category, List<Section> sections,
+                        String topicCode, String sourceUrl, String status, Integer coverImageIndex, boolean removeCover) {
+        this(title, summary, category, sections, topicCode, sourceUrl, status, coverImageIndex, removeCover, false, List.of());
+    }
+    public record PreparationTask(@Positive Long id, @NotBlank @Size(max = 255) String title,
+                                  @Size(max = 2000) String notes) {}
     public GuideRequest(String title, String summary, String category, List<Section> sections) {
         this(title, summary, category, sections, "LIVING", null, "PUBLISHED", null, false);
     }

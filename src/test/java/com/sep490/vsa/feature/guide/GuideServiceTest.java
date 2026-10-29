@@ -14,7 +14,7 @@ import static org.mockito.Mockito.*;
 class GuideServiceTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final GuideService service = new GuideService(jdbc,
-            mock(com.sep490.vsa.feature.media.MediaService.class), "/media/");
+            mock(com.sep490.vsa.feature.media.MediaService.class), "/media/", mock(GuidePreparationService.class));
     private final GuideRequest request = new GuideRequest("Title", "Summary", "PRE",
             List.of(new GuideRequest.Section("First step", "Instructions", null, null)));
 

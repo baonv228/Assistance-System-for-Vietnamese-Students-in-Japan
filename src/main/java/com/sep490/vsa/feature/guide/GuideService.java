@@ -33,12 +33,15 @@ public class GuideService {
     private final JdbcTemplate jdbc;
     private final MediaService media;
     private final String mediaBaseUrl;
+    private final GuidePreparationService preparation;
 
     public GuideService(JdbcTemplate jdbc, MediaService media,
-                        @Value("${app.media.public-base-url:/media/}") String mediaBaseUrl) {
+                        @Value("${app.media.public-base-url:/media/}") String mediaBaseUrl,
+                        GuidePreparationService preparation) {
         this.jdbc = jdbc;
         this.media = media;
         this.mediaBaseUrl = mediaBaseUrl;
+        this.preparation = preparation;
     }
 
     public record Topic(String code, String title) {}
@@ -134,7 +137,8 @@ public class GuideService {
                 rs.getObject("created_by", Long.class), rs.getString("creator_name"),
                 rs.getTimestamp("created_at").toInstant(), sections, rs.getString("stage_name"), rs.getString("topic_code"),
                 rs.getString("source_url"), rs.getString("cover_key") == null ? null : mediaBaseUrl + rs.getString("cover_key"),
-                rs.getBoolean("published") ? "PUBLISHED" : "DRAFT");
+                rs.getBoolean("published") ? "PUBLISHED" : "DRAFT", rs.getBoolean("preparation_enabled"),
+                full && rs.getBoolean("preparation_enabled") ? preparation.tasks(id) : List.of());
     }
 
     static void validateUrl(String value) {
@@ -259,6 +263,7 @@ public class GuideService {
         }
         removedMedia.removeAll(retainedMedia);
         media.discard(removedMedia);
+        preparation.saveTasks(id, request);
         return moderatorDetail(id);
     }
 

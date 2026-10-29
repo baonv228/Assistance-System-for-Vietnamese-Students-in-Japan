@@ -11,7 +11,8 @@ import java.util.List;
 @RestController public class GuideController {
  private final GuideService service;
  private final GuideUploadService uploads;
- public GuideController(GuideService service, GuideUploadService uploads){this.service=service;this.uploads=uploads;}
+ private final GuidePreparationService preparation;
+ public GuideController(GuideService service, GuideUploadService uploads, GuidePreparationService preparation){this.service=service;this.uploads=uploads;this.preparation=preparation;}
  @GetMapping({"/api/guides","/api/moderator/guides"})
  public ApiResponse<List<GuideResponse>> list(@RequestParam(required=false) String category,@RequestParam(required=false) String q){return ApiResponse.ok("Danh sách cẩm nang",service.list(category,q));}
  @GetMapping({"/api/guides/topics","/api/moderator/guides/topics"})
@@ -54,5 +55,18 @@ import java.util.List;
  public ApiResponse<Void> delete(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
   service.delete(id, me);
   return ApiResponse.ok("Đã xóa cẩm nang.", null);
+ }
+ public record CheckRequest(@jakarta.validation.constraints.NotNull Boolean completed) {}
+
+ @GetMapping("/api/guides/{id}/preparation")
+ public ApiResponse<GuidePreparationService.Progress> preparation(@PathVariable long id,
+         @AuthenticationPrincipal AppUserPrincipal me) {
+  return ApiResponse.ok("Tiến độ chuẩn bị", preparation.progress(id, me));
+ }
+
+ @PutMapping("/api/guides/{id}/preparation/{taskId}")
+ public ApiResponse<GuidePreparationService.Progress> check(@PathVariable long id, @PathVariable long taskId,
+         @Valid @RequestBody CheckRequest request, @AuthenticationPrincipal AppUserPrincipal me) {
+  return ApiResponse.ok("Đã lưu tiến độ", preparation.check(id, taskId, request.completed(), me));
  }
 }
