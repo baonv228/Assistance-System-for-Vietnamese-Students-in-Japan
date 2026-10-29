@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <title>Tin nhắn – Senpai ơi</title>
+    <!-- "Thêm vào màn hình chính": on iPhone, chat notifications (Web Push) only work in the home-screen app -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/assets/img/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="theme-color" content="#C2456E">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Senpai ơi">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/blog.css">
+    <link rel="stylesheet" href="/assets/css/blog-detail.css">
+    <link rel="stylesheet" href="/assets/css/messages.css">
+    <link rel="stylesheet" href="/assets/css/chat-media.css">
+</head>
+<body class="app chat-body">
+<!-- "Tin nhắn": one-to-one chat between Members. /messages (the list), /messages/{id} (a conversation open),
+     /messages?to={userId} (from "Nhắn tin" next to a member's name). On phones the list and the conversation take
+     turns on the screen. Accepted conversations are end-to-end encrypted once both members turned encryption on: the
+     page encrypts and decrypts (lib/chat-crypto.js), the server only stores what it cannot read. -->
+<main class="chatpage" id="chat">
+    <aside class="chat-side" aria-label="Các cuộc trò chuyện">
+        <div class="chat-side-head"><h2>Tin nhắn</h2>
+            <button class="btn sm ghost" type="button" id="notify-settings" title="Cài đặt thông báo tin nhắn" hidden>
+                <span class="ic" aria-hidden="true">settings</span><span class="sr-only">Cài đặt thông báo tin nhắn</span></button>
+        </div>
+        <div class="chat-key-banner" id="key-banner" role="status" hidden></div>
+        <div class="chat-tabs" role="tablist" aria-label="Hộp thư">
+            <button type="button" role="tab" id="tab-INBOX" data-box="INBOX" aria-selected="true" aria-controls="list">
+                Tin nhắn</button>
+            <button type="button" role="tab" id="tab-REQUESTS" data-box="REQUESTS" aria-selected="false" aria-controls="list">
+                Lời mời<span class="chat-count" id="count-REQUESTS" hidden></span></button>
+        </div>
+        <div class="chat-side-body">
+            <p class="note chat-side-note" id="list-note" aria-live="polite">Đang tải…</p>
+            <ul class="chat-list" id="list" role="tabpanel" aria-labelledby="tab-INBOX"></ul>
+            <p class="chat-more"><button class="btn sm" type="button" id="more" hidden>Xem thêm</button></p>
+        </div>
+        <div class="chat-side-foot">
+            <button class="link" type="button" id="blocks-toggle" aria-expanded="false" aria-controls="blocks">
+                <span class="ic" aria-hidden="true">block</span>Người đã chặn</button>
+            <ul class="chat-blocks" id="blocks" hidden></ul>
+        </div>
+    </aside>
+
+    <section class="chat-main" aria-label="Cuộc trò chuyện">
+        <div class="chat-empty" id="empty">
+            <span class="ic big" aria-hidden="true">forum</span>
+            <p><b>Chọn một cuộc trò chuyện</b></p>
+            <p class="note">Muốn hỏi thêm người viết bài hay câu trả lời? Bấm “Nhắn tin” cạnh tên họ ở Blog hoặc Hỏi-Đáp.</p>
+        </div>
+        <div class="chat-room" id="room" hidden>
+            <header class="chat-room-head" id="room-head"></header>
+            <div class="chat-search" id="search" hidden>
+                <div class="chat-search-bar">
+                    <span class="ic" aria-hidden="true">search</span>
+                    <label class="sr-only" for="search-input">Tìm trong cuộc trò chuyện</label>
+                    <input type="search" id="search-input" placeholder="Tìm trong cuộc trò chuyện" autocomplete="off" enterkeyhint="search">
+                    <button class="btn sm ghost" type="button" data-act="search-close" title="Đóng tìm kiếm">
+                        <span class="ic" aria-hidden="true">close</span><span class="sr-only">Đóng tìm kiếm</span></button>
+                </div>
+                <p class="note chat-search-note" id="search-note" aria-live="polite"></p>
+                <ul class="chat-search-results" id="search-results"></ul>
+            </div>
+            <div class="chat-thread" id="thread" role="log" aria-label="Tin nhắn" tabindex="0">
+                <p class="chat-safety"><span class="ic" aria-hidden="true">shield</span>
+                    Senpai ơi không bao giờ hỏi mật khẩu hay mã OTP. Đừng gửi ảnh thẻ cư trú, hộ chiếu, số tài khoản hay
+                    chuyển tiền cho người bạn chưa gặp. Thấy đáng ngờ, hãy bấm Báo cáo trên tin nhắn đó.</p>
+                <p class="chat-older"><button class="btn sm" type="button" id="older" hidden>Xem tin cũ hơn</button></p>
+                <ol class="chat-msgs" id="msgs"></ol>
+            </div>
+            <p class="chat-typing" id="typing" aria-live="polite" hidden></p>
+            <div class="chat-notices" id="notice" hidden></div>
+            <form class="chat-compose" id="compose" method="post" autocomplete="off">
+                <div class="chat-compose-bar" id="compose-bar" hidden></div>
+                <div class="chat-compose-bar rec" id="record-bar" role="status" hidden></div>
+                <div class="chat-pending" id="pending" hidden></div>
+                <div class="chat-compose-row">
+                    <div class="chat-attach" id="attach-tools" hidden>
+                        <button class="btn ghost" type="button" id="attach" title="Gửi ảnh hoặc video">
+                            <span class="ic" aria-hidden="true">photo_library</span><span class="sr-only">Ảnh/Video</span></button>
+                        <input type="file" id="attach-input" multiple hidden>
+                        <button class="btn ghost" type="button" id="record" title="Ghi âm">
+                            <span class="ic" aria-hidden="true">mic</span><span class="sr-only">Ghi âm</span></button>
+                    </div>
+                    <label class="sr-only" for="text">Tin nhắn</label>
+                    <textarea id="text" name="content" rows="1" maxlength="2000" placeholder="Nhập tin nhắn…"></textarea>
+                    <button class="btn pri" type="submit" id="send" title="Gửi (Enter)"><span class="ic" aria-hidden="true">send</span><span class="sr-only">Gửi</span></button>
+                </div>
+                <p class="note chat-hint"><span id="counter"></span> Enter để gửi · Shift + Enter để xuống dòng</p>
+                <p class="note chat-progress" id="progress" aria-live="polite" hidden></p>
+                <p class="field-error" id="send-error" role="alert" hidden></p>
+            </form>
+        </div>
+    </section>
+</main>
+
+<!-- Report a message (UC-16) -->
+<dialog class="dlg" id="report-dlg" aria-labelledby="report-title">
+    <form method="dialog" id="report-form">
+        <h3 id="report-title">Báo cáo tin nhắn</h3>
+        <p class="note">Moderator sẽ xem tin nhắn bạn báo cáo. Mỗi tin nhắn bạn chỉ báo cáo được một lần.</p>
+        <p class="note chat-report-e2ee" id="report-e2ee" hidden><span class="ic" aria-hidden="true">lock_open</span>
+            Tin nhắn này đã được mã hóa đầu cuối. Khi gửi báo cáo, nội dung chữ của nó được gửi kèm để Moderator đọc được;
+            Senpai ơi kiểm tra đúng là người kia đã viết như vậy.</p>
+        <fieldset class="reasons" id="report-reasons"><legend class="sr-only">Lý do</legend></fieldset>
+        <p class="field-error" id="report-error" role="alert" hidden></p>
+        <div class="field">
+            <label for="report-note">Ghi chú thêm (không bắt buộc)</label>
+            <textarea id="report-note" maxlength="500" rows="3" placeholder="Ví dụ: xin ảnh thẻ cư trú, mời việc lương cao"></textarea>
+        </div>
+        <label class="check"><input type="checkbox" id="report-block" checked><span>Chặn người này để họ không nhắn cho bạn nữa</span></label>
+        <div class="row end">
+            <button class="btn" type="button" data-close>Hủy</button>
+            <button class="btn pri" type="submit" id="report-submit">Gửi báo cáo</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Confirm before blocking, declining, deleting, recalling -->
+<dialog class="dlg" id="confirm-dlg" aria-labelledby="confirm-title">
+    <form method="dialog">
+        <h3 id="confirm-title">Xác nhận</h3>
+        <p id="confirm-text"></p>
+        <div class="row end">
+            <button class="btn" type="button" data-close>Hủy</button>
+            <button class="btn dan solid" type="button" id="confirm-ok">Đồng ý</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Turn end-to-end encryption on (or make a new key after a forgotten recovery password) -->
+<dialog class="dlg chat-key-dlg" id="key-setup-dlg" aria-labelledby="key-setup-title">
+    <form method="dialog" id="key-setup-form" novalidate>
+        <h3 id="key-setup-title">Bật mã hóa đầu cuối</h3>
+        <p id="key-setup-intro">Khi bật, chỉ bạn và người bạn nhắn tin đọc được tin nhắn, kể cả Senpai ơi cũng không đọc được.
+            Bạn cũng gửi được ảnh, video và ghi âm trong các cuộc trò chuyện đã mã hóa.</p>
+        <!-- The password manager (iCloud Keychain, Google) files this password under its own name, never over the
+             sign-in password of the same site: messages.js fills the hidden username -->
+        <input type="text" class="key-user" autocomplete="username" hidden readonly>
+        <div class="field">
+            <label for="key-new">Mật khẩu khôi phục</label>
+            <input type="password" id="key-new" minlength="8" autocomplete="new-password" aria-describedby="key-new-hint">
+            <p class="note" id="key-new-hint">Ít nhất 8 ký tự. Dùng để mở tin nhắn trên máy hoặc trình duyệt khác.
+                Đừng dùng lại mật khẩu đăng nhập.</p>
+        </div>
+        <div class="field">
+            <label for="key-again">Nhập lại mật khẩu khôi phục</label>
+            <input type="password" id="key-again" minlength="8" autocomplete="new-password">
+        </div>
+        <p class="chat-key-warn"><span class="ic" aria-hidden="true">warning</span>
+            Senpai ơi không lưu và không lấy lại được mật khẩu này. Quên nó thì trên máy mới bạn sẽ không đọc được tin
+            nhắn mã hóa cũ.</p>
+        <p class="note key-apple-note" hidden></p>
+        <p class="field-error" id="key-setup-error" role="alert" hidden></p>
+        <p class="note" id="key-setup-busy" aria-live="polite" hidden>Đang tạo khóa mã hóa, việc này mất khoảng một giây…</p>
+        <div class="row end">
+            <button class="btn" type="button" id="key-setup-later">Để sau</button>
+            <button class="btn pri" type="submit" id="key-setup-submit">Bật mã hóa</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Encryption is on for this account, but this browser does not have the key yet -->
+<dialog class="dlg chat-key-dlg" id="key-unlock-dlg" aria-labelledby="key-unlock-title">
+    <form method="dialog" id="key-unlock-form" novalidate>
+        <h3 id="key-unlock-title">Nhập mật khẩu khôi phục</h3>
+        <p>Bạn đã bật mã hóa đầu cuối trên một máy hoặc trình duyệt khác. Nhập mật khẩu khôi phục để đọc và gửi tin nhắn
+            mã hóa ở đây.</p>
+        <input type="text" class="key-user" autocomplete="username" hidden readonly>
+        <div class="field">
+            <label for="key-pass">Mật khẩu khôi phục</label>
+            <input type="password" id="key-pass" autocomplete="current-password">
+        </div>
+        <p class="note key-apple-note" hidden></p>
+        <p class="field-error" id="key-unlock-error" role="alert" hidden></p>
+        <p class="note" id="key-unlock-busy" aria-live="polite" hidden>Đang mở khóa, việc này mất khoảng một giây…</p>
+        <p><button class="link" type="button" id="key-forgot">Quên mật khẩu? Tạo khóa mới</button></p>
+        <div class="row end">
+            <button class="btn" type="button" id="key-unlock-later">Để sau</button>
+            <button class="btn pri" type="submit" id="key-unlock-submit">Mở khóa</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- "Mã an toàn": both members see the same digits when nobody stands in between -->
+<dialog class="dlg" id="safety-dlg" aria-labelledby="safety-title">
+    <form method="dialog">
+        <h3 id="safety-title">Mã an toàn</h3>
+        <div id="safety-body"></div>
+        <div class="row end"><button class="btn pri" type="button" data-close>Đóng</button></div>
+    </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script type="module" src="/assets/js/pages/messages.js"></script>
+</body>
+</html>

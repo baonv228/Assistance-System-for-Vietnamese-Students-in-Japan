@@ -137,6 +137,58 @@ export const apiClient = {
     notificationSummary: (after) => request(`/me/notifications/summary?${toQuery({ after })}`),
     readNotifications: (upToId) => post("/me/notifications/read", { upToId: upToId ?? null }),
 
+    // "Tin nhắn" between Members. chats(box: INBOX | REQUESTS) → { items, hasMore, counts: { unread, requests } };
+    // chat / chatWith → { id (null before the first message), peer, status: { state, canSend, notice: { code, text },
+    // blockedByMe, peerReadUpTo }, messages (oldest first), hasOlder, reportReasons, limits }
+    chats: (box = "INBOX", page = 0) => request(`/me/chats?${toQuery({ box, page })}`),
+    chatCounts: () => request("/me/chats/counts"),
+    chat: (id) => request(`/me/chats/${id}`),
+    chatWith: (userId) => request(`/me/chats/with/${userId}`),
+    // limit: 1–200 (default 30); the page asks for more at once when it searches the whole conversation
+    chatOlder: (id, before, limit) => request(`/me/chats/${id}/messages?${toQuery({ before, limit })}`),
+    // → { messages (after `after`), changed (edited, recalled or reacted since `changedSince`), status, serverTime }
+    chatUpdates: (id, after, changedSince) => request(`/me/chats/${id}/updates?${toQuery({ after, changedSince })}`),
+    chatMessage: (id, messageId) => request(`/me/chats/${id}/messages/${messageId}`),
+    // message: a text (plain) or { content } | { encrypted: { ciphertext, iv, senderKeyId, recipientKeyId,
+    // frankingTag }, fileIds, replyToId } → { conversationId, message, status }
+    sendChat: (id, message) => post(`/me/chats/${id}/messages`, typeof message === "string" ? { content: message } : message),
+    sendChatTo: (userId, content) => post(`/me/chats/with/${userId}/messages`, { content }),
+    // body { content } | { encrypted } → the message as it is now
+    editChatMessage: (id, messageId, body) =>
+        request(`/me/chats/${id}/messages/${messageId}`, { method: "PUT", body: JSON.stringify(body) }),
+    recallChatMessage: (id, messageId) => request(`/me/chats/${id}/messages/${messageId}`, { method: "DELETE" }),
+    // emoji one of ChatService.REACTIONS, or null to take one's reaction back → the message as it is now
+    reactChatMessage: (id, messageId, emoji) => (emoji
+        ? request(`/me/chats/${id}/messages/${messageId}/reaction`, { method: "PUT", body: JSON.stringify({ emoji }) })
+        : request(`/me/chats/${id}/messages/${messageId}/reaction`, { method: "DELETE" })),
+    chatTyping: (id) => post(`/me/chats/${id}/typing`),
+    // FormData: "kind" (IMAGE | VIDEO | AUDIO) + "file" (the encrypted bytes) → { fileId }
+    uploadChatFile: (id, formData) => request(`/me/chats/${id}/files`, { method: "POST", body: formData }),
+    // GET with fetch(url, { credentials: "same-origin" }): the encrypted bytes, for the two members only
+    chatFileUrl: (id, fileId) => `${API_BASE}/me/chats/${id}/files/${fileId}`,
+    // End-to-end encryption keys. chatMyKey → { key: { id, publicKey, wrappedPrivateKey, wrapSalt, wrapIv,
+    // wrapIterations, createdAt } | null }; createChatKey(body with those fields but id/createdAt) → that key;
+    // chatKey(keyId) → { id, userId, publicKey, revoked } (own keys and keys of people the member talks to)
+    chatMyKey: () => request("/me/chats/keys/me"),
+    createChatKey: (body) => post("/me/chats/keys", body),
+    chatKey: (keyId) => request(`/me/chats/keys/${keyId}`),
+    // New-message notifications: { emailEnabled, pushEnabled }; push key → { publicKey } (base64url VAPID key)
+    chatNotifySettings: () => request("/me/chats/notify/settings"),
+    updateChatNotifySettings: (body) => request("/me/chats/notify/settings", { method: "PUT", body: JSON.stringify(body) }),
+    pushPublicKey: () => request("/me/chats/notify/push-key"),
+    // subscription = PushSubscription.toJSON(): { endpoint, keys: { p256dh, auth } }
+    savePushSubscription: (subscription) => post("/me/chats/notify/push-subscriptions", subscription),
+    deletePushSubscription: (endpoint) =>
+        request("/me/chats/notify/push-subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
+    readChat: (id, upToId) => post(`/me/chats/${id}/read`, { upToId: upToId ?? null }),
+    acceptChat: (id) => post(`/me/chats/${id}/accept`),
+    declineChat: (id) => post(`/me/chats/${id}/decline`),
+    clearChat: (id) => request(`/me/chats/${id}`, { method: "DELETE" }),
+    // body { reasonId, note, block } (+ plaintext, frankingKey for an encrypted message, see chat-crypto.js)
+    reportChatMessage: (messageId, body) => post(`/me/chats/messages/${messageId}/report`, body),
+    chatBlocks: () => request("/me/chats/blocks"),
+    blockMember: (userId, on) => request(`/me/chats/blocks/${userId}`, { method: on ? "POST" : "DELETE" }),
+
     // Blog Feed (UC-09), posts only. params: { q, topicIds: [..], sort, page, size }
     blogs: (params = {}) => request(`/blogs?${toQuery(params)}`),
     blogOverview: () => request("/blogs/overview"),

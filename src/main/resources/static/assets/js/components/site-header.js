@@ -1,6 +1,7 @@
 // Top navigation (desktop) and bottom tab bar (phone), as in the prototype.
 // Usage: const user = await mountSiteHeader("home");  → returns the signed-in user or null.
 import { apiClient, currentUser } from "../api/client.js";
+import { liveOpen, onLive, startLive } from "../lib/live.js";
 import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
 
 /** Features other members are building link to a placeholder page for now. */
@@ -20,8 +21,12 @@ const TABS = [
 const link = ([key, label, icon, href], active) =>
     `<a href="${href}" ${key === active ? 'aria-current="page"' : ""}>${ic(icon)}<span>${label}</span></a>`;
 
+/** The signed-in user's id, for what "Đăng xuất" clears in this browser. */
+let signedInId = null;
+
 export async function mountSiteHeader(active) {
     const user = await currentUser().catch(() => null);
+    signedInId = user?.id ?? null;
 
     const header = document.createElement("header");
     header.className = "site-top";
@@ -48,6 +53,12 @@ export async function mountSiteHeader(active) {
     login?.addEventListener("click", refresh);
     if (user) {
         watchNotifications(header, user);
+        // The "Tin nhắn" page asks for its own counts more often and updates the button itself
+        if (user.role === "USER") {
+            watchChats(header, user, active === "messages");
+            refreshPushSoon(user);
+        }
+        startLive();
     }
     return user;
 }
@@ -59,13 +70,20 @@ function accountHtml(user, active) {
     const staff = user.role !== "USER"
         ? `<a class="btn sm" href="${esc(user.homePath)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`
         : "";
-    return `${staff}
+    // "Tin nhắn" is for Members only (staff accounts do not chat)
+    const chat = user.role === "USER"
+        ? `<a class="btn sm bell ${active === "messages" ? "on" : ""}" href="/messages" data-chat title="Tin nhắn">${ic("chat")}<span class="bell-count" data-chat-count hidden></span><span class="sr-only" data-chat-label>Tin nhắn</span></a>`
+        : "";
+    return `${staff}${chat}
         <a class="btn sm bell" href="/notifications" data-bell title="Thông báo">${ic("notifications")}<span class="bell-count" data-bell-count hidden></span><span class="sr-only" data-bell-label>Thông báo</span></a>
-        <a class="btn sm ${active === "me" ? "on" : ""}" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
+        <a class="btn sm me-link ${active === "me" ? "on" : ""}" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
         <button class="btn sm" type="button" data-logout title="Đăng xuất">${ic("logout")}<span class="sr-only">Đăng xuất</span></button>`;
 }
 
 export async function logout() {
+    // The page drops what it kept for this member in the tab (e.g. the chat drafts) and keeps nothing more
+    window.dispatchEvent(new Event("asvsj:signing-out"));
+    await forgetThisBrowser();
     try {
         await apiClient.logout();
     } finally {
@@ -73,12 +91,28 @@ export async function logout() {
     }
 }
 
+/**
+ * Before signing out (still signed in, so the server can drop the subscription): this browser stops getting the
+ * account's chat notifications, and the chat encryption key kept in it is forgotten, as on a shared computer. Signing
+ * in again asks once for the "mật khẩu khôi phục". Never makes the member wait more than 3 s.
+ */
+async function forgetThisBrowser() {
+    const userId = signedInId;
+    if (userId == null) return;
+    const tasks = [
+        import("../lib/push.js").then((push) => push.disablePush()),
+        import("../lib/chat-crypto.js").then((crypto) => crypto.forgetLocalIdentity(userId))
+    ];
+    await Promise.race([Promise.allSettled(tasks), new Promise((resolve) => setTimeout(resolve, 3000))]);
+}
+
 // ---------------------------------------------------------------- notifications
 // The bell shows the unread count. While one of the user's own posts, questions or reviews waits for its photo/video
 // scan, the count is asked again every few seconds; the result (CONTENT_PUBLISHED: published, CONTENT_REJECTED: refused
 // with the reason) then pops up on whatever page the user is on, and the page hears of every new notification through
-// an "asvsj:notification" event (the post, event or place it is about reloads what it shows). Otherwise the bell asks
-// once a minute, and at once when the tab comes back to the front; never while the tab is hidden.
+// an "asvsj:notification" event (the post, event or place it is about reloads what it shows). A new notification is
+// asked for at once when the live stream announces it (lib/live.js); otherwise the bell asks once a minute, and at once
+// when the tab comes back to the front; never while the tab is hidden.
 
 const FAST_MS = 5000;
 const SLOW_MS = 60000;
@@ -162,8 +196,181 @@ function watchNotifications(header, user) {
     document.addEventListener("visibilitychange", () => {
         if (!document.hidden && !timer) check();
     });
+    onLive("notification", check);
+    onLive("open", check);                          // (re)connected: what came while it was down
     checkNow = check;
     check();
+}
+
+// ---------------------------------------------------------------- messages
+// The "Tin nhắn" button shows how many conversations have unread messages (requests included), and the tab title starts
+// with "(n) ". Asked at once when the live stream announces a change (lib/live.js), every 25 s while the tab is in front
+// without the stream (every minute with it) and at once when the tab comes back; never while it is hidden. On
+// every page but "Tin nhắn", a message newer than the last one this tab has dealt with pops up as a notice ("Tin nhắn
+// mới từ …", never its text). The newest message id the tab has dealt with is kept across pages in sessionStorage; a new
+// tab only records it, so messages older than the tab never pop up. The "Tin nhắn" page shows every message itself and
+// sets the count (setChatCount): the page after it starts afresh, so nothing seen there pops up again.
+
+const CHAT_MS = 25000;
+/** While the live stream is open it announces every change; asking is only a safety net then. */
+const CHAT_LIVE_MS = 60000;
+/** Coming back to the tab asks at once, but not again within this time (switching tabs back and forth). */
+const CHAT_GAP_MS = 5000;
+let chatButton = null;
+let chatUnread = 0;
+let titlePrefix = "";                           // "(3) " as last put in front of the title
+let titleWatch = null;
+
+/** Shows this number of conversations with unread messages on the "Tin nhắn" button and as "(n) " in the tab title. */
+export function setChatCount(unread) {
+    chatUnread = Number.isFinite(unread) && unread > 0 ? Math.floor(unread) : 0;
+    applyTitle();
+    if (!chatButton) return;
+    const count = chatButton.querySelector("[data-chat-count]");
+    const label = chatButton.querySelector("[data-chat-label]");
+    count.textContent = chatUnread > 99 ? "99+" : String(chatUnread);
+    count.hidden = !chatUnread;
+    label.textContent = chatUnread ? `Tin nhắn (${chatUnread} cuộc trò chuyện chưa đọc)` : "Tin nhắn";
+    chatButton.title = label.textContent;
+}
+
+function applyTitle() {
+    let base = document.title;
+    if (titlePrefix && base.startsWith(titlePrefix)) base = base.slice(titlePrefix.length);
+    titlePrefix = chatUnread ? `(${chatUnread > 99 ? "99+" : chatUnread}) ` : "";
+    if (document.title !== titlePrefix + base) document.title = titlePrefix + base;
+}
+
+/** Pages set their own title after loading (a post, a conversation): the count goes back in front of it. */
+function keepTitlePrefix() {
+    if (titleWatch || typeof MutationObserver !== "function" || !document.head) return;
+    titleWatch = new MutationObserver(() => {
+        if (titlePrefix && !document.title.startsWith(titlePrefix)) applyTitle();
+    });
+    titleWatch.observe(document.head, { childList: true, subtree: true, characterData: true });
+}
+
+function watchChats(header, user, onMessagesPage) {
+    chatButton = header.querySelector("[data-chat]");
+    keepTitlePrefix();
+    const store = `asvsj.chat.seen.${user.id}`;
+    if (onMessagesPage) {
+        forgetSeen(store);
+        return;
+    }
+    let seen = readSeen(store);
+    let timer = null;
+    let running = false;
+    let again = false;                          // announced while a request was out: ask once more right after
+    let stopped = false;
+    let lastAsked = 0;
+
+    async function check() {
+        if (stopped) return;
+        if (running) {
+            again = true;
+            return;
+        }
+        clearTimeout(timer);
+        timer = null;
+        if (document.hidden) return;
+        running = true;
+        lastAsked = Date.now();
+        try {
+            const counts = await apiClient.chatCounts();
+            setChatCount(counts.unread);
+            const latest = counts.latest;
+            const id = Number(latest?.messageId) || 0;
+            if (seen === null) {
+                seen = id;                      // a new tab: what is unread now is not news
+            } else if (latest && id > seen) {
+                showChatNotice(latest);
+                seen = id;
+            }
+            writeSeen(store, seen);
+        } catch (error) {
+            if (error.status === 401 || error.status === 403) {
+                stopped = true;                 // signed out, locked or no longer a Member: stop asking
+            }
+        }
+        running = false;
+        if (again && !stopped) {
+            again = false;
+            check();
+        } else if (!stopped && !document.hidden) {
+            timer = setTimeout(check, liveOpen() ? CHAT_LIVE_MS : CHAT_MS);
+        }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        if (stopped) return;
+        if (document.hidden) {
+            clearTimeout(timer);
+            timer = null;
+            return;
+        }
+        const since = Date.now() - lastAsked;
+        if (since >= CHAT_GAP_MS) {
+            check();
+        } else if (!timer && !running) {
+            timer = setTimeout(check, CHAT_GAP_MS - since);
+        }
+    });
+    // "đang soạn tin" changes no count; everything else may
+    onLive("chat", (event) => {
+        if (event?.kind !== "typing") check();
+    });
+    onLive("open", check);
+    check();
+}
+
+/** Seconds after the page loads before the push subscription is renewed (the page's own requests go first). */
+const PUSH_REFRESH_MS = 4000;
+
+/**
+ * Once per tab session, on a browser where this Member turned Web Push on: hands the current subscription to the server
+ * again (enablePush asks nothing when the permission is already granted). Push services replace subscriptions now and
+ * then and sw.js does not handle "pushsubscriptionchange", so without this the server would keep pushing to a dead one.
+ * Skipped while the member-wide switch is off, because enablePush would turn it back on. Errors are ignored.
+ */
+function refreshPushSoon(user) {
+    const store = `asvsj.push.refreshed.${user.id}`;
+    try {
+        if (sessionStorage.getItem(store)) return;
+        sessionStorage.setItem(store, "1");           // set first: a failure is not tried again on every page
+    } catch {
+        return;                                     // storage blocked: not on every page load either
+    }
+    if (!globalThis.isSecureContext || !("serviceWorker" in navigator)) return;
+    setTimeout(async () => {
+        try {
+            const push = await import("../lib/push.js");
+            if (!push.pushSupported() || (await push.pushState()) !== "on") return;
+            if ((await apiClient.chatNotifySettings())?.pushEnabled !== true) return;
+            await push.enablePush();
+        } catch {
+            // offline, push service down, signed out: the next tab session tries again
+        }
+    }, PUSH_REFRESH_MS);
+}
+
+/** "Tin nhắn mới từ Lan" / "Lan muốn nhắn tin với bạn." with "Xem"; a newer one of the same conversation replaces it. */
+function showChatNotice(latest) {
+    const name = latest.peerName || "một thành viên";
+    const conversation = Number(latest.conversationId);
+    const box = noticeBox();
+    box.querySelectorAll(`[data-chat-notice="${conversation}"]`).forEach((old) => old.remove());
+    const notice = document.createElement("div");
+    notice.className = "site-notice chat";
+    notice.dataset.chatNotice = String(conversation);
+    // brand colour instead of the green of a scan result (site.css has no rule for chat notices)
+    notice.style.borderLeftColor = "var(--brand)";
+    notice.innerHTML = `${ic(latest.request ? "person_add" : "chat")}
+        <div class="site-notice-txt"><p>${esc(latest.request ? `${name} muốn nhắn tin với bạn.` : `Tin nhắn mới từ ${name}`)}</p>
+            <a class="link" href="/messages/${esc(conversation)}">Xem</a></div>
+        <button class="site-notice-x" type="button" title="Đóng">${ic("close")}<span class="sr-only">Đóng</span></button>`;
+    notice.querySelector(".ic").style.color = "var(--brand)";
+    addNotice(box, notice);
 }
 
 function announce(notification) {
@@ -192,10 +399,23 @@ function showNotice(notification) {
         <div class="site-notice-txt"><p>${esc(notification.content)}</p>
             ${notification.link ? `<a class="link" href="${esc(notification.link)}">Xem</a>` : ""}</div>
         <button class="site-notice-x" type="button" title="Đóng">${ic("close")}<span class="sr-only">Đóng</span></button>`;
+    addNotice(box, notice);
+}
+
+/** Newest on top, at most NOTICES_MAX, each closes by itself after NOTICE_MS. */
+function addNotice(box, notice) {
     notice.querySelector(".site-notice-x").addEventListener("click", () => notice.remove());
     box.prepend(notice);
     [...box.children].slice(NOTICES_MAX).forEach((old) => old.remove());
     setTimeout(() => notice.remove(), NOTICE_MS);
+}
+
+function forgetSeen(store) {
+    try {
+        sessionStorage.removeItem(store);
+    } catch {
+        // storage blocked
+    }
 }
 
 function readSeen(store) {

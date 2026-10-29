@@ -57,3 +57,11 @@
     clip: rect(0 0 0 0);
     white-space: nowrap;
 }
+
+/* iPhone/iPad (the only browsers that match this @supports) zoom the page into a field whose text is smaller than
+   16 px and do not zoom back out: the fields of every page that loads this file get 16 px there. */
+@supports (-webkit-touch-callout: none) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea {
+        font-size: 16px !important;
+    }
+}

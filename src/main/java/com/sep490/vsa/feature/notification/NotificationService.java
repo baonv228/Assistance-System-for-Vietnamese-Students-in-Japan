@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.notification;
 
+import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.feature.notification.NotificationDtos.NotificationItem;
 import com.sep490.vsa.feature.notification.NotificationDtos.NotificationPage;
 import com.sep490.vsa.feature.notification.NotificationDtos.NotificationSummary;
@@ -10,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 
 /**
  * In-app notifications ({@code notifications}). Other features only call {@link #send}; the bell in the site header
@@ -33,20 +35,26 @@ public class NotificationService {
 
     private final JdbcTemplate jdbc;
     private final NotificationRepository repository;
+    private final LiveEvents live;
     private final Clock clock;
 
-    public NotificationService(JdbcTemplate jdbc, NotificationRepository repository, Clock clock) {
+    public NotificationService(JdbcTemplate jdbc, NotificationRepository repository, LiveEvents live, Clock clock) {
         this.jdbc = jdbc;
         this.repository = repository;
+        this.live = live;
         this.clock = clock;
     }
 
-    /** @param refType what a click on the notification opens (e.g. BLOG), with {@code refId} */
+    /**
+     * @param refType what a click on the notification opens (e.g. BLOG), with {@code refId}. The user's open pages are
+     *                told at once (after the commit), so the bell does not wait for its next check.
+     */
     public void send(long userId, String type, String content, String refType, Long refId) {
         String text = content.length() <= MAX_CONTENT ? content : content.substring(0, MAX_CONTENT - 1) + "…";
         jdbc.update("""
                 INSERT INTO notifications (user_id, type, content, ref_type, ref_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)""", userId, type, text, refType, refId, Timestamp.from(clock.instant()));
+        live.publish(userId, "notification", Map.of());
     }
 
     /** Page {@code page} (from 0) of the user's notifications, newest first. */

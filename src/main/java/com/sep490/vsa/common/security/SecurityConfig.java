@@ -1,5 +1,6 @@
 package com.sep490.vsa.common.security;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
@@ -24,7 +26,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Session-based security for the same-origin HTML/JS frontend.
@@ -40,6 +46,30 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 public class SecurityConfig {
 
     private static final RequestMatcher API = new AntPathRequestMatcher("/api/**");
+    /** Member pages a guest is sent away from: after signing in they come back here (?next=, followed by login.js). */
+    private static final RequestMatcher MEMBER_PAGES = new OrRequestMatcher(
+            new AntPathRequestMatcher("/profile"), new AntPathRequestMatcher("/saved"),
+            new AntPathRequestMatcher("/notifications"), new AntPathRequestMatcher("/messages"),
+            new AntPathRequestMatcher("/messages/**"));
+
+    /**
+     * Not signed in on a page: to the sign-in page. From a Member page (e.g. a chat notification tapped after the
+     * session ended: /messages/12) the sign-in page gets ?next= so the member lands back on it; staff pages stay plain.
+     */
+    static AuthenticationEntryPoint loginThenBack() {
+        LoginUrlAuthenticationEntryPoint plain = new LoginUrlAuthenticationEntryPoint("/login");
+        return (request, response, exception) -> {
+            if (!"GET".equals(request.getMethod()) || !MEMBER_PAGES.matches(request)) {
+                plain.commence(request, response, exception);
+                return;
+            }
+            String path = request.getRequestURI().substring(request.getContextPath().length());
+            String query = request.getQueryString();
+            String next = query == null ? path : path + "?" + query;
+            response.sendRedirect(request.getContextPath() + "/login?next="
+                    + URLEncoder.encode(next, StandardCharsets.UTF_8));
+        };
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -72,6 +102,9 @@ public class SecurityConfig {
                 // Role and status are read again on every request: a lock or role change applies at once
                 .addFilterAfter(new SessionUserRefreshFilter(jdbc, contextRepository), SecurityContextHolderFilter.class)
                 .authorizeHttpRequests(auth -> auth
+                        // The live stream (/api/me/live) ends with an async dispatch of the request already allowed;
+                        // checking it again would fail once the session ended meanwhile, on a response already sent
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         // API
                         .requestMatchers("/api/auth/**", "/api/legal/**").permitAll()
                         .requestMatchers("/api/me/**").authenticated()
@@ -85,14 +118,14 @@ public class SecurityConfig {
                         .requestMatchers("/academic", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
                         .requestMatchers("/admin", "/admin/**", "/pages/admin/**").hasRole("ADMIN")
                         .requestMatchers("/profile", "/pages/profile.html", "/saved", "/pages/saved.html",
-                                "/notifications", "/pages/notifications.html").authenticated()
+                                "/notifications", "/pages/notifications.html",
+                                "/messages", "/messages/**", "/pages/messages.html").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e
                         // Not signed in: API gets 401, pages go to the login page
                         .defaultAuthenticationEntryPointFor(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), API)
-                        .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"), AnyRequestMatcher.INSTANCE)
+                        .defaultAuthenticationEntryPointFor(loginThenBack(), AnyRequestMatcher.INSTANCE)
                         // Signed in with the wrong role: API gets 403, pages go to the user's own home page
                         .accessDeniedHandler((request, response, denied) -> {
                             if (API.matches(request)) {

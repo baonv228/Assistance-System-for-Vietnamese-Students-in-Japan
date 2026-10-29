@@ -1,0 +1,413 @@
+/* Photos, videos and voice messages of "Tin nhắn" (assets/js/pages/chat-media.js) and the dialog "Cài đặt thông báo"
+   (chat-notify.js). Load after site.css and messages.css. Uses only the tokens of tokens.css.
+   In a message:  .cm-files  > .cm-photos.cm-n1…5 > .cm-photo (> .cm-open > img) · .cm-video · .cm-audio
+                  loading .cm-wait, failure .cm-fail (+ .cm-retry); they work inside the brand-coloured "mine" bubble.
+   Above the box: .cm-pending > .cm-pend (.cm-pend-photo | -video | -audio) with .cm-pend-x [data-remove-attachment]
+   Recording:     .cm-rec (dot, timer, bar, [data-recorder-cancel], [data-recorder-stop])
+   Viewer:        dialog.cm-viewer · "Cài đặt thông báo": dialog.cn-dlg */
+
+/* ---------------- files in a message ---------------- */
+.cm-files { display: block; white-space: normal; line-height: 1.3; }
+.cm-files:not(:last-child) { margin-bottom: 6px; }
+
+.cm-photos {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 3px;
+    width: 300px;
+    max-width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+}
+.cm-photo {
+    position: relative;
+    grid-column: span 3;
+    aspect-ratio: 1;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--surface-2);
+}
+/* one photo keeps its shape (inline aspect-ratio from its size, kept between 3:4 and 2:1) */
+.cm-n1 .cm-photo { grid-column: span 6; aspect-ratio: 4 / 3; }
+/* three: a wide one on top, two below */
+.cm-n3 .cm-photo:first-child { grid-column: span 6; aspect-ratio: 2; }
+/* five: two on top, three below */
+.cm-n5 .cm-photo:nth-child(n + 3) { grid-column: span 2; }
+
+.cm-open {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+}
+.cm-open img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cm-open:focus-visible { outline: 3px solid var(--lantern); outline-offset: -3px; }
+
+.cm-video {
+    position: relative;
+    width: 300px;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+}
+.cm-video.cm-tall { width: 220px; }
+.cm-video video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+.cm-audio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 300px;
+    max-width: 100%;
+    min-height: 44px;
+}
+.cm-audio > .ic { color: var(--brand); }
+.cm-audio-slot { flex: 1; min-width: 0; display: block; }
+.cm-audio audio { display: block; width: 100%; height: 40px; }
+.cm-audio-dur { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; opacity: .8; }
+/* a format this device cannot play (under the dead player) */
+.cm-unplayable { display: block; margin-top: 4px; font-size: 12px; line-height: 1.35; opacity: .85; }
+.cm-video .cm-unplayable {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, .72);
+    color: #fff;
+    opacity: 1;
+}
+
+/* loading */
+.cm-wait {
+    position: absolute;
+    inset: 0;
+    display: block;
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--line) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: cm-shimmer 1.2s linear infinite;
+}
+.cm-video .cm-wait { background-image: linear-gradient(90deg, #111 0%, #2a2a2a 50%, #111 100%); }
+.cm-audio .cm-wait { position: static; height: 32px; border-radius: 999px; }
+@keyframes cm-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* failure: "Không tải được tệp" + "Thử lại" */
+.cm-fail {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--surface-2);
+}
+.cm-fail .ic { font-size: 22px; vertical-align: 0; }
+.cm-video .cm-fail { color: #fff; background: #222; }
+.cm-audio .cm-fail { position: static; flex-direction: row; justify-content: flex-start; gap: 6px; padding: 0; background: none; }
+.cm-audio .cm-fail .ic { font-size: 18px; }
+.cm-retry {
+    border: 0;
+    background: none;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--brand-text);
+    text-decoration: underline;
+    cursor: pointer;
+}
+.cm-retry:focus-visible { outline: none; box-shadow: var(--focus); }
+.cm-video .cm-retry { color: #fff; }
+
+/* inside the brand-coloured bubble of one's own message */
+.mine .cm-photo { background: rgba(255, 255, 255, .18); }
+.mine .cm-wait { background-image: linear-gradient(90deg, rgba(255, 255, 255, .14) 0%, rgba(255, 255, 255, .32) 50%, rgba(255, 255, 255, .14) 100%); }
+.mine .cm-video .cm-wait { background-image: linear-gradient(90deg, #111 0%, #2a2a2a 50%, #111 100%); }
+.mine .cm-fail { color: inherit; background: rgba(255, 255, 255, .16); }
+.mine .cm-video .cm-fail { color: #fff; background: #222; }
+.mine .cm-audio .cm-fail { background: none; }
+.mine .cm-retry, .mine .cm-audio > .ic { color: inherit; }
+
+/* ---------------- chosen, not sent yet ---------------- */
+.cm-pending {
+    grid-column: 1 / -1;
+    list-style: none;
+    margin: 0;
+    padding: 0 0 2px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+}
+.cm-pend {
+    position: relative;
+    flex: none;
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+}
+.cm-pend img, .cm-pend video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cm-pend-audio {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 40px 6px 10px;
+}
+.cm-pend-audio > .ic { color: var(--brand); }
+.cm-pend-audio audio { width: 200px; max-width: 46vw; height: 36px; }
+.cm-pend-dur {
+    position: absolute;
+    left: 4px;
+    bottom: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .62);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.cm-pend-dur .ic { font-size: 14px; vertical-align: 0; }
+.cm-pend-audio .cm-pend-dur { position: static; padding: 0; background: none; color: var(--muted); font-size: 12px; }
+.cm-pend-x {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(47, 62, 110, .78);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+}
+.cm-pend-x .ic { font-size: 17px; vertical-align: 0; }
+.cm-pend-x:hover { background: var(--crit); }
+.cm-pend-x:focus-visible { outline: none; box-shadow: var(--focus); }
+.cm-pend-audio .cm-pend-x { top: 50%; right: 8px; transform: translateY(-50%); }
+
+/* ---------------- recording a voice message ---------------- */
+.cm-rec {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 4px 4px 4px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+}
+.cm-rec-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--crit);
+    animation: cm-blink 1s ease-in-out infinite;
+}
+@keyframes cm-blink { 50% { opacity: .25; } }
+.cm-rec-label { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.cm-rec-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cm-rec-max { margin-left: -6px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cm-rec-bar { flex: 1; min-width: 32px; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.cm-rec-bar span { display: block; height: 100%; border-radius: 99px; background: var(--crit); transition: width .2s linear; }
+.cm-rec .btn { flex: none; }
+.cm-rec-cancel { color: var(--muted); }
+/* messages.css makes the buttons of the message box square icon buttons; these have a label */
+.chat-compose .cm-rec .btn { width: auto; min-height: 36px; padding: 0 12px; }
+.chat-compose .cm-rec { grid-column: 1 / -1; }
+
+/* ---------------- full-size photo ---------------- */
+.cm-viewer {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: rgba(12, 15, 28, .94);
+    color: #fff;
+    overflow: hidden;
+}
+.cm-viewer[open] { display: grid; place-items: center; }
+.cm-viewer::backdrop { background: rgba(12, 15, 28, .6); }
+.cm-viewer img {
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 110px);
+    max-height: calc(100dvh - 110px);
+    object-fit: contain;
+    border-radius: 6px;
+    cursor: zoom-out;
+}
+.cm-viewer-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+.cm-viewer-count { margin-right: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cm-viewer-save, .cm-viewer-close {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, .3);
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+.cm-viewer-save:hover, .cm-viewer-close:hover, .cm-viewer-nav:hover { background: rgba(255, 255, 255, .22); }
+.cm-viewer-nav {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .14);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+}
+.cm-viewer-nav.prev { left: 12px; }
+.cm-viewer-nav.next { right: 12px; }
+.cm-viewer-nav .ic { font-size: 30px; vertical-align: 0; }
+.cm-viewer :focus-visible { outline: 3px solid var(--lantern); outline-offset: 2px; }
+
+/* ---------------- "Cài đặt thông báo" ---------------- */
+.cn-dlg {
+    width: min(460px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    box-shadow: 0 24px 60px rgba(47, 62, 110, .25);
+    overflow-y: auto;
+}
+.cn-dlg::backdrop { background: rgba(47, 62, 110, .35); }
+.cn-body { display: grid; gap: 14px; padding: 20px; }
+.cn-head { display: flex; align-items: center; gap: 8px; }
+.cn-head h3 { flex: 1; display: flex; gap: 8px; align-items: center; }
+.cn-head h3 .ic { color: var(--brand); }
+.cn-x { border: 0; background: none; padding: 4px; border-radius: 8px; color: var(--muted); cursor: pointer; }
+.cn-x:hover { color: var(--ink); background: var(--surface-2); }
+.cn-x:focus-visible { outline: none; box-shadow: var(--focus); }
+.cn-switch {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+}
+.cn-switch:hover { background: var(--surface-2); }
+.cn-switch:has(input:disabled) { cursor: default; }
+.cn-label { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.cn-label b { font-size: 14.5px; }
+.cn-switch input {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 44px;
+    height: 26px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--line);
+    cursor: pointer;
+    transition: background .15s;
+}
+.cn-switch input::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+    transition: transform .15s;
+}
+.cn-switch input:checked { background: var(--brand); }
+.cn-switch input:checked::before { transform: translateX(18px); }
+.cn-switch input:focus-visible { outline: none; box-shadow: var(--focus); }
+.cn-switch input:disabled { opacity: .5; cursor: not-allowed; }
+.cn-device { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--ai-soft); }
+.cn-device h4 { margin: 0; display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.cn-device-state { font-size: 13.5px; }
+.cn-device-state.cn-warn { color: var(--warn); }
+.cn-device .btn { justify-self: start; }
+.cn-status { font-size: 13.5px; color: var(--muted); }
+.cn-status:empty { display: none; }
+.cn-status.ok { color: var(--ok); }
+.cn-status.error { color: var(--crit); }
+.cn-status .link { color: inherit; text-decoration: underline; }
+.cn-actions { display: flex; justify-content: flex-end; }
+
+@media (prefers-reduced-motion: reduce) {
+    .cm-wait, .cm-rec-dot { animation: none; }
+    .cn-switch input, .cn-switch input::before, .cm-rec-bar span { transition: none; }
+}
+
+@media (max-width: 860px) {
+    .cm-photos, .cm-video, .cm-audio { width: 260px; }
+    .cm-video.cm-tall { width: 190px; }
+    .cm-pend { width: 64px; height: 64px; }
+    .cm-pend-audio { width: auto; height: auto; }
+    .cm-rec { gap: 8px; padding-left: 10px; }
+    .cm-rec-label { display: none; }
+    .cm-viewer img { max-width: 100vw; border-radius: 0; }
+    .cm-viewer-nav { width: 40px; height: 40px; }
+    .cm-viewer-nav.prev { left: 6px; }
+    .cm-viewer-nav.next { right: 6px; }
+    .cn-dlg { width: calc(100vw - 24px); }
+    .cn-body { padding: 16px; }
+}

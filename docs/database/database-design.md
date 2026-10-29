@@ -26,6 +26,7 @@
 | 10. Kiểm duyệt và báo cáo | `reason_options`, `banned_keywords`, `moderation_scans`, `report_cases`, `reports`, `appeals` |
 | 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress` |
 | 12. Thông báo và hệ thống | `notifications`, `system_settings`, `activity_logs`, `api_usage` |
+| 13. Tin nhắn (V14, V15) | `chat_conversations`, `chat_members`, `chat_messages`, `chat_blocks`, `chat_keys`, `chat_message_edits`, `chat_reactions`, `chat_files`, `chat_report_evidence`, `chat_notify_settings`, `push_subscriptions`, `web_push_keys` |
 
 ---
 
@@ -566,7 +567,7 @@ hoặc thêm như từ khóa khác.
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
 | id | BIGINT | PK | |
-| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `PHRASE`, `PRACTICE` |
+| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `PHRASE`, `PRACTICE`, `MESSAGE` (tin nhắn riêng, từ V14; tin mã hóa kèm `chat_report_evidence`) |
 | target_id | BIGINT | NN | |
 | handler_role | VARCHAR(20) | NN | `MODERATOR` hoặc `ACADEMIC_MANAGER` |
 | report_count | INT | NN, mặc định 0 | |
@@ -680,6 +681,88 @@ hoặc thêm như từ khóa khác.
 | service | VARCHAR(40) | PK | `GOOGLE_MAPS_LOAD`, `GOOGLE_PLACE_DETAILS`, `OPENAI_MODERATION`, `STORAGE_GB` |
 | usage_date | DATE | PK | |
 | amount | DECIMAL(12,2) | NN | |
+
+---
+
+## 13. Tin nhắn (V14, V15)
+
+Nhắn tin riêng một-một giữa các thành viên (vai trò USER, đang hoạt động). Người lạ nhắn trước thì tin đến dưới dạng
+**lời mời**: người được hỏi chấp nhận, trả lời (cũng là chấp nhận), từ chối hoặc chặn; trước đó người nhắn chỉ gửi được
+3 tin. Lời mời không mã hóa, chỉ gửi chữ và qua cùng bộ lọc với bình luận (từ khóa cấm, BR-22 về link và số điện thoại).
+Khi cả hai đã chấp nhận và cả hai đã bật mã hóa (V15), cuộc trò chuyện **mã hóa đầu cuối**: server chỉ lưu bản mã hóa
+(`ciphertext`), không đọc và không lọc được nội dung; ảnh, video, ghi âm chỉ gửi được khi đó. Tin nhắn của tài khoản bị
+khóa hoặc đã xóa bị ẩn với người kia (không xóa), mở khóa thì hiện lại.
+
+### `chat_conversations` – Cuộc trò chuyện (mỗi cặp thành viên một cuộc)
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| id | BIGINT | PK | |
+| user_low_id | BIGINT | FK → users, NN | Người có id nhỏ hơn trong cặp |
+| user_high_id | BIGINT | FK → users, NN | Người có id lớn hơn; CHECK user_low_id < user_high_id |
+| started_by | BIGINT | FK → users, NN | Người nhắn trước (đếm giới hạn cuộc trò chuyện mới mỗi ngày) |
+| created_at | DATETIME | NN | |
+| | | UQ(user_low_id, user_high_id) | Hai người nhắn trước cùng lúc vẫn chỉ có một cuộc |
+
+### `chat_members` – Phía của từng người trong cuộc trò chuyện
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| conversation_id | BIGINT | PK, FK → chat_conversations | |
+| user_id | BIGINT | PK, FK → users | |
+| state | VARCHAR(10) | NN | `REQUEST` (người kia nhắn trước, chưa trả lời), `ACCEPTED`, `DECLINED` (đã từ chối: không còn trong danh sách, người kia không gửi thêm được cho tới khi người này nhắn lại) |
+| last_read_id | BIGINT | NN, mặc định 0 | Tin mới nhất đã đọc ("Đã xem" chỉ hiện cho người kia khi state = ACCEPTED) |
+| cleared_id | BIGINT | NN, mặc định 0 | "Xóa cuộc trò chuyện": tin có id ≤ giá trị này không còn hiện với người này (người kia vẫn giữ) |
+| updated_at | DATETIME | NN | |
+| notified_up_to_id | BIGINT | NN, mặc định 0 | (V15) Tin mới nhất đã báo qua email |
+| emailed_at | DATETIME | | (V15) Lần cuối gửi email về cuộc trò chuyện này (cách nhau ít nhất 6 giờ) |
+| pushed_at | DATETIME(3) | | (V15) Lần cuối gửi thông báo đẩy (cách nhau ít nhất 30 giây) |
+
+### `chat_messages` – Tin nhắn
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| id | BIGINT | PK | |
+| conversation_id | BIGINT | FK → chat_conversations, NN | |
+| sender_id | BIGINT | FK → users, NN | |
+| content | VARCHAR(2000) | | Tin chưa mã hóa, đã bỏ khoảng trắng đầu/cuối; NULL khi mã hóa hoặc đã thu hồi quá 30 ngày |
+| ciphertext | MEDIUMTEXT | | (V15) Bản mã hóa AES-GCM (base64) của tin mã hóa đầu cuối |
+| iv | VARCHAR(32) | | (V15) |
+| sender_key_id, recipient_key_id | BIGINT | FK → chat_keys | (V15) Hai khóa đã dùng để mã hóa |
+| franking_tag | CHAR(64) | | (V15) HMAC để người nhận chứng minh nội dung khi báo cáo |
+| reply_to_id | BIGINT | FK → chat_messages | (V15) Tin được trả lời trích dẫn |
+| edited_at, recalled_at | DATETIME | | (V15) Sửa (trong 15 phút), thu hồi |
+| changed_at | DATETIME(3) | | (V15) Lần sửa, thu hồi, thả cảm xúc gần nhất (trang hỏi các thay đổi này) |
+| created_at | DATETIME | NN | Đếm giới hạn 30 tin/phút |
+| | | INDEX(conversation_id, id), INDEX(sender_id, created_at), CHECK content hoặc ciphertext hoặc recalled_at | |
+
+### `chat_keys` – Khóa mã hóa của thành viên (V15)
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| id | BIGINT | PK | |
+| user_id | BIGINT | FK → users, NN | Khóa hiện tại = dòng mới nhất chưa `revoked_at` |
+| public_key | VARCHAR(120) | NN | Khóa công khai ECDH P-256 (base64, 65 byte) |
+| wrapped_private_key, wrap_salt, wrap_iv, wrap_iterations | | NN | Khóa riêng đã được mã hóa bằng "mật khẩu khôi phục" (PBKDF2), server không mở được |
+| created_at, revoked_at | DATETIME | | Khóa mới thu hồi khóa cũ; xóa tài khoản cũng thu hồi |
+
+### `chat_message_edits`, `chat_reactions`, `chat_files`, `chat_report_evidence` (V15)
+- `chat_message_edits`: các bản cũ của tin đã sửa (giữ cho báo cáo; xóa cùng nội dung 30 ngày sau khi thu hồi).
+- `chat_reactions`: PK(message_id, user_id), `emoji` (👍 ❤️ 😂 😮 😢 🙏); mỗi người một cảm xúc mỗi tin.
+- `chat_files`: ảnh, video, ghi âm đã mã hóa trên trình duyệt; `kind` IMAGE/VIDEO/AUDIO, `storage_key` dạng
+  `chat/yyyy/MM/uuid.bin`, `message_id` gắn khi gửi tin (tệp không gắn sau 24 giờ bị xóa), `deleted_at` khi thu hồi.
+  Không nằm trong `media`, không quét, không công khai.
+- `chat_report_evidence`: nội dung đã giải mã của tin mã hóa bị báo cáo (server kiểm tra với `franking_tag` trước khi
+  lưu), `report_id` → `reports`, cho Moderator xem.
+
+### `chat_notify_settings`, `push_subscriptions`, `web_push_keys` (V15)
+- `chat_notify_settings`: `email_enabled`, `push_enabled` của thành viên (không có dòng = cả hai bật).
+- `push_subscriptions`: mỗi trình duyệt bật thông báo đẩy một dòng (`endpoint`, `endpoint_hash` UQ, `p256dh`, `auth`,
+  `failure_count`); chỉ nhận địa chỉ của các dịch vụ push đã biết.
+- `web_push_keys`: một dòng (id = 1), cặp khóa VAPID của server, tạo lần đầu dùng; không được đổi.
+
+### `chat_blocks` – Chặn
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| blocker_id | BIGINT | PK, FK → users | Người chặn (bỏ chặn được) |
+| blocked_id | BIGINT | PK, FK → users | Người bị chặn; khi còn dòng này, hai người không nhắn được cho nhau |
+| created_at | DATETIME | NN | |
 
 ---
 

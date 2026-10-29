@@ -104,6 +104,7 @@ function render(p) {
             <a class="btn" href="${soon("public-profile")}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
             <a class="btn" href="${soon("notebook")}">${ic("bookmark")}Sổ tay tiếng Nhật</a>
             <a class="btn" href="/saved">${ic("bookmarks")}Đã lưu (${p.savedCount})</a>
+            ${p.role === "USER" ? `<a class="btn" href="/messages">${ic("chat")}Tin nhắn</a>` : ""}
             <a class="btn" href="/terms?doc=tos">${ic("gavel")}Điều khoản và chính sách</a>
             <button class="btn" type="button" id="logout">${ic("logout")}Đăng xuất</button>
         </div>
@@ -244,7 +245,7 @@ function askDelete() {
     danger.innerHTML = `<div class="card warncard">
         <b>Xóa tài khoản?</b>
         <p class="note">Hồ sơ, điểm và tag bị xóa; yêu cầu tag đang chờ và ảnh minh chứng bị hủy. Bạn sẽ bị đăng xuất và
-            không thể khôi phục. Bài viết, câu hỏi, bình luận và câu trả lời của bạn sẽ bị ẩn với mọi người; review của
+            không thể khôi phục. Bài viết, câu hỏi, bình luận, câu trả lời và tin nhắn của bạn sẽ bị ẩn với mọi người; review của
             bạn được xóa hoặc ẩn danh (nhóm đang chốt).</p>
         <div class="row"><button class="btn dan solid" type="button" id="delete-yes">Xóa tài khoản</button>
             <button class="btn" type="button" id="delete-no">Hủy</button></div>
