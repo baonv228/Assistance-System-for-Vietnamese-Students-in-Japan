@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.admin;
 
 import com.sep490.vsa.common.exception.ApiException;
+import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.feature.admin.AdminDtos.PageResult;
@@ -45,14 +46,16 @@ public class AdminUserService {
     private final ActiveAdminGuard adminGuard;
     private final AuthorStatusSync authorStatusSync;
     private final SystemSettings settings;
+    private final LiveEvents live;
 
     public AdminUserService(JdbcTemplate jdbc, ActivityLogService logService, ActiveAdminGuard adminGuard,
-                            AuthorStatusSync authorStatusSync, SystemSettings settings) {
+                            AuthorStatusSync authorStatusSync, SystemSettings settings, LiveEvents live) {
         this.jdbc = jdbc;
         this.logService = logService;
         this.adminGuard = adminGuard;
         this.authorStatusSync = authorStatusSync;
         this.settings = settings;
+        this.live = live;
     }
 
     /**
@@ -295,6 +298,9 @@ public class AdminUserService {
             throw ApiException.badRequest(DELETED_ACCOUNT);
         }
         authorStatusSync.afterStatusChange(targetUserId);
+        if (newStatus == UserStatus.LOCKED) {
+            live.close(targetUserId);                   // its open pages get no more live updates (after the commit)
+        }
 
         String cleanReason = reason != null && !reason.isBlank()
                 ? ActivityLogService.cut(reason.trim(), REASON_MAX) : null;

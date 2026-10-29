@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.user;
 
 import com.sep490.vsa.common.exception.ApiException;
+import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.AuthorStatusSync;
@@ -44,10 +45,11 @@ public class ProfileService {
     private final ActiveAdminGuard adminGuard;
     private final AuthorStatusSync authorStatusSync;
     private final MediaService media;
+    private final LiveEvents live;
 
     public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock,
                           SystemSettings settings, SavedRepository saved, ActiveAdminGuard adminGuard,
-                          AuthorStatusSync authorStatusSync, MediaService media) {
+                          AuthorStatusSync authorStatusSync, MediaService media, LiveEvents live) {
         this.users = users;
         this.providers = providers;
         this.jdbc = jdbc;
@@ -57,6 +59,7 @@ public class ProfileService {
         this.adminGuard = adminGuard;
         this.authorStatusSync = authorStatusSync;
         this.media = media;
+        this.live = live;
     }
 
     @Transactional(readOnly = true)
@@ -122,7 +125,7 @@ public class ProfileService {
      * <p>
      * As the "Xóa tài khoản" box says: the profile is anonymized, the points go to 0, the identity tags are revoked,
      * pending tag requests are closed (REJECTED, "Tài khoản đã xóa") and every tag proof photo is discarded (file
-     * removed after commit). Point and tag history rows stay.
+     * removed after commit). Point and tag history rows stay. Its live update streams close after the commit.
      * <p>
      * READ COMMITTED like an Admin's lock ({@code AdminUserService.updateUserStatus}): the comment recount then locks
      * only the posts it changes, not every post row it reads, so a member commenting at the same time waits for no
@@ -151,6 +154,7 @@ public class ProfileService {
         // Write the DELETED status now, so the recount (plain SQL in this transaction) sees it
         users.flush();
         authorStatusSync.afterStatusChange(userId);
+        live.close(userId);
     }
 
     private User load(Long userId) {

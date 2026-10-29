@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.auth;
 
 import com.sep490.vsa.common.exception.ApiException;
+import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.common.security.TokenHasher;
 import com.sep490.vsa.common.security.UserSessions;
 import com.sep490.vsa.common.settings.SystemSettings;
@@ -36,7 +37,9 @@ import static com.sep490.vsa.feature.auth.AuthRules.normalizeEmail;
  *       made with Google/Facebook has none and sets its first one. The other devices are signed out, this one keeps
  *       its session under a new id, and an email tells the owner.</li>
  * </ul>
- * BCrypt runs outside the database transactions, as at login.
+ * BCrypt runs outside the database transactions, as at login. Either way the account's live update streams close
+ * ({@link LiveEvents#close}), so a signed-out device hears nothing more; the device that changed its password opens a
+ * new stream a few seconds later under its new session id.
  */
 @Service
 public class PasswordService {
@@ -54,19 +57,22 @@ public class PasswordService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordMail mail;
     private final UserSessions sessions;
+    private final LiveEvents live;
     private final SystemSettings settings;
     private final TransactionTemplate tx;
     private final Clock clock;
     private final String publicUrl;
 
     public PasswordService(JdbcTemplate jdbc, AuthService auth, PasswordEncoder passwordEncoder, PasswordMail mail,
-                           UserSessions sessions, SystemSettings settings, PlatformTransactionManager transactionManager,
-                           Clock clock, @Value("${app.public-url:http://localhost:8080}") String publicUrl) {
+                           UserSessions sessions, LiveEvents live, SystemSettings settings,
+                           PlatformTransactionManager transactionManager, Clock clock,
+                           @Value("${app.public-url:http://localhost:8080}") String publicUrl) {
         this.jdbc = jdbc;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
         this.mail = mail;
         this.sessions = sessions;
+        this.live = live;
         this.settings = settings;
         this.tx = new TransactionTemplate(transactionManager);
         this.clock = clock;
@@ -136,6 +142,7 @@ public class PasswordService {
             return owner.userId();
         });
         sessions.endOthers(userId, null);
+        live.close(userId);
     }
 
     private record LinkOwner(long userId, String email) {
@@ -177,6 +184,7 @@ public class PasswordService {
         tx.executeWithoutResult(s -> jdbc.update("UPDATE users SET password_hash = ? WHERE id = ?", hash, userId));
         request.changeSessionId();
         sessions.endOthers(userId, request.getSession(false));
+        live.close(userId);
         mail.sendChanged(account.email(), account.displayName());
         return first ? "Đã tạo mật khẩu. Từ giờ bạn đăng nhập được bằng email và mật khẩu." : "Đã đổi mật khẩu.";
     }

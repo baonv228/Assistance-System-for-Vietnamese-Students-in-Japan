@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.auth;
 
+import com.sep490.vsa.common.live.LiveEvents;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +58,8 @@ class PasswordFlowTest {
     private PasswordEncoder encoder;
     @MockBean
     private PasswordMail mail;
+    @MockBean
+    private LiveEvents live;
 
     private String email;
     private long userId;
@@ -95,9 +98,12 @@ class PasswordFlowTest {
                 .andExpect(jsonPath("$.data.confirmPassword").value("Hai mật khẩu không khớp."));
         send(post("/api/auth/password/reset"), null, reset(token, "chikhongso", "chikhongso"))
                 .andExpect(jsonPath("$.data.password").value("Mật khẩu phải có cả chữ và số"));
+        verify(live, never()).close(userId);
         send(post("/api/auth/password/reset"), null, reset(token, "moimoi2026", "moimoi2026"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới."));
+        // Every device is signed out, and so are the pages still listening for live updates
+        verify(live).close(userId);
 
         // The lock is lifted and the new password works; the link is used up
         login(OLD).andExpect(status().isUnauthorized());
@@ -120,6 +126,7 @@ class PasswordFlowTest {
         send(put("/api/me/password"), laptop, change(OLD, "moimoi2026", "moimoi2026"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.message").value("Đã đổi mật khẩu."));
         verify(mail).sendChanged(eq(email), anyString());
+        verify(live).close(userId);
 
         assertThat(phone.isInvalid()).isTrue();
         assertThat(laptop.isInvalid()).isFalse();

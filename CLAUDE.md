@@ -130,7 +130,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `{currentPassword, password, confirmPassword}`: the current one through `AuthService.checkCurrentPassword` (counted
   like a login, 400 on `currentPassword`, 423 when locked), new ≠ current; the session gets a new id, the other devices
   are signed out (`common/security/UserSessions`: sessions per user in memory, filled by `SessionSignIn`, emptied by the
-  session listener) and the owner gets an email. **The local profile may have a real SMTP server: a manual test of
+  session listener) and the owner gets an email. Reset and change both close the account's live streams
+  (`LiveEvents.close`; this device reconnects under its new session id). **The local profile may have a real SMTP server: a manual test of
   these flows sends real emails** (the seed addresses belong to strangers).
 - "Xóa tài khoản" (`ProfileService.deleteAccount`) also revokes the user's tags, closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
