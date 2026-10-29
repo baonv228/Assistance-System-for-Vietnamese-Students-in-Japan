@@ -91,6 +91,9 @@ public class ReviewController {
     }
 
     private static String updatedMessage(Saved saved) {
+        if (!saved.changed()) {
+            return "Không có thay đổi nào.";
+        }
         return "PROCESSING".equals(saved.status())
                 ? "Đã lưu thay đổi. Ảnh/video đang được quét, trong lúc này chỉ bạn thấy review."
                 : "Đã lưu thay đổi.";

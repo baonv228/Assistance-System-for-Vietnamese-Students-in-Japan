@@ -9,7 +9,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - **Behaviour and screens:** the clickable prototype, repo https://github.com/baonv228/Prototype_System_Test
   (branch `tienhung`). When a business rule is unclear, check the prototype first.
 - **Database:** Flyway migrations in `src/main/resources/db/migration/` (`V1__init_schema.sql` = MySQL 8,
-  54 tables) and design notes in `docs/database/database-design.md`. Never edit a pushed migration; add the
+  54 tables; V10 adds `prefectures`) and design notes in `docs/database/database-design.md`. Never edit a pushed migration; add the
   next `V<n>__<description>.sql` instead.
 - **Report documents** (table descriptions EN/VI, use case specs, screen specs) are kept in the prototype
   repo under `docs/`, not here. If you change a table, update the schema here and the table dictionary there.
@@ -56,7 +56,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `AuthorStatusSync` recounts the posts the account commented on when an Admin locks/unlocks it or the user deletes it
   (post rows locked before the users row, same order as comment actions) and refreshes "Bài nổi bật" after commit.
   Home leaves out their reviews too (guest numbers and "Hữu ích" quotes, member "Review mới"; `ActiveAuthors.of("r")`),
-  and so do the event pages (reviews, ratings, album); what else happens to place reviews of such accounts is still open.
+  and so do the event pages (reviews, ratings, album) and the Map (place reviews, pin and detail figures, liking or
+  reporting them → 404, scam "!" posts; `MapRepository`).
 - New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
 - Places: OpenStreetMap places store their `osm_id`, names, address and coordinates (ODbL allows it; credit
   "© OpenStreetMap contributors"); places saved from Google Maps before keep their `google_place_id` (no address or
@@ -115,14 +116,30 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `password_min_length` is checked in `RegistrationService.complete` (the page gets it with the verify-code answer) with
   BCrypt's 72-byte limit. Display names are stripped (Unicode spaces too) before validation. SMTP waits at most 5 s
   (`spring.mail.properties.mail.smtp.*timeout`).
+- Passwords (UC-U05 / UC-U06, `feature/auth/PasswordService`, `PasswordController`, `PasswordMail`):
+  "Quên mật khẩu?" on /login → `/forgot-password` (the typed email is carried in sessionStorage, never in the address)
+  → `POST /api/auth/password/forgot` `{email}` always answers the same message (also as `data`); only for an ACTIVE
+  account, at most 1 link a minute and 5 a day, a new link cancels the older ones; the link is a `user_tokens` row
+  (RESET_PASSWORD, SHA-256 of the token, `reset_token_minutes` 30) and the email goes out on a background thread
+  (`@Async`, so the answer time says nothing). The link is `app.public-url` (env `APP_PUBLIC_URL`, never the Host
+  header) + `/reset-password?token=`; the page takes the token out of the address, has `referrer` no-referrer, checks it
+  (`POST /api/auth/password/check` → masked email) and sends `POST /api/auth/password/reset` `{token, password,
+  confirmPassword}`: 8 (`password_min_length`)–72 characters / 72 bytes, letters and digits, both equal (all problems
+  in `fields`); sets the hash, clears the login lock, confirms the email, uses up every link, signs every device out,
+  then /login?reset=1. "Đổi mật khẩu" / "Tạo mật khẩu" (account without a password) on Tôi → `PUT /api/me/password`
+  `{currentPassword, password, confirmPassword}`: the current one through `AuthService.checkCurrentPassword` (counted
+  like a login, 400 on `currentPassword`, 423 when locked), new ≠ current; the session gets a new id, the other devices
+  are signed out (`common/security/UserSessions`: sessions per user in memory, filled by `SessionSignIn`, emptied by the
+  session listener) and the owner gets an email. **The local profile may have a real SMTP server: a manual test of
+  these flows sends real emails** (the seed addresses belong to strangers).
 - "Xóa tài khoản" (`ProfileService.deleteAccount`) also revokes the user's tags, closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/terms`, `/profile`, `/saved`, `/notifications`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
-  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
+  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -163,9 +180,46 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
 - Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to 5 published
-  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area, then a topic
-  that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest).
-  Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực
+  của bạn"), then in its prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage
+  (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest). "Review mới" orders the same
+  way (area, prefecture, rest). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+- Living areas (V10, `feature/area`: `AreaService`, `AreaController`, `AreaDtos`): all of Japan, prefecture
+  (`prefectures`, 47) → municipality, the 20 designated cities split into wards (`areas`, 1,892 rows: `code` = 6-digit
+  official code, `prefecture_code`, `name_ja`/`name_kana`/`name_en`, `lat`/`lng` representative point, `display_name`
+  "Arakawa-ku, Tokyo · 東京都荒川区"; no station). Data = Geolonia 住所データ (japanese-addresses-v2 `api/ja.json`, CC BY
+  4.0, from デジタル庁 アドレス・ベース・レジストリ). Users and places keep `area_id`; the seven old sample areas moved to
+  their Tokyo ward. Public GETs: `/api/areas` (prefectures + `devLocation`), `/api/areas/prefectures/{code}`,
+  `/api/areas/search?q=` (romaji, kanji, kana; "-" = space; 12, names starting with it first), `/api/areas/nearest?lat=
+  &lng=` (nearest representative point; outside Japan 400 `NOT_IN_JAPAN`; may give the neighbour near a border, the user
+  confirms), `/api/areas/{id}`. Picker `components/area-picker.js` (Tôi and the Home prompt): prefecture + area selects,
+  quick search, "Chọn trên bản đồ" (click, or "Vị trí của tôi" through the browser's permission prompt /
+  `app.map.dev-location`); only the area id is saved, the point never is. Label by stage: PRE "Khu vực bạn sắp đến",
+  HOME "Khu vực bạn từng sống", else "Khu vực bạn đang sống". Not required: the Home keeps a gentle prompt ("Mong bạn
+  cho Senpai ơi biết khu vực…") until area and stage are set or "Để sau". New places in Japan get the area nearest to
+  their position (`AreaService.assignPlace`: OSM places, pins; Moderator create/update through `areaIdAt`, only when the
+  place is moved); places in Vietnam have none.
+- Points (UC-U10): the Tôi card shows the total, the rank badge, progress, ranks with perks and the point rules;
+  "Lịch sử điểm" = `GET /api/me/points?page=` (`feature/user/PointHistoryService`, 20 a page, newest first: delta, reason
+  label, the content's title and a link only while it can still be seen; plain SQL over `point_transactions`). The
+  points on the member Home link to `/profile#points`. `PointService.add` keeps `users.points` ≥ 0 (`GREATEST`), the
+  history keeps every point taken. Sample data sets `users.points` without history lines ("Chưa có lần cộng hoặc trừ
+  điểm nào được ghi lại."). Rank badges next to names elsewhere (reviews, posts, comments) are not done yet.
+- Identity tags (UC-U09, UC-M01, UC-M02; `feature/tag`: `TagService`, `TagRepository`, `TagController`, `TagDtos`).
+  "Xin tag định danh" on Tôi → page `/tag-request` (`tag-request.js`): `GET /api/me/tag-requests/compose` (active tags
+  with description, colour, proof types, `selfieOnly`, `owned`; the waiting request; keep days) and `POST
+  /api/me/tag-requests` multipart (part "request" `{tagId, proofTypeId, consent}` + "photo"; USER role; one waiting
+  request per user, users row locked; held tags refused; a selfie-only tag takes its single proof type; messages "Hãy
+  chọn một tag.", "Hãy chọn loại minh chứng.", "Hãy chọn ảnh minh chứng." / "Hãy chọn ảnh chân dung.", "Bạn cần đồng ý
+  cho Kiểm duyệt viên xem ảnh."). The photo is re-encoded (EXIF dropped), stored under `tagproof/`, **never sent to the
+  image scanner** (scan_status stays PROCESSING) and never public (`MediaAccess` gives tag proofs to nobody but their
+  owner). Moderator page `/moderator/tags` (`mod-tags.js`): `GET /api/moderator/tag-requests?tag=&q=&page=` (PENDING of
+  ACTIVE users, oldest first, 10 a page, `daysLeft`), `GET …/{id}`, `GET …/{id}/photo` (bytes only while PENDING,
+  `no-store, private`, inline, nosniff; the page blocks the context menu), `POST …/{id}/approve` (user_tags granted or
+  re-granted, notification "Bạn đã được cấp tag X.") and `POST …/{id}/reject` `{reason}` (one of `TagService.REJECT_REASONS`;
+  "Yêu cầu tag X bị từ chối: lý do. Bạn có thể gửi lại."). Either way the photo is discarded at once and the action logged
+  (target USER). `expireOld` (hourly at :15) closes requests older than `proof_keep_days` (14) as EXPIRED, deletes the
+  photo and tells the user. A request handled meanwhile → 409 "Yêu cầu này đã được xử lý.".
 - "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
   shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
   `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
@@ -292,7 +346,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   nothing, keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
   Security's firewall). Content type from `media.mime_type`, `nosniff`, Range requests and 304 work. Only registered
   while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
-  event is not deleted, and the cover of an event that is not deleted. A Moderator queue adds its rule in
+  event is not deleted, and the cover of an event that is not deleted. A Moderator sees PASSED files of a pending pin's review ("Ghim mới"). A Moderator queue adds its rule in
   `MediaAccess`.
 - `feature/moderation`: `MediaScanService` + `ImageModerator` + `MediaReader`. Photos first go to OpenAI Moderation
   `omni-moderation-latest` (free; `app.moderation.openai.api-key` or env `OPENAI_API_KEY`; without a key
@@ -434,8 +488,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   to "Chi tiết" = OSM raster tiles when WebGL/CDN fails); the layers button switches, the choice is kept in localStorage.
   CARTO basemaps were tried and need an API key in browsers. Declare module-level `let`s above `await start()` (TDZ).
 - APIs (GET public): `GET /api/map` (categories with counts, every ACTIVE place with a position plus the viewer's own
-  PENDING pins, review count and average, scam "!" flag, map centre = middle of the places of the user's area, else
-  Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
+  PENDING pins, review count and average, scam "!" flag, map centre = the representative point of the user's area,
+  else Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
   get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.search`),
   `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
   PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
@@ -443,7 +497,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `/api/map/places/{id}/save`, POST/DELETE `/api/reviews/{id}/like` (not one's own; like_count recounted),
   POST `/api/reviews/{id}/report` (ContentReportService target REVIEW; over the threshold the review becomes HIDDEN).
 - Tools as in the prototype: one card (search "Tìm địa điểm" + "Danh mục" dropdown with "Tất cả danh mục" and
-  counts), then "Sự kiện: Tắt / 15 ngày tới / 30 ngày tới" (lantern pins labelled "Còn N ngày" / "Đang diễn ra").
+  counts), then "Sự kiện: Tắt / 15 ngày tới / 30 ngày tới" (lantern pins labelled "Còn N ngày" / "Đang diễn ra";
+  their popup links "Xem sự kiện" to `/events/{id}`).
   Legend open on desktop, folded while the panel is open and on phones.
 - Shops drawn by the "Gọn" style are clickable (MapLibre layers poi_r1/poi_r7/poi_r20/poi_transit, bus stops
   ignored): OpenFreeMap is built by Planetiler, feature id = OSM id × 10 + 1 node / 2 way / 3 relation (checked against
@@ -460,8 +515,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Pins: bright (round, big, review count) when ACTIVE with ≥ 1 published review and not closed; faded otherwise;
   community pins (source USER) square; pending dashed; closed grey; lantern pins for events. OSM results of a search
   get temporary dark pins and a details panel without an id ("chưa có trên Senpai ơi"); such a place is stored only when
-  someone reviews, saves or links it. "Viết review", "Báo đã đóng cửa" and "Cắm ghim" are disabled until those steps
-  are built. `PlaceOption` (search result) now also carries lat/lng.
+  someone reviews, saves or links it. `PlaceOption` (search result) now also carries lat/lng.
 - Login accepts `?next=/path` (same-site paths only, Users only) so the Map can send guests to sign in and back.
 - Reviews (feature/review, UC-U16..18): `GET /api/reviews/compose?placeId=` (limits, new-account quota, `myReviewId`),
   `POST /api/reviews` (multipart part "review" `{placeId | externalPlaceId, rating, content}` + ≤ 5 "images" + 1
@@ -470,9 +524,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Write Post (links, new-account limit shared with posts in `user_daily_usage`, banned keywords). An
   `externalPlaceId` goes through `PlaceService.resolve/save` (the OSM place is added). Without media → PUBLISHED and
   +10 (`PointService.REVIEW`, reason REVIEW_CREATED, paid once); with media → PROCESSING until
-  `ReviewPublishService` (async + retry job, like BlogPublishService) publishes or rejects it and notifies the author
-  (`CONTENT_PUBLISHED` / `CONTENT_REJECTED`; the first review of a PENDING pin: "…sẽ hiển thị cho mọi người khi ghim
-  được Moderator duyệt"); an edit with new media hides it again until the scan passes. Delete = hard delete, points withdrawn, report cases closed, files discarded.
+  `ReviewPublishService` (async + retry job, like BlogPublishService; place reviews only, `event_id IS NULL`, event
+  reviews have their own job) publishes or rejects it and notifies the author (`CONTENT_PUBLISHED` /
+  `CONTENT_REJECTED`; the first review of a PENDING pin: "…sẽ hiển thị cho mọi người khi ghim được Moderator duyệt"),
+  checking the banned keywords again before scanning and right before publishing (a hit → REJECTED, author told the
+  keyword); an edit with new media hides it again until the scan passes. Delete = hard delete, points withdrawn, report
+  cases closed, files discarded.
   The form is a panel mode ("write") of map.js; pins are reloaded after a save.
 - "Cắm ghim" (UC-U19, feature/review PinService/PinController): `GET /api/map/pins/compose`, `GET
   /api/map/pins/duplicates?lat=&lng=&names=a|b` (ACTIVE places within 200 m whose squashed name contains / is contained
@@ -486,6 +543,53 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - "Báo đã đóng cửa" (UC-U20): `POST /api/map/places/{id}/closed-report` → `{count, threshold, queued}`; one row per
   user and place (`place_closed_reports`, 409 on a second), ACTIVE and not closed places only; at
   `closed_report_threshold` (5) the place waits for a Moderator, the label is never set automatically.
+- Moderator place pages (feature/place `ModeratorPlaceController`, `PinModerationService`, `PlaceModerationRepository`,
+  `PlaceModerationDtos`; pages use `components/staff-desk.js`, `lib/mod-place-ui.js` toast + small Leaflet map,
+  `assets/css/mod-places.css`). Every action locks the place row (`FOR UPDATE`), writes `place_history`, the activity
+  log (target PLACE) and, for a community pin, a notification; a place another Moderator just handled → 409.
+  - "Ghim mới" `/moderator/pins` (UC-M05, UC-M06): `GET /api/moderator/pins?category=&duplicates=` (PENDING USER pins,
+    oldest first, approved places within 200 m, "Có thể trùng" = a squashed name contains / is contained in another),
+    `GET /api/moderator/pins/{id}` (names, first review with its PASSED photos, places within 200 m with distance and
+    review count, PIN_REJECT reasons, categories, `scanning`), `POST …/approve` `{nameVi, categoryId}` (ACTIVE, +15
+    `PointService.PIN_APPROVED` reason PIN_APPROVED ref PLACE, notification "Ghim “…” đã được duyệt. +15 điểm."; 409
+    while the first review's files are still scanned), `POST …/reject` `{reasonId}` (REJECTED + `reject_reason`, the
+    first review deleted like its author would: report cases closed, points withdrawn, files discarded), `POST …/merge`
+    `{targetId}` (an ACTIVE place within 200 m; the first review moves there unless the author already has one there, then
+    it is deleted; pin MERGED + `merged_into_id`, saves moved, `place_merges` row, MERGED history on both).
+    `MediaAccess` lets an ACTIVE Moderator see PASSED files of a review of a PENDING place (audience STAFF, no-store).
+  - "Báo đóng cửa" `/moderator/closed` (UC-M04 AF4/AF5): `GET /api/moderator/closed` (`waiting` = ACTIVE open places with
+    ≥ `closed_report_threshold` unresolved reports, most first; `closed` = labelled places), `PUT
+    /api/moderator/places/{id}/closed` `{closed}` (true: label + reports kept as resolved, CLOSED history; false: label
+    off, reports deleted so people can report again, REOPENED history), `DELETE /api/moderator/places/{id}/closed-reports`
+    ("Vẫn mở cửa, xóa các báo cáo").
+  - "Địa điểm" `/moderator/places` (UC-M07, UC-M08; `PlaceAdminService`, page `mod-places.js`, `?id=` opens a place,
+    `?new=1` "Thêm địa điểm"): `GET /api/moderator/places?q=&category=&source=&status=&prefecture=&page=` (10 a page,
+    newest first, `q` over the names and address with accents ignored; source MODERATOR also lists TEAM; `prefectures`
+    for the filter), `GET …/{id}` (details, counts, history as ready text "Sửa thông tin · Danh mục: Quán ăn → Siêu
+    thị", categories, PLACE_REMOVE reasons), `GET /api/moderator/places/osm-search?q=` (= `PlaceService.search`: Senpai ơi places with an id → "Mở",
+    OSM places → "Chọn"), `GET …/osm/{externalId}` (`PlaceService.resolve`: `existingId`, or a filled-in form with the
+    category from `category_osm_tags`), `POST /api/moderator/places` and `PUT …/{id}` `{osmId?, nameVi, nameJa, nameEn,
+    address, categoryId, lat, lng, confirmDuplicate}` (the area follows the position; required: name "Hãy nhập tên hiển thị.", category,
+    position "Hãy bấm lên bản đồ để đặt vị trí."; a similar ACTIVE name within 200 m answers `duplicates` without
+    `placeId` until `confirmDuplicate`; new places are ACTIVE at once, source OSM with `osm_id` or MODERATOR; an OSM id
+    Senpai ơi has answers that place; edits keep the OSM id, never write to OpenStreetMap, history `{changes: [{field,
+    from, to}]}`, "Không có thay đổi nào." when nothing changed, pin authors notified), `POST …/{id}/remove`
+    `{reasonId, note}` (ACTIVE → REMOVED, `removed_reason` = "reason: note", hidden everywhere, nothing deleted) and
+    `POST …/{id}/restore`. The closed label uses `PUT …/{id}/closed`.
+  - "Gộp trùng lặp" `/moderator/merge` (UC-M09; `PlaceMergeService`, `PlaceMergeRepository`, page `mod-merge.js`,
+    `?a=&b=` compares, `?a=` = "Gộp với địa điểm khác" from a place): the queue is worked out on request (no table, so
+    it is always current): ACTIVE places ≤ 200 m apart with similar squashed names, not in `duplicate_dismissals`;
+    HIGH ("Cao") = same category, ≤ 50 m and the same Japanese or English name, else MEDIUM; HIGH first, then distance,
+    10 a page (`GET /api/moderator/merges?page=`). `POST /api/moderator/merges/dismiss` `{aId, bId}` = "Không trùng".
+    `GET …/merges/compare?a=&b=` (both sides, counts of reviews/saves/posts/guide items, people with a review on both),
+    `GET …/merges/search?q=&near=` (every word must match, nearest first). `POST /api/moderator/merges` `{keptId,
+    mergedId, fields: {nameVi|nameJa|nameEn|address|categoryId|areaId|position: KEPT|MERGED}, confirmed}` (400 without
+    `confirmed`): both rows locked lower id first; a person with a review on both keeps the newer one (no points taken);
+    reviews, saves, post links, guide items and open closed reports move; places merged into the merged one are pointed
+    at the kept one (links follow one step); the merged place becomes MERGED and keeps its `osm_id` (OSM search then
+    shows the kept place); `place_merges` row, MERGED history on both, pin authors notified. Final, no undo.
+    The settings `duplicate_warn_radius_m` / `merge_suggest_radius_m` are still "Chưa áp dụng": 200 m / 50 m are
+    constants (`PlaceMergeService`, `PinModerationService`).
 - `app.map.dev-location=lat,lng,label` (application-local only) makes "Vị trí của tôi" return a fixed point, for testing
   from outside Japan; `/api/map` sends it as `devLocation`.
 

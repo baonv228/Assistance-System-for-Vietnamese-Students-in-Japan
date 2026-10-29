@@ -100,7 +100,7 @@ public class DevDataSeeder implements CommandLineRunner {
                 INSERT INTO users (email, password_hash, email_verified_at, display_name, role, is_adult_confirmed,
                                    area_id, stage, points, created_at)
                 VALUES (?, ?, NOW(), ?, ?, TRUE,
-                        CASE WHEN ? THEN (SELECT id FROM areas WHERE station = 'Nippori') END,
+                        CASE WHEN ? THEN (SELECT id FROM areas WHERE code = '131181') END,
                         ?, ?, NOW() - INTERVAL ? DAY)""",
                 a.email(), passwordEncoder.encode(PASSWORD), a.name(), a.role(), a.inNippori(), a.stage(),
                 a.points(), a.createdDaysAgo());

@@ -206,6 +206,19 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     font: inherit;
 }
 .select:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
+.select[aria-invalid="true"] { border-color: var(--crit); }
+/* "Đổi mật khẩu" on Tôi */
+#pw-form { display: grid; gap: 12px; margin-top: 8px; max-width: 420px; }
+#pw-form .alert[hidden] { display: none; }
+/* "Lịch sử điểm" on Tôi */
+.point-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.point-list li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid var(--line); }
+.point-list .delta { font-weight: 700; text-align: right; }
+.point-list .delta.plus { color: var(--ok); }
+.point-list .delta.minus { color: var(--crit); }
+.point-list .what { overflow-wrap: anywhere; }
+#history .pager { justify-content: center; margin-top: 8px; }
 
 .page { max-width: 1080px; margin: 0 auto; padding: 24px 24px 48px; display: grid; gap: 18px; }
 .narrow { max-width: 780px; }
@@ -353,3 +366,27 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     .desk-side .side-title { display: none; }
     .desk-main { padding: 18px 16px; }
 }
+/* "Xin tag định danh" (UC-U09) */
+.tag-form { display: grid; gap: 14px; }
+.tag-form .alert[hidden] { display: none; }
+.tag-options { display: grid; gap: 8px; }
+.tag-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 12px; cursor: pointer; }
+.tag-option:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.tag-option.owned { opacity: .6; cursor: default; }
+.tag-option input { margin-top: 4px; accent-color: var(--brand); }
+.tag-form .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.tag-form .check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--brand); flex: none; }
+.tag-preview { max-width: 260px; max-height: 200px; border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
+
+/* Living-area picker (components/area-picker.js) */
+.area-picker { display: grid; gap: 10px; }
+.area-tools { flex-wrap: wrap; }
+.area-tools input { min-width: 200px; }
+.area-results { display: grid; gap: 4px; max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px; background: var(--surface); }
+.area-results button { text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; font: inherit; color: var(--ink); }
+.area-results button:hover, .area-results button:focus-visible { background: var(--brand-soft); }
+.area-mapbox { display: grid; gap: 8px; }
+.area-mapbox .row { flex-wrap: wrap; }
+.area-map { height: 300px; border-radius: 10px; border: 1px solid var(--line); }
+.area-credit { font-size: 12px; margin: 0; }

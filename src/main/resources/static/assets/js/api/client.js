@@ -96,6 +96,13 @@ export const apiClient = {
     completeRegistration: (body) => post("/auth/register/complete", body),
     pendingSocial: () => request("/auth/social/pending"),
     completeSocial: (body) => post("/auth/social/complete", body),
+    // UC-U05 "Quên mật khẩu": forgotPassword answers the message to show (the same whether the email has an account);
+    // checkPasswordLink { email } (masked) or 400 when the link is used or expired
+    forgotPassword: (email) => post("/auth/password/forgot", { email }),
+    checkPasswordLink: (token) => post("/auth/password/check", { token }),
+    resetPassword: (token, password, confirmPassword) => post("/auth/password/reset", { token, password, confirmPassword }),
+    // UC-U06 "Đổi mật khẩu" / "Tạo mật khẩu" ({ currentPassword, password, confirmPassword }): the message to show
+    changePassword: (body) => request("/me/password", { method: "PUT", body: JSON.stringify(body) }),
 
     // Legal documents: "tos", "privacy", "community"
     legal: (type) => request(`/legal/${type}`),
@@ -108,7 +115,19 @@ export const apiClient = {
     deleteAccount: () => request("/me", { method: "DELETE" }),
     // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
     saved: () => request("/me/saved"),
-    areas: () => request("/areas"),
+    // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
+    pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),
+    // UC-U09 "Xin tag định danh": { tags: [{ id, name, description, color, selfieOnly, proofTypes, owned }], pending,
+    // keepDays, photoMaxMb }; submitTagRequest takes FormData: part "request" (JSON {tagId, proofTypeId, consent}) + "photo"
+    tagCompose: () => request("/me/tag-requests/compose"),
+    submitTagRequest: (formData) => request("/me/tag-requests", { method: "POST", body: formData }),
+    // Living-area picker (V10). areaPicker → { prefectures: [{ code, nameJa, nameEn, lat, lng }], devLocation };
+    // the others answer areas { id, prefectureCode, nameJa, nameEn, name, lat, lng }
+    areaPicker: () => request("/areas"),
+    areasIn: (prefectureCode) => request(`/areas/prefectures/${encodeURIComponent(prefectureCode)}`),
+    searchAreas: (q) => request(`/areas/search?${toQuery({ q })}`),
+    nearestArea: (lat, lng) => request(`/areas/nearest?${toQuery({ lat, lng })}`),
+    area: (id) => request(`/areas/${encodeURIComponent(id)}`),
 
     // Notifications (bell + "Thông báo"). page → { items, hasMore, unread };
     // summary → { unread, latestId, processing, fresh: notifications after `after`, newest first }
@@ -206,7 +225,41 @@ export const apiClient = {
     modCreateEvent: (formData) => request("/moderator/events", { method: "POST", body: formData }),
     modUpdateEvent: (id, formData) => request(`/moderator/events/${id}`, { method: "PUT", body: formData }),
     modDeleteEvent: (id) => request(`/moderator/events/${id}`, { method: "DELETE" }),
-    modEventPlaces: (q) => request(`/moderator/events/places?${toQuery({ q })}`)
+    modEventPlaces: (q) => request(`/moderator/events/places?${toQuery({ q })}`),
+
+    // Moderator places. "Ghim mới" (UC-M05, UC-M06): { items, categories }, a pin's details, then approve
+    // ({nameVi, categoryId}), reject ({reasonId}) or merge ({targetId}). "Báo đóng cửa": { waiting, closed, threshold }
+    modPins: (params = {}) => request(`/moderator/pins?${toQuery(params)}`),
+    modPin: (id) => request(`/moderator/pins/${id}`),
+    modApprovePin: (id, body) => post(`/moderator/pins/${id}/approve`, body),
+    modRejectPin: (id, reasonId) => post(`/moderator/pins/${id}/reject`, { reasonId }),
+    modMergePin: (id, targetId) => post(`/moderator/pins/${id}/merge`, { targetId }),
+    modClosed: () => request("/moderator/closed"),
+    modSetClosed: (id, closed) => request(`/moderator/places/${id}/closed`, { method: "PUT", body: JSON.stringify({ closed }) }),
+    modKeepOpen: (id) => request(`/moderator/places/${id}/closed-reports`, { method: "DELETE" }),
+    // "Địa điểm" (UC-M07, UC-M08). params: { q, category, source, status, area, page }. createPlace / updatePlace take
+    // { osmId?, nameVi, nameJa, nameEn, address, categoryId, areaId, lat, lng, confirmDuplicate } and answer
+    // { message, placeId, duplicates } (duplicates and no placeId = not saved, "Có thể trùng")
+    modPlaces: (params = {}) => request(`/moderator/places?${toQuery(params)}`),
+    modPlace: (id) => request(`/moderator/places/${id}`),
+    modSearchOsm: (q) => request(`/moderator/places/osm-search?${toQuery({ q })}`),
+    modPickOsm: (externalId) => request(`/moderator/places/osm/${encodeURIComponent(externalId)}`),
+    modCreatePlace: (body) => post("/moderator/places", body),
+    modUpdatePlace: (id, body) => request(`/moderator/places/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    modRemovePlace: (id, reasonId, note) => post(`/moderator/places/${id}/remove`, { reasonId, note }),
+    modRestorePlace: (id) => post(`/moderator/places/${id}/restore`),
+    // "Gộp trùng lặp" (UC-M09): queue { items: [{ a, b, distance, level }], page, size, total }; compare { a, b, distance,
+    // level, sameAuthors }; merge { keptId, mergedId, fields: { nameVi: "KEPT" | "MERGED", … }, confirmed }
+    modMerges: (page = 0) => request(`/moderator/merges?${toQuery({ page })}`),
+    modMergeCompare: (a, b) => request(`/moderator/merges/compare?${toQuery({ a, b })}`),
+    modMergeSearch: (q, near) => request(`/moderator/merges/search?${toQuery({ q, near })}`),
+    modMerge: (body) => post("/moderator/merges", body),
+    modDismissPair: (aId, bId) => post("/moderator/merges/dismiss", { aId, bId }),
+    // "Duyệt tag định danh" (UC-M01, UC-M02). params: { tag, q, page }; a request's photoUrl is the Moderator API
+    modTagRequests: (params = {}) => request(`/moderator/tag-requests?${toQuery(params)}`),
+    modTagRequest: (id) => request(`/moderator/tag-requests/${id}`),
+    modApproveTag: (id) => post(`/moderator/tag-requests/${id}/approve`),
+    modRejectTag: (id, reason) => post(`/moderator/tag-requests/${id}/reject`, { reason })
 };
 
 /** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */

@@ -1,5 +1,6 @@
 // Homepage: guests see an invitation, signed-in users see what matters to them today (as in the prototype).
 import { apiClient, ApiError } from "../api/client.js";
+import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
 
@@ -62,15 +63,15 @@ const feature = (icon, title, text, href) =>
 // ---------------------------------------------------------------- member
 
 async function renderMember() {
-    const [home, areas] = await Promise.all([apiClient.memberHome(), apiClient.areas()]);
+    const home = await apiClient.memberHome();
     const g = home.guide;
     main.innerHTML = `
         <div class="page">
             <div class="greet">${LOGO_SVG}<div>
                 <h2>${greeting(home)}</h2>
-                <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}${home.points} điểm · ${esc(home.rankName)}</p>
+                <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}<a class="link" href="/profile#points">${home.points} điểm · ${esc(home.rankName)}</a></p>
             </div></div>
-            ${profilePrompt(home, areas)}
+            ${profilePrompt(home)}
             <div class="homegrid">
                 ${phraseCard(home.phrase)}
                 <div class="card">
@@ -109,7 +110,7 @@ async function renderMember() {
             </div>
         </div>`;
     bindSpeak();
-    bindPrompt();
+    bindPrompt(home);
 }
 
 /** "Dành cho bạn": posts near the user's area or suiting their stage first (chosen by the server). */
@@ -144,7 +145,12 @@ function promptHidden() {
     }
 }
 
-const areaShort = (name) => (name ? name.split("–").pop().trim() : "");
+/** "Arakawa-ku, Tokyo · 東京都荒川区" → "Arakawa-ku"; "Kita-ku, Osaka-shi, Osaka · …" → "Kita-ku, Osaka-shi". */
+const areaShort = (name) => {
+    if (!name) return "";
+    const roman = name.split(" · ")[0];
+    return roman.includes(",") ? roman.slice(0, roman.lastIndexOf(",")).trim() : roman.trim();
+};
 
 /** Same wording as the prototype; a generic greeting until area and stage are set. */
 function greeting(home) {
@@ -161,42 +167,51 @@ function greeting(home) {
     }[home.stage];
 }
 
-function profilePrompt(home, areas) {
+function profilePrompt(home) {
     if ((home.areaName && home.stage) || promptHidden()) {
         return "";
     }
+    // Not required: a gentle reminder until the user gives an area and a stage, or presses "Để sau"
+    const where = home.stage === "PRE" ? "bạn sắp đến" : home.stage === "HOME" ? "bạn từng sống" : "bạn đang sinh sống";
     return `<div class="card promptcard" id="prompt">
-        <b>${ic("location_on")} Chọn khu vực và giai đoạn của bạn</b>
-        <p class="note">Để Senpai ơi gợi ý việc cần làm, review và sự kiện gần bạn. Chỉ lưu khu vực, không lưu địa chỉ; chỉ mình bạn thấy.</p>
-        <div class="two">
-            <div class="field"><label for="hp-area">Khu vực sinh sống</label>
-                <select class="select" id="hp-area"><option value="">Chưa chọn</option>
-                ${areas.map((a) => `<option value="${a.id}" ${a.name === home.areaName ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div>
-            <div class="field"><label for="hp-stage">Giai đoạn</label>
-                <select class="select" id="hp-stage"><option value="">Chưa chọn</option>
-                ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === home.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-        </div>
+        <b>${ic("location_on")} Mong bạn cho Senpai ơi biết khu vực ${where}</b>
+        <p class="note">Để website gợi ý đúng những gì gần bạn nhất: việc cần làm, review và sự kiện quanh đó. Chỉ lưu
+            khu vực (quận, thành phố), không lưu địa chỉ hay vị trí; chỉ mình bạn thấy.</p>
+        <div class="field"><label for="hp-stage">Giai đoạn</label>
+            <select class="select" id="hp-stage"><option value="">Chưa chọn</option>
+            ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === home.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+        <div id="hp-area-box"><p class="note">Đang tải danh sách khu vực…</p></div>
         <p class="alert error" data-error role="alert" hidden></p>
-        <div class="row"><button class="btn pri sm" type="button" data-save>Lưu</button>
+        <div class="row"><button class="btn pri sm" type="button" data-save disabled>Lưu</button>
             <button class="btn sm" type="button" data-later>Để sau</button></div>
     </div>`;
 }
 
-function bindPrompt() {
+function bindPrompt(home) {
     const prompt = document.querySelector("#prompt");
     if (!prompt) {
         return;
     }
     const save = prompt.querySelector("[data-save]");
     const error = prompt.querySelector("[data-error]");
+    let picker = null;
+    mountAreaPicker(prompt.querySelector("#hp-area-box"), { id: "hp", areaId: home.areaId, stage: home.stage })
+        .then((p) => {
+            picker = p;
+            prompt.querySelector("#hp-stage").addEventListener("change", (e) => p.setStage(e.target.value));
+            save.disabled = false;
+        })
+        .catch((err) => {
+            prompt.querySelector("#hp-area-box").innerHTML = `<p class="alert error">${esc(err.message)}</p>`;
+        });
     save.addEventListener("click", async () => {
-        const areaId = document.querySelector("#hp-area").value;
+        const areaId = picker ? picker.value() : null;
         const stage = document.querySelector("#hp-stage").value;
         save.disabled = true;                       // one save at a time
         save.textContent = "Đang lưu…";
         error.hidden = true;
         try {
-            await apiClient.updateProfile({ areaId: areaId ? Number(areaId) : null, stage: stage || null });
+            await apiClient.updateProfile({ areaId, stage: stage || null });
             await renderMember();                   // draws the page again, without the prompt
         } catch (err) {
             // The choices stay; "Lưu" can be pressed again (also when the page could not be reloaded after saving)

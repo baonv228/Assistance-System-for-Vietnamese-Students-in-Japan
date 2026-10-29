@@ -230,6 +230,7 @@ public class ReviewRepository {
             return ps;
         }, key);
         long id = key.getKey().longValue();
+        com.sep490.vsa.feature.area.AreaService.assignPlace(jdbc, id);
         jdbc.update("""
                 INSERT INTO place_history (place_id, action, actor_id, detail, created_at)
                 VALUES (?, 'CREATED', ?, JSON_OBJECT('source', 'USER', 'via', 'PIN'), ?)""", id, userId, at);

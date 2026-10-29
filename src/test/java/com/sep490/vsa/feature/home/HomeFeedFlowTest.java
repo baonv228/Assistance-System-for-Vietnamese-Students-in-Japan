@@ -82,8 +82,10 @@ class HomeFeedFlowTest {
     @BeforeEach
     void setUp() {
         word = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-        jdbc.update("INSERT INTO areas (ward, station, display_name, is_active) VALUES ('Test', 'Test', ?, TRUE)",
-                "Feed test – " + word);
+        // In Okinawa (47), where no other test puts places, for the same-prefecture order
+        jdbc.update("""
+                INSERT INTO areas (prefecture_code, ward, station, display_name, is_active)
+                VALUES ('47', 'Test', 'Test', ?, TRUE)""", "Feed test – " + word);
         area = jdbc.queryForObject("SELECT id FROM areas WHERE display_name = ?", Long.class, "Feed test – " + word);
         viewer = user("ACTIVE");
         author = user("ACTIVE");
@@ -124,6 +126,33 @@ class HomeFeedFlowTest {
         int neitherAt = ids(feed).indexOf(neither);
         assertThat(neitherAt == -1 || neitherAt > 2).isTrue();
         assertThat(feed.get(0)).containsEntry("topicName", "Nhà ở").containsEntry("title", "Feed " + word);
+    }
+
+    @Test
+    void sameAreaThenSamePrefectureThenElsewhere() throws Exception {
+        setProfile(viewer, area, null);
+        long naha = jdbc.queryForObject("SELECT id FROM areas WHERE code = '472018'", Long.class);   // Naha-shi
+        jdbc.update("""
+                INSERT INTO places (name_vi, category_id, area_id, lat, lng, source, status, created_by)
+                VALUES (?, (SELECT MIN(id) FROM place_categories), ?, 26.2, 127.7, 'TEAM', 'ACTIVE', ?)""",
+                "Feed place 2 " + word, naha, author);
+        long other = jdbc.queryForObject("SELECT id FROM places WHERE name_vi = ?", Long.class, "Feed place 2 " + word);
+        try {
+            Instant now = Instant.now();
+            long inArea = blog(author, "POST", "PUBLISHED", now.minusSeconds(3 * 3600), 0, 0, true, null);
+            long inPrefecture = blog(author, "POST", "PUBLISHED", now.minusSeconds(2 * 3600), 0, 0, false, null);
+            jdbc.update("INSERT INTO blog_place_links (blog_id, place_id) VALUES (?, ?)", inPrefecture, other);
+            long elsewhere = blog(author, "POST", "PUBLISHED", now.minusSeconds(3600), HUGE, 0, false, null);
+
+            List<Map<String, Object>> feed = forYou(viewer);
+            assertThat(ids(feed)).startsWith(inArea, inPrefecture);
+            assertThat(feed.get(0).get("reason")).isEqualTo(NEAR);
+            assertThat(feed.get(1).get("reason")).isEqualTo(HomeService.REASON_PREFECTURE);
+            assertThat(ids(feed).indexOf(elsewhere)).isNotIn(0, 1);
+        } finally {
+            jdbc.update("DELETE FROM blogs WHERE author_id = ?", author);
+            jdbc.update("DELETE FROM places WHERE id = ?", other);
+        }
     }
 
     @Test

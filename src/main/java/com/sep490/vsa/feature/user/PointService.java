@@ -10,7 +10,8 @@ import java.time.Clock;
 
 /**
  * Adds and withdraws points. Every change is a row in {@code point_transactions};
- * {@code users.points} is the running total kept in step with it.
+ * {@code users.points} is the running total kept in step with it, never below 0 (UC-U10 AF3: the history still shows
+ * every point taken).
  * Point rules (SRS 1.1 (8)): review +10, approved pin +15, best answer +5, removed content −20, and a user
  * who deletes their own content loses the points that content earned.
  */
@@ -19,6 +20,8 @@ import java.time.Clock;
 public class PointService {
 
     public static final int BEST_ANSWER = 5;
+    /** A community pin approved by a Moderator (reason PIN_APPROVED, ref PLACE), SRS point list. */
+    public static final int PIN_APPROVED = 15;
     /** A published place or event review (reason REVIEW_CREATED, ref REVIEW), SRS 1.1 (8), paid the first time it is published. */
     public static final int REVIEW = 10;
     /**
@@ -43,7 +46,7 @@ public class PointService {
         jdbc.update("""
                 INSERT INTO point_transactions (user_id, delta, reason, ref_type, ref_id, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)""", userId, delta, reason, refType, refId, Timestamp.from(clock.instant()));
-        jdbc.update("UPDATE users SET points = points + ? WHERE id = ?", delta, userId);
+        jdbc.update("UPDATE users SET points = GREATEST(0, points + ?) WHERE id = ?", delta, userId);
     }
 
     /**

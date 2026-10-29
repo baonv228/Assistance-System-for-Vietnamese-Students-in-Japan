@@ -10,11 +10,11 @@
 - ⚠️ Nhóm 9 (Học tiếng Nhật) có thể bị thu gọn theo góp ý của hội đồng. Các bảng đánh dấu **(có thể bỏ)**.
 - Chức năng mới (việc làm thêm, hỏi đáp chuyển tới senpai, đăng nhập Facebook…) **chưa** có trong bản này, chờ chốt với giảng viên.
 
-## Tổng quan (54 bảng, 1 view)
+## Tổng quan (55 bảng, 1 view)
 
 | Nhóm | Bảng |
 |---|---|
-| 1. Tài khoản | `areas`, `users`, `user_auth_providers`, `user_tokens`, `legal_documents`, `user_consents`, `user_daily_usage` |
+| 1. Tài khoản | `prefectures`, `areas`, `users`, `user_auth_providers`, `user_tokens`, `legal_documents`, `user_consents`, `user_daily_usage` |
 | 2. Tag định danh | `tag_types`, `tag_proof_types`, `tag_requests`, `user_tags` |
 | 3. Điểm và cấp bậc | `ranks`, `point_transactions` |
 | 4. Media | `media` |
@@ -31,16 +31,34 @@
 
 ## 1. Tài khoản
 
-### `areas` – Khu vực (phường – ga)
-Danh sách cố định cho người dùng chọn. Không bao giờ lưu địa chỉ nhà.
+### `prefectures` – Tỉnh (V10)
+47 tỉnh của Nhật. Dữ liệu: Geolonia 住所データ (CC BY 4.0, từ アドレス・ベース・レジストリ của デジタル庁).
+
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| code | CHAR(2) | PK | Mã tỉnh ("13" = Tokyo) |
+| name_ja | VARCHAR(10) | NN | 東京都 |
+| name_kana | VARCHAR(20) | NN | トウキョウト |
+| name_en | VARCHAR(20) | NN | Tokyo |
+| lat, lng | DECIMAL(9,6) | NN | Điểm đại diện |
+
+### `areas` – Khu vực sinh sống (thành phố / quận, V10)
+Toàn Nhật Bản: mỗi 市区町村, 20 thành phố chỉ định (政令指定都市) chia tới quận (区); 1.892 dòng (không gồm 6 làng
+vùng Lãnh thổ phương Bắc). Người dùng chỉ lưu `area_id`, không bao giờ lưu địa chỉ hay tọa độ. Không còn ga tàu.
 
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
 | id | BIGINT | PK | |
-| ward | VARCHAR(80) | NN | Phường, quận (Arakawa) |
-| station | VARCHAR(80) | NN | Ga (Nippori) |
-| display_name | VARCHAR(160) | NN, UQ | "Arakawa – Nippori" |
-| sort_order | INT | NN, mặc định 0 | Thứ tự hiển thị |
+| code | CHAR(6) | UQ, NULL được | Mã địa phương chuẩn 6 số ("131181" = Arakawa-ku) |
+| prefecture_code | CHAR(2) | FK → prefectures, NULL được | |
+| ward | VARCHAR(80) | NN | Tên romaji (Arakawa-ku) |
+| station | VARCHAR(80) | NULL được | Không dùng nữa (khu vực mẫu cũ) |
+| display_name | VARCHAR(160) | NN, UQ | "Arakawa-ku, Tokyo · 東京都荒川区" |
+| name_ja | VARCHAR(40) | | 荒川区 / 大阪市北区 |
+| name_kana | VARCHAR(80) | | アラカワク |
+| name_en | VARCHAR(80) | | Arakawa-ku / Kita-ku, Osaka-shi |
+| lat, lng | DECIMAL(9,6) | | Điểm đại diện: mở bản đồ ở đó, gợi ý khu vực từ một điểm |
+| sort_order | INT | NN, mặc định 0 | Thứ tự chính thức |
 | is_active | BOOLEAN | NN, mặc định true | |
 
 ### `users` – Người dùng (mọi vai trò)

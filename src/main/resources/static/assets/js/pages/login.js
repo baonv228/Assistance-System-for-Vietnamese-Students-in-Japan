@@ -64,12 +64,21 @@ const params = new URLSearchParams(window.location.search);
 const notices = {
     deleted: ["Tài khoản của bạn đã được xóa.", "success"],
     registered: ["Đăng ký thành công. Hãy đăng nhập bằng email và mật khẩu vừa tạo.", "success"],
+    reset: ["Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.", "success"],
     social: ["Đăng nhập bằng Google hoặc Facebook không thành công. Vui lòng thử lại.", "error"],
     social_no_email: ["Tài khoản mạng xã hội không chia sẻ email. Hãy cho phép chia sẻ email hoặc đăng ký bằng email.", "error"],
     account_locked: ["Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên.", "error"]
 };
-const notice = params.has("registered") ? notices.registered
+const notice = params.has("registered") ? notices.registered : params.has("reset") ? notices.reset
     : params.has("deleted") ? notices.deleted : notices[params.get("error")];
+// "Quên mật khẩu?" takes the email typed so far to the next page (in this tab's storage, never in the address)
+document.querySelector("#forgot").addEventListener("click", () => {
+    try {
+        sessionStorage.setItem("asvsj.forgotEmail", form.email.value.trim());
+    } catch {
+        // storage blocked: the email is typed again
+    }
+});
 if (notice) {
     showAlert(alertBox, notice[0], notice[1]);
 }

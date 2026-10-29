@@ -102,7 +102,7 @@ public class MapService {
     }
 
     /** "35.7281,139.7707,Ga Nippori" → the fixed test position; empty or invalid → null (real location). */
-    static DevLocation parseDevLocation(String value) {
+    public static DevLocation parseDevLocation(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }

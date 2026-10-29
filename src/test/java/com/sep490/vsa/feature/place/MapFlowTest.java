@@ -142,6 +142,24 @@ class MapFlowTest {
     }
 
     @Test
+    void reviewsOfLockedAccountsAreHidden() throws Exception {
+        jdbc.update("UPDATE users SET status = 'LOCKED' WHERE id = ?", viewer);     // wrote review2 (4 stars)
+        mvc.perform(get("/api/map").session(session(owner)))
+                .andExpect(jsonPath("$.data.places[?(@.id == " + place + ")].reviewCount", contains(1)))
+                .andExpect(jsonPath("$.data.places[?(@.id == " + place + ")].rating", contains(5.0)));
+        mvc.perform(get("/api/map/places/" + place)).andExpect(jsonPath("$.data.reviewCount").value(1));
+        mvc.perform(get("/api/map/places/" + place + "/reviews"))
+                .andExpect(jsonPath("$.data.items[*].id", contains((int) review1)))
+                .andExpect(jsonPath("$.data.total").value(1));
+        mvc.perform(withCsrf(post("/api/reviews/" + review2 + "/like").session(session(owner))))
+                .andExpect(status().isNotFound());
+
+        // Unlocked: it shows again, nothing was deleted
+        jdbc.update("UPDATE users SET status = 'ACTIVE' WHERE id = ?", viewer);
+        mvc.perform(get("/api/map/places/" + place + "/reviews")).andExpect(jsonPath("$.data.total").value(2));
+    }
+
+    @Test
     void likingSavingAndReportingNeedASignedInUser() throws Exception {
         mvc.perform(withCsrf(post("/api/reviews/" + review1 + "/like"))).andExpect(status().isUnauthorized());
         mvc.perform(withCsrf(post("/api/reviews/" + review1 + "/like").session(session(owner))))

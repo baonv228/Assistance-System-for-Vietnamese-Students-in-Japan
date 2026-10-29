@@ -36,6 +36,7 @@ import static com.sep490.vsa.feature.auth.AuthRules.normalizeEmail;
 public class AuthService {
 
     private static final String WRONG_CREDENTIALS = "Email hoặc mật khẩu không đúng.";
+    static final String CURRENT_PASSWORD_WRONG = "Mật khẩu hiện tại không đúng.";
     private static final String ACCOUNT_LOCKED = "Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên.";
     private static final String SOCIAL_ONLY =
             "Tài khoản này được tạo bằng Google hoặc Facebook. Hãy đăng nhập bằng nút tương ứng.";
@@ -80,6 +81,28 @@ public class AuthService {
             throw wrongPassword(user.getId(), now);
         }
         return signIn(user.getId(), now);
+    }
+
+    /**
+     * "Đổi mật khẩu" (UC-U06): the current password of a signed-in user. A wrong one is counted like a wrong password
+     * at login (lock_attempts in a row lock the account for lock_minutes) and answers 400 "Mật khẩu hiện tại không
+     * đúng." on the field currentPassword, never 401 (the page would think the session ended).
+     */
+    public void checkCurrentPassword(long userId, String password) {
+        Instant now = clock.instant();
+        User user = users.findById(userId).orElseThrow(() -> ApiException.unauthorized("Bạn chưa đăng nhập."));
+        if (user.isLockedAt(now)) {
+            throw lockedUntil(user.getLockedUntil(), now);
+        }
+        if (passwordEncoder.matches(password == null ? "" : password, user.getPasswordHash())) {
+            return;
+        }
+        ApiException wrong = wrongPassword(userId, now);
+        if (wrong.getStatus() != HttpStatus.UNAUTHORIZED) {
+            throw wrong;                                    // the account is locked now
+        }
+        String message = wrong.getMessage().replace(WRONG_CREDENTIALS, CURRENT_PASSWORD_WRONG);
+        throw ApiException.invalid(message, java.util.Map.of("currentPassword", message));
     }
 
     @Transactional(readOnly = true)

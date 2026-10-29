@@ -190,7 +190,7 @@ public class ReviewService {
     public Saved update(AppUserPrincipal me, long reviewId, UpdateRequest request, List<MultipartFile> images,
                         MultipartFile video) {
         Account account = member(me);
-        editable(account, reviewId, false);
+        ReviewRow before = editable(account, reviewId, false);
         UpdateRequest r = request == null ? new UpdateRequest(null, null, null) : request;
         Map<String, String> errors = new LinkedHashMap<>();
         String content = clean(r.rating(), r.content(), errors);
@@ -203,6 +203,12 @@ public class ReviewService {
         List<Prepared> files = prepare(imageFiles, videoFile, (int) keptImages + imageFiles.size(),
                 (int) keptVideos + (videoFile == null ? 0 : 1), errors);
         throwIf(errors);
+        // UC-U17 AF3: nothing changed (same stars, text, files in the same order) → nothing saved, no "đã sửa"
+        List<Long> keptIds = keep.stream().map(AttachedMedia::id).toList();
+        if (files.isEmpty() && r.rating() == before.rating() && content.equals(before.content())
+                && keptIds.equals(attached.stream().map(AttachedMedia::id).toList())) {
+            return new Saved(reviewId, before.placeId(), before.status(), false);
+        }
         boolean countVideo = videoFile != null && attached.stream().noneMatch(m -> "VIDEO".equals(m.type()));
         return tx.execute(s -> saveEdit(account, reviewId, r.rating(), content, keep, files, countVideo));
     }
