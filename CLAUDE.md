@@ -94,7 +94,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
   "/", no "://", backslash, space or control character, same origin, not /login, /register or /complete-signup); staff
   and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. Pages Spring Security guards
-  (`/profile`, `/saved`, `/notifications`) still send a guest to plain `/login`.
+  (`/profile`, `/saved`, `/notifications`) still send a guest to plain `/login`. Sessions last 14 days without activity
+  and the cookie survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env
+  `SESSION_TIMEOUT`, "cần chốt").
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`
   (`currentUser().catch(() => null)`), so an early Enter never puts the email or password in the URL.
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
