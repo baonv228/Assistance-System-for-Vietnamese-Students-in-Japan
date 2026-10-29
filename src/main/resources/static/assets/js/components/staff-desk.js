@@ -18,7 +18,7 @@ export const DESKS = {
             ["closed", "storefront", "Báo cáo đóng cửa", "UC-M05", "/moderator/closed"],
             ["pins", "add_location_alt", "Duyệt ghim mới", "UC-M06", "/moderator/pins"],
             ["events", "celebration", "Sự kiện", "UC-M07", "/moderator/events"],
-            ["guide", "menu_book", "Cẩm nang", "UC-M08"],
+            ["guide", "menu_book", "Cẩm nang", "UC-M08", "/moderator/guides"],
             ["topics", "sell", "Chủ đề blog", "UC-M09"],
             ["places", "location_on", "Địa điểm", "UC-M10 – UC-M13", "/moderator/places"],
             ["merge", "merge", "Gộp trùng lặp", "UC-M14", "/moderator/merge"]

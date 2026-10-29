@@ -74,7 +74,18 @@ async function request(path, options = {}, retried = false) {
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const apiClient = {
-    getGuides: () => request("/guides"),
+    getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
+    guideTopics: () => request("/guides/topics"),
+    guideSubjects: () => request("/guides/subjects"),
+    guidePreparation: (id) => request(`/guides/${id}/preparation`),
+    checkGuideTask: (id, taskId, completed) => request(`/guides/${id}/preparation/${taskId}`, { method: "PUT", body: JSON.stringify({ completed }) }),
+    moderatorGuide: (id) => request(`/moderator/guides/${id}`),
+    deleteGuide: (id) => request(`/moderator/guides/${id}`, { method: "DELETE" }),
+    updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),
+    browseGuides: (params = {}) => request(`/guides/browse?${toQuery(params)}`),
+    moderatorGuides: (params = {}) => request(`/moderator/guides/browse?${toQuery(params)}`),
+    guide: (id) => request(`/guides/${id}`),
+    createGuide: (body) => request("/moderator/guides", { method: "POST", body }),
     getScholarships: () => request("/scholarships"),
 
     // Auth

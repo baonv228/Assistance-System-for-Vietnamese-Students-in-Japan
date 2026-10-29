@@ -3,18 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Huong dan - VSA Japan</title>
-    <link rel="stylesheet" href="/assets/css/main.css">
+    <title>Cẩm nang – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/guides.css">
 </head>
-<body>
-<div data-component="navbar"></div>
-<main class="shell">
-    <section class="page-heading">
-        <p class="eyebrow">Knowledge base</p>
-        <h1>Huong dan sinh vien</h1>
-    </section>
-    <section id="guide-list" class="list"></section>
+<body class="app">
+<main class="page guide-page guide-browse">
+<header class="page-heading"><h1>Cẩm nang sinh viên</h1><p>Hướng dẫn thiết thực cho việc học tập và cuộc sống tại Nhật Bản.</p></header>
+<p id="browse-error" class="alert error" role="alert" hidden></p>
+<section id="browse-listing">
+<form id="browse-filters" class="guide-browse-filters" role="search">
+<div class="guide-search-row"><label class="sr-only" for="guide-search">Tìm cẩm nang</label><input id="guide-search" type="search" name="q" maxlength="200" placeholder="Tìm theo tiêu đề, chủ đề hoặc từ khóa..."><button class="btn pri" type="submit">Tìm kiếm</button></div>
+<input type="hidden" name="topicCode" value="">
+<div id="browse-topics" class="guide-topic-pills" role="group" aria-label="Lọc theo chủ đề"></div>
+<div class="guide-stage-row"><label for="guide-stage">Giai đoạn</label><select id="guide-stage" name="category"><option value="">Tất cả giai đoạn</option></select><a class="link" href="/guides">Xóa bộ lọc</a></div>
+</form>
+<div class="guide-results-head"><p id="browse-count" class="note" role="status" aria-live="polite">Đang tải cẩm nang…</p><label class="sr-only" for="guide-sort">Sắp xếp cẩm nang</label><select id="guide-sort" name="sort" form="browse-filters" aria-label="Sắp xếp cẩm nang"><option value="NEWEST">Mới nhất</option><option value="OLDEST">Cũ nhất</option><option value="TITLE">Tiêu đề A–Z</option></select></div>
+<div id="browse-list" class="guide-grid"></div>
+<nav id="browse-pager" class="guide-actions" aria-label="Phân trang cẩm nang" hidden></nav>
+</section>
+<article id="browse-detail" class="card" hidden></article>
+<a id="browse-back" class="btn" href="/guides" hidden>← Quay lại kết quả tìm kiếm</a>
 </main>
-<script type="module" src="/assets/js/pages/guides.js"></script>
-</body>
-</html>
+<script type="module" src="/assets/js/pages/guide-browse.js"></script>
+</body></html>

@@ -44,9 +44,11 @@ public final class CleanUrls {
         PAGES.put("/blog/new", "/pages/blog-write.html");
         PAGES.put("/qa", "/pages/qa.html");
         PAGES.put("/qa/ask", "/pages/qa-ask.html");
+        PAGES.put("/moderator/guides", "/pages/moderator/guides.html");
         PAGES.put("/forgot-password", "/pages/forgot-password.html");
         PAGES.put("/reset-password", "/pages/reset-password.html");
         PAGES.put("/events", "/pages/events.html");
+
         PAGES.put("/moderator", "/pages/moderator/index.html");
         PAGES.put("/moderator/events", "/pages/moderator/events.html");
         PAGES.put("/moderator/pins", "/pages/moderator/pins.html");
@@ -63,6 +65,7 @@ public final class CleanUrls {
     }
 
     private static final Map<String, String> DETAIL_PAGES = Map.of(
+            "/guides", "/pages/guides.html",
             "/blog", "/pages/blog-detail.html",
             "/qa", "/pages/qa-detail.html",
             "/events", "/pages/event-detail.html");
@@ -129,6 +132,19 @@ public final class CleanUrls {
     /** The clean address of an old .html link, with its query string, or null when the path is not an old page. */
     static String cleanAddress(String path, String query) {
         String q = query == null ? "" : query;
+        // Keep event links with a trailing slash on the canonical route, including the moderator desk.
+        if (path.matches("/(?:events(?:/\\d+(?:/review)?)?|moderator/events)/")) {
+            return withQuery(path.substring(0, path.length() - 1), q);
+        }
+        if (EVENT_REVIEW_PAGE.equals(path)) {
+            Matcher id = ID_PARAM.matcher(q);
+            if (!id.find()) {
+                return withQuery("/events", q);
+            }
+            String rest = (q.substring(0, id.start()) + "&" + q.substring(id.end())).replaceAll("^&+|&+$", "")
+                    .replaceAll("&{2,}", "&");
+            return withQuery("/events/" + id.group(1) + "/review", rest);
+        }
         for (Map.Entry<String, String> detail : DETAIL_PAGES.entrySet()) {
             if (detail.getValue().equals(path)) {
                 Matcher id = ID_PARAM.matcher(q);

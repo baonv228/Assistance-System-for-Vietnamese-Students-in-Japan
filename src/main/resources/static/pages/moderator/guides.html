@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moderator – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/guides.css">
+</head>
+<!-- Only signed-in MODERATOR accounts can open this page (SecurityConfig) -->
+<body class="app" data-role="MODERATOR">
+<template id="guide-content"><div class="guide-page">
+<a id="dashboard" href="/moderator" hidden>← Dashboard Moderator</a>
+<header class="page-heading"><h1>Cẩm nang sinh viên</h1><p>Hướng dẫn theo chủ đề dành cho sinh viên Việt Nam tại Nhật Bản.</p><button class="btn pri" id="create" hidden>Tạo cẩm nang</button></header>
+<p id="message" role="status" aria-live="polite"></p>
+<section id="listing"><form id="filters" class="guide-filters card"><label>Tìm kiếm<input name="q" maxlength="200" placeholder="Tiêu đề hoặc mô tả"></label><label>Giai đoạn<select name="category"><option value="">Tất cả giai đoạn</option></select></label><label>Chủ đề<select name="topicCode"><option value="">Tất cả chủ đề</option></select></label><label>Trạng thái<select name="status"><option value="ALL">Tất cả</option><option value="DRAFT">Nháp</option><option value="PUBLISHED">Công khai</option></select></label><button class="btn">Tìm kiếm</button></form><p id="count"></p><div id="guide-list" class="list"></div><nav id="guide-pager" class="guide-actions" aria-label="Phân trang cẩm nang" hidden></nav></section>
+<section id="editor" class="guide-editor card" hidden>
+<div class="guide-editor-head"><h2 id="editor-title">Tạo mới cẩm nang</h2><div class="guide-actions"><button type="button" class="btn" id="save-draft">Lưu nháp</button><button type="button" class="btn" id="preview">Xem trước</button><button type="button" class="btn pri" id="publish">Đăng công khai</button></div></div>
+<form id="guide-form">
+<label>Tiêu đề <span class="required">*</span><input name="title" maxlength="255" required placeholder="Nhập tiêu đề cẩm nang"></label>
+<div class="guide-compose-grid"><div>
+<label>Giai đoạn <span class="required">*</span><select name="category"><option value="">Chọn giai đoạn</option></select></label>
+<label>Chủ đề <span class="required">*</span><select name="topicCode"><option value="">Chọn chủ đề</option></select></label>
+</div><div><label for="cover-input">Ảnh bìa</label><label class="guide-cover-drop" id="cover-drop" for="cover-input"><span class="ic">add_photo_alternate</span><span>Kéo thả ảnh hoặc chọn tệp</span><small>PNG, JPG tối đa 5 MB</small><input id="cover-input" type="file" accept="image/jpeg,image/png"><img id="cover-preview" alt="Xem trước ảnh bìa" hidden></label><button class="btn sm" type="button" id="remove-cover" hidden>Bỏ ảnh bìa</button></div></div>
+<label>Mô tả ngắn<textarea name="summary" maxlength="2000" placeholder="Mục đích và đối tượng áp dụng (tùy chọn)"></textarea></label>
+<label>Đường dẫn gốc<input name="sourceUrl" type="url" maxlength="2000" placeholder="https://... (không bắt buộc)"></label>
+<label for="guide-content-input">Nội dung <span class="required">*</span></label>
+<div class="guide-rich-editor"><div class="guide-toolbar" role="toolbar" aria-label="Định dạng nội dung">
+<button class="btn sm" type="button" data-format="bold" title="In đậm"><b>B</b></button><button class="btn sm" type="button" data-format="italic" title="In nghiêng"><i>I</i></button><button class="btn sm" type="button" data-format="underline" title="Gạch chân"><u>U</u></button><button class="btn sm" type="button" data-format="heading" title="Tiêu đề mục">H2</button><button class="btn sm" type="button" data-format="bullet" title="Danh sách">• Danh sách</button><button class="btn sm" type="button" data-format="number" title="Các bước">1. Các bước</button><button class="btn sm" type="button" data-format="link" title="Chèn liên kết">Liên kết</button></div>
+<textarea id="guide-content-input" name="content" maxlength="20000" placeholder="Nhập nội dung trả lời..."></textarea></div>
+<div class="guide-preparation-option"><label class="guide-check-label"><input type="checkbox" id="preparation-enabled"> Tạo danh sách chuẩn bị</label><p class="note">Thêm các việc cần làm để người đọc có thể tick và theo dõi tiến độ riêng.</p></div>
+<div class="guide-editor-tabs" role="tablist" aria-label="Soạn cẩm nang"><button type="button" class="btn on" id="editor-content-tab" role="tab" aria-selected="true" aria-controls="editor-content-panel">Nội dung cẩm nang</button><button type="button" class="btn" id="editor-preparation-tab" role="tab" aria-selected="false" aria-controls="editor-preparation-panel" hidden>Danh sách chuẩn bị</button></div>
+<section id="editor-preparation-panel" role="tabpanel" aria-labelledby="editor-preparation-tab" hidden><h3>Các việc cần làm</h3><p class="note">Tối đa 100 công việc. Mỗi việc gồm tên và ghi chú tùy chọn. Có thể đổi thứ tự bằng nút Lên/Xuống.</p><div id="preparation-rows"></div><button type="button" class="btn" id="add-preparation-task">Thêm công việc</button></section>
+<fieldset class="guide-status"><legend>Trạng thái <span class="required">*</span></legend><label><input type="radio" name="status" value="DRAFT"> Nháp</label><label><input type="radio" name="status" value="PUBLISHED" checked> Công khai</label></fieldset>
+<p class="note">Bản nháp có thể chưa hoàn thiện. Chọn đủ giai đoạn, chủ đề và nhập nội dung trước khi đăng công khai.</p>
+<div class="guide-actions"><button class="btn" type="button" id="cancel">Quay lại danh sách</button><button class="btn pri" type="submit">Lưu theo trạng thái đã chọn</button></div>
+</form></section>
+<section id="detail" hidden></section>
+</div></template>
+<script type="module" src="/assets/js/pages/guides.js"></script>
+</body>
+</html>

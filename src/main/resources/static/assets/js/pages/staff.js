@@ -3,12 +3,16 @@
 import { DESKS, mountStaffDesk } from "../components/staff-desk.js";
 import { esc, ic } from "../lib/ui.js";
 
+const guideContent = document.querySelector("#guide-content");
 const role = document.body.dataset.role;
 const desk = DESKS[role];
-const shell = await mountStaffDesk(role, "overview");
+const shell = await mountStaffDesk(role, guideContent ? "guide" : "overview");
 if (shell) {
     document.title = `${desk.title} – Senpai ơi`;
-    shell.main.innerHTML = `
+    if (guideContent) {
+        shell.main.replaceChildren(guideContent.content.cloneNode(true));
+        document.title = "Cẩm nang – Senpai ơi";
+    } else shell.main.innerHTML = `
         <div>
             <h2>${esc(desk.title)}</h2>
             <p class="note">Xin chào ${esc(shell.user.displayName)}. ${esc(desk.intro)}</p>
