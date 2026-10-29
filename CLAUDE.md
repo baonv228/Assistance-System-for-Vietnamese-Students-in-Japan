@@ -598,6 +598,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Working notes
 - `spring.flyway.out-of-order=true`: migrations are written on several branches at once (V9 here while the HandBook
   branch has V7/V8), so a database that already ran a higher version still applies a lower one merged later.
+- `common/web/ProxiedHttpsRedirect` (before Spring Security): a GET/HEAD that a proxy or tunnel marks
+  `X-Forwarded-Proto: http` answers 301 to the same page at `https://<host>` (the http port dropped), because Web Crypto,
+  the microphone and Web Push only work on https pages; requests straight to the server (localhost, the LAN address)
+  are untouched; `app.https-redirect.enabled=false` turns it off. It reads the raw header, so it works with
+  `server.forward-headers-strategy` none or native, not "framework" (that one removes the header first). The default is
+  native (env `FORWARD_HEADERS_STRATEGY`): Tomcat trusts X-Forwarded-* from this machine and private networks only, so
+  behind a tunnel or proxy the session cookie is `Secure` and redirects stay on https. The chat page also offers "Mở
+  bằng https" when it is opened at an http name on the default port. Phones need the https address (e.g. a tunnel).
 - Live updates (`common/live`): `GET /api/me/live` (any signed-in role) is a Server-Sent Events stream (`LiveEvents`,
   in memory, so one server only, "cần chốt" for several): `LiveEvents.publish(userId, type, data)` sends after the commit
   (never for a rollback) on two threads of its own; events carry ids and kinds only, never a text: `chat` (see "Tin
