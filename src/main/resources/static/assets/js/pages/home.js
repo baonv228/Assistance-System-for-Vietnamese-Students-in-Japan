@@ -2,7 +2,9 @@
 import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
+import {
+    areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo
+} from "../lib/ui.js";
 
 const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
@@ -144,13 +146,6 @@ function promptHidden() {
         return false; // storage blocked
     }
 }
-
-/** "Arakawa-ku, Tokyo · 東京都荒川区" → "Arakawa-ku"; "Kita-ku, Osaka-shi, Osaka · …" → "Kita-ku, Osaka-shi". */
-const areaShort = (name) => {
-    if (!name) return "";
-    const roman = name.split(" · ")[0];
-    return roman.includes(",") ? roman.slice(0, roman.lastIndexOf(",")).trim() : roman.trim();
-};
 
 /** Same wording as the prototype; a generic greeting until area and stage are set. */
 function greeting(home) {

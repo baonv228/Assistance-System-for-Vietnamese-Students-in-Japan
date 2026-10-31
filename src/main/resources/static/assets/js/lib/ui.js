@@ -14,6 +14,15 @@ export const LOGO_SVG = `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#C
 
 export const STAGES = { PRE: "Sắp sang Nhật", ARR: "Mới đến", LEAVE: "Sắp về nước", HOME: "Đã về nước" };
 
+/** Area display names (V10): "Arakawa-ku, Tokyo · 東京都荒川区" → "Arakawa-ku, Tokyo". */
+export const areaRoman = (name) => (name || "").split(" · ")[0].trim();
+
+/** "Arakawa-ku, Tokyo · 東京都荒川区" → "Arakawa-ku"; "Kita-ku, Osaka-shi, Osaka · …" → "Kita-ku, Osaka-shi". */
+export const areaShort = (name) => {
+    const roman = areaRoman(name);
+    return roman.includes(",") ? roman.slice(0, roman.lastIndexOf(",")).trim() : roman;
+};
+
 /**
  * The sign-in page, which sends a member back to this page afterwards ("/login?next=%2Fqa%2F7"; login.js only follows
  * a path of this site). `path` is another page of this site to go to instead, e.g. "Viết bài" → "/blog/new".
