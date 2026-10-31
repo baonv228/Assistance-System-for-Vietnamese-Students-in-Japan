@@ -286,6 +286,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 }
 .mini:hover { background: var(--surface-2); }
 .mini > .ic { color: var(--brand); }
+.mini-where .ic { font-size: 15px; vertical-align: -3px; margin-right: 2px; }
 .mini .when {
     flex: none;
     width: 52px;

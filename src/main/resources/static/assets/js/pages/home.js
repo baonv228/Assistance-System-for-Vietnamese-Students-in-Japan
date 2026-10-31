@@ -3,7 +3,7 @@ import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import {
-    areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo
+    areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
 } from "../lib/ui.js";
 
 const soon = (feature) => `/coming-soon?f=${feature}`;
@@ -89,13 +89,7 @@ async function renderMember(notice = "") {
                             <a class="btn sm" href="/guides">Mở cẩm nang</a></div>`
                         : `<p>${g.total ? "Bạn đã xong giai đoạn này." : "Cẩm nang cho giai đoạn này đang được biên soạn."}</p>`}
                 </div>
-                <div class="card">
-                    <div class="row"><span class="badge">${ic("rate_review")}${home.areaName ? `Review mới quanh ${esc(areaShort(home.areaName))}` : "Review mới"}</span></div>
-                    ${home.reviews.map((r) => `<a class="mini" href="/map">${ic(r.categoryIcon)}
-                        <span><b>${esc(r.placeName)}</b> <span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span><br>
-                        <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span></span></a>`).join("")
-                        || '<p class="note">Chưa có review mới.</p>'}
-                </div>
+                ${reviewCard(home)}
                 <div class="card">
                     <div class="row"><span class="badge lan">${ic("celebration")}Sự kiện 2 tuần tới</span><span class="grow"></span>
                         <a class="link" href="/events">Tất cả</a></div>
@@ -181,6 +175,31 @@ const postMeta = (p) => `<span class="row spot-meta">${p.topicName ? `<span clas
 
 /** The place's panel on the Map. */
 const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;
+
+/**
+ * "Review mới quanh …": 3 reviews, those in the user's area first, then its prefecture (chosen by the server). The
+ * title says "quanh" only when one of them really is in the area; each review says where its place is and opens it on
+ * the Map; "Tất cả" opens the page with every review.
+ */
+function reviewCard(home) {
+    const reviews = home.reviews;
+    const inArea = reviews.some((r) => r.near === "AREA");
+    const inPrefecture = reviews.some((r) => r.near === "PREFECTURE");
+    const title = !home.areaName ? "Review mới"
+        : inArea ? `Review mới quanh ${areaShort(home.areaName)}`
+            : inPrefecture ? `Review mới ở ${prefectureShort(home.areaName)}` : "Review mới";
+    return `<div class="card">
+        <div class="row"><span class="badge br">${ic("rate_review")}${esc(title)}</span><span class="grow"></span>
+            <a class="link" href="/reviews">Tất cả</a></div>
+        ${home.areaName && reviews.length && !inArea
+            ? `<p class="note">Chưa có review nào ở ${esc(areaShort(home.areaName))}, đây là review mới ${inPrefecture ? "trong tỉnh" : "ở nơi khác"}.</p>` : ""}
+        ${reviews.map((r) => `<a class="mini" href="${placeUrl(r.placeId)}">${ic(r.categoryIcon)}
+            <span><b>${esc(r.placeName)}</b> <span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span><br>
+            <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span><br>
+            <span class="note mini-where">${r.placeArea ? `${ic("location_on")}${esc(areaRoman(r.placeArea))} · ` : ""}${esc(timeAgo(r.createdAt))}</span></span></a>`).join("")
+            || '<p class="note">Chưa có review mới.</p>'}
+    </div>`;
+}
 
 function promptHidden() {
     try {

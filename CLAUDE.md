@@ -197,6 +197,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
   first post across the width), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
+- "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
+  newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"
+  through `GuideNext.placeId`), `placeArea` and `near` (AREA / PREFECTURE / null). The title says "quanh <khu vực>" only
+  when one review is in the area ("ở <tỉnh>" for the prefecture, else "Review mới" and a line saying so). "Tất cả" opens
+  page `/reviews` (`pages/reviews.html`, `reviews.js`, `reviews.css`; `HomeReviewService`, `GET /api/home/reviews?scope=
+  &page=`, public): every review the card draws from (`HomeReviewService.SHOWN`: published place reviews of ACTIVE
+  places by active accounts, not the viewer's own), newest first, 10 a page ("Xem thêm review", pages kept within
+  0–199), in scope AREA ("Quanh …"), PREFECTURE ("Cả tỉnh …") or ALL ("Tất cả") with each scope's count; guests and
+  members without an area get ALL only (with a hint), and without `scope` the page opens on the first scope holding
+  reviews. Each review: place (category, area, "Đã đóng cửa"), stars, "Gần bạn" / "Cùng tỉnh", "Hữu ích" (> 10 likes),
+  excerpt (240), first photo that passed the scan + count, author with tags, "Xem trên bản đồ".
 - Living areas (V10, `feature/area`: `AreaService`, `AreaController`, `AreaDtos`): all of Japan, prefecture
   (`prefectures`, 47) → municipality, the 20 designated cities split into wards (`areas`, 1,892 rows: `code` = 6-digit
   official code, `prefecture_code`, `name_ja`/`name_kana`/`name_en`, `lat`/`lng` representative point, `display_name`

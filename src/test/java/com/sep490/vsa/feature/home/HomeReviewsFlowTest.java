@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.home;
 import com.jayway.jsonpath.JsonPath;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.home.HomeDtos.GuideNext;
+import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,10 +37,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The place of "Việc tiếp theo" on the member Home and the page "Review mới" ({@code GET /api/home/reviews}), end to
- * end against MySQL ({@code asvsj_test}, like HomeFeedFlowTest). Each test makes its own area in Okinawa, where no
- * other test puts places, and dates its reviews ten days ahead, so they lead every newest-first list of the shared
- * database.
+ * "Review mới quanh …" on the member Home and the page "Review mới" ({@code GET /api/home/reviews}), end to end
+ * against MySQL ({@code asvsj_test}, like HomeFeedFlowTest). Each test makes its own area in Okinawa, where no other
+ * test puts places, and dates its reviews ten days ahead, so they lead every newest-first list of the shared database.
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:mysql://localhost:3306/asvsj_test?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
@@ -100,7 +100,38 @@ class HomeReviewsFlowTest {
         jdbc.update("DELETE FROM areas WHERE id = ?", area);
     }
 
-    // ---------------------------------------------------------------- the member Home
+    // ---------------------------------------------------------------- the Home card
+
+    @Test
+    void homeCardOpensEachPlaceAndSaysWhereItIs() {
+        long inArea = place("Quán " + word, area, "ACTIVE");
+        long inNaha = place("Naha " + word, naha, "ACTIVE");
+        long r1 = review(author, inArea, base.minusSeconds(7200));
+        long r2 = review(author, inNaha, base.minusSeconds(3600));     // newer, but the area comes first
+
+        List<ReviewItem> card = home.member(viewer).reviews();
+        assertThat(card).extracting(ReviewItem::id).startsWith(r1, r2);
+        assertThat(card.get(0)).isEqualTo(new ReviewItem(r1, inArea, "Quán " + word, card.get(0).categoryIcon(),
+                "Review test – " + word, "AREA", 4, "Review Test", "Review " + word, base.minusSeconds(7200)));
+        assertThat(card.get(0).categoryIcon()).isNotBlank();
+        assertThat(card.get(1).placeId()).isEqualTo(inNaha);
+        assertThat(card.get(1).near()).isEqualTo("PREFECTURE");
+        assertThat(card.get(1).placeArea()).startsWith("Naha-shi, Okinawa · ");
+        assertThat(card.get(1).createdAt()).isEqualTo(base.minusSeconds(3600));
+        // The third one is elsewhere (the newest of the shared database): not near
+        assertThat(card).hasSize(3);
+        assertThat(card.get(2).near()).isNull();
+    }
+
+    @Test
+    void homeCardMarksNothingNearWhenTheAreaAndPrefectureHaveNoReview() {
+        long far = place("Xa " + word, null, "ACTIVE");
+        long r = review(author, far, base);
+        List<ReviewItem> card = home.member(viewer).reviews();
+        assertThat(card.get(0).id()).isEqualTo(r);
+        assertThat(card).allSatisfy(item -> assertThat(item.near()).isNull());
+        assertThat(card.get(0).placeArea()).isNull();
+    }
 
     @Test
     void nextGuideItemCarriesItsPlace() {

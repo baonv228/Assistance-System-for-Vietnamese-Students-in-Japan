@@ -35,7 +35,13 @@ public final class HomeDtos {
     public record EventItem(Long id, String title, LocalDate startDate, LocalDate endDate, String locationName, long daysUntil) {
     }
 
-    public record ReviewItem(String placeName, String categoryIcon, int rating, String authorName, String excerpt) {
+    /**
+     * A review of "Review mới quanh …": {@code placeId} opens the place on the Map, {@code placeArea} is the area the
+     * place is in ("Arakawa-ku, Tokyo · 東京都荒川区", null outside Japan), {@code near} AREA or PREFECTURE when it is the
+     * user's area or prefecture, else null.
+     */
+    public record ReviewItem(Long id, Long placeId, String placeName, String categoryIcon, String placeArea, String near,
+                             int rating, String authorName, String excerpt, Instant createdAt) {
     }
 
     /**

@@ -280,21 +280,26 @@ public class HomeService {
     }
 
     /**
-     * "Review mới": newest reviews by other people, those in the user's area first, then its prefecture; never those of
-     * a locked or deleted account ({@link ActiveAuthors}).
+     * "Review mới": newest reviews by other people ({@link HomeReviewService#SHOWN}), those in the user's area first,
+     * then its prefecture, each saying where its place is; the page "Review mới" lists them all.
      */
     private List<ReviewItem> reviews(Long userId, Area area) {
+        Long areaId = area == null ? null : area.id();
+        String prefecture = area == null ? null : area.prefectureCode();
         return jdbc.query("""
-                SELECT p.name_vi, c.icon, r.rating, u.display_name, r.content FROM reviews r
+                SELECT r.id, p.id, p.name_vi, c.icon, pa.display_name,
+                       CASE WHEN p.area_id = ? THEN 'AREA' WHEN pa.prefecture_code = ? THEN 'PREFECTURE' END AS near,
+                       r.rating, u.display_name, r.content, r.created_at FROM reviews r
                 JOIN places p ON p.id = r.place_id JOIN place_categories c ON c.id = p.category_id
                 JOIN users u ON u.id = r.author_id LEFT JOIN areas pa ON pa.id = p.area_id
-                WHERE r.status = 'PUBLISHED' AND p.status = 'ACTIVE' AND r.author_id <> ? AND %s
+                WHERE %s AND r.author_id <> ?
                 ORDER BY CASE WHEN p.area_id = ? THEN 0 WHEN pa.prefecture_code = ? THEN 1 ELSE 2 END,
-                         r.created_at DESC LIMIT 3"""
-                        .formatted(ActiveAuthors.of("r")),
-                (rs, i) -> new ReviewItem(rs.getString(1), rs.getString(2), rs.getInt(3), rs.getString(4),
-                        excerpt(rs.getString(5), 80)),
-                userId, area == null ? null : area.id(), area == null ? null : area.prefectureCode());
+                         r.created_at DESC, r.id DESC LIMIT 3"""
+                        .formatted(HomeReviewService.SHOWN),
+                (rs, i) -> new ReviewItem(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6), rs.getInt(7), rs.getString(8), excerpt(rs.getString(9), 80),
+                        rs.getTimestamp(10).toInstant()),
+                areaId, prefecture, userId, areaId, prefecture);
     }
 
     /**

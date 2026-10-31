@@ -23,6 +23,12 @@ export const areaShort = (name) => {
     return roman.includes(",") ? roman.slice(0, roman.lastIndexOf(",")).trim() : roman;
 };
 
+/** "Arakawa-ku, Tokyo · 東京都荒川区" → "Tokyo". */
+export const prefectureShort = (name) => {
+    const roman = areaRoman(name);
+    return roman.slice(roman.lastIndexOf(",") + 1).trim();
+};
+
 /**
  * The sign-in page, which sends a member back to this page afterwards ("/login?next=%2Fqa%2F7"; login.js only follows
  * a path of this site). `path` is another page of this site to go to instead, e.g. "Viết bài" → "/blog/new".
