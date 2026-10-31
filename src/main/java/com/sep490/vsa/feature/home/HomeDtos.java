@@ -37,6 +37,27 @@ public final class HomeDtos {
     public record ReviewItem(String placeName, String categoryIcon, int rating, String authorName, String excerpt) {
     }
 
+    /**
+     * Page "Review mới" ({@code /reviews}): one page of {@code items} in {@code scope} (AREA, PREFECTURE or ALL), the
+     * scopes this viewer can pick with how many reviews each holds, and the names of the viewer's area and prefecture.
+     */
+    public record ReviewFeed(String scope, String areaName, String prefectureName, List<ScopeCount> scopes, int page,
+                             boolean hasMore, List<FeedReview> items) {
+    }
+
+    public record ScopeCount(String code, long count) {
+    }
+
+    /**
+     * A review on the "Review mới" page; {@code photoUrl} is its first photo that passed the scan (null without one),
+     * {@code mediaCount} counts its photos and videos that passed.
+     */
+    public record FeedReview(Long id, Long placeId, String placeName, String categoryName, String categoryIcon,
+                             String placeArea, boolean placeClosed, String near, int rating, String authorName,
+                             List<Tag> authorTags, String excerpt, int likeCount, Instant createdAt, String photoUrl,
+                             int mediaCount) {
+    }
+
     public record Featured(Long id, String title, String excerpt, String authorName, List<Tag> authorTags,
                            int readMinutes, String period) {
     }

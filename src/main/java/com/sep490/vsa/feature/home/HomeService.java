@@ -353,7 +353,7 @@ public class HomeService {
         return value == null ? 0 : value;
     }
 
-    private static String excerpt(String text, int max) {
+    static String excerpt(String text, int max) {
         if (text == null) {
             return "";
         }
