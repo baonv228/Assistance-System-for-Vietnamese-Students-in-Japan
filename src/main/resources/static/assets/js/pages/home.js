@@ -2,7 +2,9 @@
 import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
+import {
+    areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
+} from "../lib/ui.js";
 
 const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
@@ -62,7 +64,11 @@ const feature = (icon, title, text, href) =>
 
 // ---------------------------------------------------------------- member
 
-async function renderMember() {
+/**
+ * The member Home leads with "Dành cho bạn", then the cards that follow the user's stage and area ("Việc tiếp theo",
+ * "Review mới quanh …"), then what is the same for everyone. `notice` is shown in "Dành cho bạn" after a save.
+ */
+async function renderMember(notice = "") {
     const home = await apiClient.memberHome();
     const g = home.guide;
     main.innerHTML = `
@@ -71,19 +77,19 @@ async function renderMember() {
                 <h2>${greeting(home)}</h2>
                 <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}<a class="link" href="/profile#points">${home.points} điểm · ${esc(home.rankName)}</a></p>
             </div></div>
-            ${profilePrompt(home)}
+            ${forYouSection(home, notice)}
             <div class="homegrid">
-                ${phraseCard(home.phrase)}
                 <div class="card">
                     <div class="row"><span class="badge br">${ic("menu_book")}Việc tiếp theo</span><span class="grow"></span>
                         <span class="note">${g.done}/${g.total} · ${esc(g.stageTitle)}</span></div>
                     <div class="bar2"><span style="width:${g.total ? (g.done / g.total) * 100 : 0}%"></span></div>
                     ${g.next ? `<b>${esc(g.next.title)}</b>
                         ${g.next.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(g.next.dueNote)}</span></span>` : ""}
-                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="/map">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
+                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="${placeUrl(g.next.placeId)}">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
                             <a class="btn sm" href="/guides">Mở cẩm nang</a></div>`
                         : `<p>${g.total ? "Bạn đã xong giai đoạn này." : "Cẩm nang cho giai đoạn này đang được biên soạn."}</p>`}
                 </div>
+                ${reviewCard(home)}
                 <div class="card">
                     <div class="row"><span class="badge lan">${ic("celebration")}Sự kiện 2 tuần tới</span><span class="grow"></span>
                         <a class="link" href="/events">Tất cả</a></div>
@@ -93,49 +99,107 @@ async function renderMember() {
                             <span><b>${esc(e.title)}</b><br><span class="note">${eventWhen(e)} · ${esc(e.locationName)}</span></span></a>`;
                     }).join("") || '<p class="note">Chưa có sự kiện nào trong 2 tuần tới.</p>'}
                 </div>
-                <div class="card">
-                    <div class="row"><span class="badge">${ic("rate_review")}${home.areaName ? `Review mới quanh ${esc(areaShort(home.areaName))}` : "Review mới"}</span></div>
-                    ${home.reviews.map((r) => `<a class="mini" href="/map">${ic(r.categoryIcon)}
-                        <span><b>${esc(r.placeName)}</b> <span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span><br>
-                        <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span></span></a>`).join("")
-                        || '<p class="note">Chưa có review mới.</p>'}
-                </div>
+                ${phraseCard(home.phrase)}
                 ${home.featured ? `<a class="card blogcard" href="/blog/${home.featured.id}" style="grid-column:1/-1">
                     <span class="row"><span class="badge lan">${ic("star")}Bài nổi bật ${home.featured.period === "WEEK" ? "tuần này" : "tháng này"}</span>
                         <span class="note">${home.featured.readMinutes} phút đọc</span></span>
                     <h3>${esc(home.featured.title)}</h3>
                     <span class="note">${esc(home.featured.excerpt)}</span>
                     <span class="row">${esc(home.featured.authorName)} ${tagChips(home.featured.authorTags)}</span></a>` : ""}
-                ${forYouCard(home)}
             </div>
         </div>`;
     bindSpeak();
-    bindPrompt(home);
+    bindForYou(home);
 }
 
-/** "Dành cho bạn": posts near the user's area or suiting their stage first (chosen by the server). */
-function forYouCard(home) {
+/**
+ * "Dành cho bạn": what the suggestions are based on (area, stage, topics learnt from the user's likes, saves, comments
+ * and posts) with "Điều chỉnh" to change area and stage in place, then the posts chosen and ranked by the server, each
+ * with the reasons it was chosen. Open at once while area or stage is missing, until "Để sau".
+ */
+function forYouSection(home, notice) {
     const posts = home.forYou || [];
-    const hint = home.areaName && home.stage ? "" : `<p class="note" id="foryou-hint">${forYouHint(!promptHidden())}</p>`;
-    return `<section class="card foryou" style="grid-column:1/-1" aria-labelledby="foryou-title">
-        <div class="row"><span class="badge br" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</span><span class="grow"></span>
-            <a class="link" href="/blog">Xem thêm</a></div>
-        ${hint}
-        ${posts.map((p) => `<article class="feeditem">
-            <a class="feedtitle" href="/blog/${encodeURIComponent(p.id)}">${esc(p.title)}</a>
-            ${p.excerpt ? `<span class="note">${esc(p.excerpt)}</span>` : ""}
-            <span class="row">${p.topicName ? `<span class="badge">${esc(p.topicName)}</span>` : ""}
-                ${p.reason ? `<span class="badge lan">${ic(p.reason === "Gần khu vực của bạn" ? "location_on" : "flag")}${esc(p.reason)}</span>` : ""}
-                <span class="note">${esc(p.authorName)} · ${esc(timeAgo(p.createdAt))} ·
-                    <span aria-label="${p.likeCount} lượt thích">${ic("favorite")}${p.likeCount}</span>
-                    <span aria-label="${p.commentCount} bình luận">${ic("chat_bubble")}${p.commentCount}</span></span></span>
-        </article>`).join("") || '<p class="note">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
+    const open = !(home.areaName && home.stage) && !promptHidden();
+    const [lead, ...rest] = posts;
+    return `<section class="spot" id="foryou" aria-labelledby="foryou-title">
+        <div class="spot-head">
+            <h2 class="grow" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2>
+            <a class="btn sm" href="/blog" aria-label="Xem thêm bài viết trên Blog">Xem thêm${ic("arrow_forward")}</a>
+        </div>
+        <p class="spot-sub">Bài viết Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
+        <div class="spot-basis">
+            <span class="spot-label">Dựa trên</span>
+            ${home.areaName ? chip("location_on", areaShort(home.areaName), "Khu vực") : chip("location_off", "Chưa chọn khu vực", "", "off")}
+            ${home.stage ? chip("flag", STAGES[home.stage], "Giai đoạn") : chip("flag", "Chưa chọn giai đoạn", "", "off")}
+            ${(home.interests || []).map((t) => chip("interests", t, "Chủ đề bạn quan tâm")).join("")}
+            <button class="btn sm" type="button" data-tune aria-expanded="${open}" aria-controls="prompt">${ic("tune")}Điều chỉnh</button>
+        </div>
+        <p class="note">${home.interests?.length
+            ? "Chủ đề quan tâm được rút ra từ những bài bạn đã thích, lưu, bình luận hoặc viết trong 90 ngày qua."
+            : "Hãy thích, lưu hoặc bình luận bài viết: Senpai ơi sẽ biết bạn quan tâm chủ đề nào để gợi ý sát hơn."}</p>
+        ${notice ? `<p class="alert success" role="status">${ic("check_circle")} ${esc(notice)}</p>` : ""}
+        ${profileForm(home, open)}
+        ${lead ? `<div class="spot-posts">
+            <article class="spot-lead">${reasonChips(lead)}
+                <a class="feedtitle" href="/blog/${encodeURIComponent(lead.id)}">${esc(lead.title)}</a>
+                ${lead.excerpt ? `<p class="spot-excerpt">${esc(lead.excerpt)}</p>` : ""}
+                ${postMeta(lead)}
+            </article>
+            ${rest.map((p) => `<article class="spot-item">${reasonChips(p)}
+                <a class="feedtitle" href="/blog/${encodeURIComponent(p.id)}">${esc(p.title)}</a>
+                ${postMeta(p)}
+            </article>`).join("")}
+        </div>
+        <a class="btn sm spot-more" href="/blog">Xem thêm bài viết${ic("arrow_forward")}</a>`
+        : '<p class="spot-empty">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
     </section>`;
 }
 
-/** Points to the prompt above while it is shown, otherwise to the "Tôi" page. */
-const forYouHint = (promptShown) => `${ic("tips_and_updates")}Chọn khu vực và giai đoạn ${promptShown
-    ? "ở ô phía trên" : 'ở trang <a class="link" href="/profile">Tôi</a>'} để mục này gợi ý bài hợp với bạn hơn.`;
+/** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
+const chip = (icon, text, what, extra = "") =>
+    `<span class="spot-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
+
+/** Why the server chose the post, in its ranking order: the place near the user, the stage topic, the interest. */
+const REASON_STYLE = {
+    AREA: ["location_on", ""], PREFECTURE: ["map", ""], STAGE: ["flag", "stage"], INTEREST: ["interests", "interest"]
+};
+const reasonChips = (post) => (post.reasons?.length ? `<div class="whys">${post.reasons.map((r) => {
+    const [icon, style] = REASON_STYLE[r.code] || ["auto_awesome", ""];
+    return `<span class="why ${style}">${ic(icon)}<span>${esc(r.label)}${r.detail ? ` · <b>${esc(r.detail)}</b>` : ""}</span></span>`;
+}).join("")}</div>` : "");
+
+const postMeta = (p) => `<span class="row spot-meta">${p.topicName ? `<span class="badge">${esc(p.topicName)}</span>` : ""}
+    <span class="note">${esc(p.authorName)} · ${esc(timeAgo(p.createdAt))} ·
+        <span aria-label="${p.likeCount} lượt thích">${ic("favorite")}${p.likeCount}</span>
+        <span aria-label="${p.commentCount} bình luận">${ic("chat_bubble")}${p.commentCount}</span></span></span>`;
+
+/** The place's panel on the Map. */
+const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;
+
+/**
+ * "Review mới quanh …": 3 reviews, those in the user's area first, then its prefecture (chosen by the server). The
+ * title says "quanh" only when one of them really is in the area; each review says where its place is and opens it on
+ * the Map; "Tất cả" opens the page with every review.
+ */
+function reviewCard(home) {
+    const reviews = home.reviews;
+    const inArea = reviews.some((r) => r.near === "AREA");
+    const inPrefecture = reviews.some((r) => r.near === "PREFECTURE");
+    const title = !home.areaName ? "Review mới"
+        : inArea ? `Review mới quanh ${areaShort(home.areaName)}`
+            : inPrefecture ? `Review mới ở ${prefectureShort(home.areaName)}` : "Review mới";
+    return `<div class="card">
+        <div class="row"><span class="badge br">${ic("rate_review")}${esc(title)}</span><span class="grow"></span>
+            <a class="link" href="/reviews">Tất cả</a></div>
+        ${home.areaName && reviews.length && !inArea
+            ? `<p class="note">Chưa có review nào ở ${esc(areaShort(home.areaName))}, đây là review mới ${inPrefecture ? "trong tỉnh" : "ở nơi khác"}.</p>` : ""}
+        ${reviews.map((r) => `<a class="mini" href="${placeUrl(r.placeId)}">${ic(r.categoryIcon)}
+            <span><b>${esc(r.placeName)}</b> <span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span><br>
+            <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span><br>
+            <span class="note mini-where">${r.placeArea ? `${ic("location_on")}${esc(areaRoman(r.placeArea))} · ` : ""}${esc(timeAgo(r.createdAt))}</span></span></a>`).join("")
+            || '<p class="note">Chưa có review mới.</p>'}
+    </div>`;
+}
 
 function promptHidden() {
     try {
@@ -144,13 +208,6 @@ function promptHidden() {
         return false; // storage blocked
     }
 }
-
-/** "Arakawa-ku, Tokyo · 東京都荒川区" → "Arakawa-ku"; "Kita-ku, Osaka-shi, Osaka · …" → "Kita-ku, Osaka-shi". */
-const areaShort = (name) => {
-    if (!name) return "";
-    const roman = name.split(" · ")[0];
-    return roman.includes(",") ? roman.slice(0, roman.lastIndexOf(",")).trim() : roman.trim();
-};
 
 /** Same wording as the prototype; a generic greeting until area and stage are set. */
 function greeting(home) {
@@ -167,43 +224,62 @@ function greeting(home) {
     }[home.stage];
 }
 
-function profilePrompt(home) {
-    if ((home.areaName && home.stage) || promptHidden()) {
-        return "";
-    }
-    // Not required: a gentle reminder until the user gives an area and a stage, or presses "Để sau"
+/**
+ * Area and stage, inside "Dành cho bạn". Not required: while one is missing it is a gentle reminder, open until the
+ * user saves both or presses "Để sau"; afterwards "Điều chỉnh" opens it to change them.
+ */
+function profileForm(home, open) {
+    const complete = home.areaName && home.stage;
     const where = home.stage === "PRE" ? "bạn sắp đến" : home.stage === "HOME" ? "bạn từng sống" : "bạn đang sinh sống";
-    return `<div class="card promptcard" id="prompt">
-        <b>${ic("location_on")} Mong bạn cho Senpai ơi biết khu vực ${where}</b>
-        <p class="note">Để website gợi ý đúng những gì gần bạn nhất: việc cần làm, review và sự kiện quanh đó. Chỉ lưu
-            khu vực (quận, thành phố), không lưu địa chỉ hay vị trí; chỉ mình bạn thấy.</p>
+    return `<div class="card promptcard" id="prompt" ${open ? "" : "hidden"}>
+        <b>${ic("location_on")} ${complete ? "Đổi khu vực hoặc giai đoạn của bạn" : `Mong bạn cho Senpai ơi biết khu vực ${where}`}</b>
+        <p class="note">${complete ? "Gợi ý bên dưới đổi theo ngay khi bạn lưu." : "Để website gợi ý đúng những gì gần bạn nhất: việc cần làm, review và sự kiện quanh đó."}
+            Chỉ lưu khu vực (quận, thành phố), không lưu địa chỉ hay vị trí; chỉ mình bạn thấy.</p>
         <div class="field"><label for="hp-stage">Giai đoạn</label>
             <select class="select" id="hp-stage"><option value="">Chưa chọn</option>
             ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === home.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         <div id="hp-area-box"><p class="note">Đang tải danh sách khu vực…</p></div>
         <p class="alert error" data-error role="alert" hidden></p>
         <div class="row"><button class="btn pri sm" type="button" data-save disabled>Lưu</button>
-            <button class="btn sm" type="button" data-later>Để sau</button></div>
+            <button class="btn sm" type="button" data-later>${complete ? "Đóng" : "Để sau"}</button></div>
     </div>`;
 }
 
-function bindPrompt(home) {
+function bindForYou(home) {
     const prompt = document.querySelector("#prompt");
-    if (!prompt) {
-        return;
-    }
+    const tune = document.querySelector("[data-tune]");
     const save = prompt.querySelector("[data-save]");
     const error = prompt.querySelector("[data-error]");
     let picker = null;
-    mountAreaPicker(prompt.querySelector("#hp-area-box"), { id: "hp", areaId: home.areaId, stage: home.stage })
-        .then((p) => {
-            picker = p;
-            prompt.querySelector("#hp-stage").addEventListener("change", (e) => p.setStage(e.target.value));
-            save.disabled = false;
-        })
-        .catch((err) => {
-            prompt.querySelector("#hp-area-box").innerHTML = `<p class="alert error">${esc(err.message)}</p>`;
-        });
+    let mounting = null;
+    // The picker loads the prefectures and the current area, so only once the form is shown
+    const mount = () => {
+        mounting ??= mountAreaPicker(prompt.querySelector("#hp-area-box"), { id: "hp", areaId: home.areaId, stage: home.stage })
+            .then((p) => {
+                picker = p;
+                prompt.querySelector("#hp-stage").addEventListener("change", (e) => p.setStage(e.target.value));
+                save.disabled = false;
+            })
+            .catch((err) => {
+                prompt.querySelector("#hp-area-box").innerHTML = `<p class="alert error">${esc(err.message)}</p>`;
+            });
+    };
+    const show = (visible) => {
+        prompt.hidden = !visible;
+        tune.setAttribute("aria-expanded", String(visible));
+        if (visible) {
+            mount();
+        }
+    };
+    if (!prompt.hidden) {
+        mount();
+    }
+    tune.addEventListener("click", () => {
+        show(prompt.hidden);
+        if (!prompt.hidden) {
+            prompt.querySelector("#hp-stage").focus();
+        }
+    });
     save.addEventListener("click", async () => {
         const areaId = picker ? picker.value() : null;
         const stage = document.querySelector("#hp-stage").value;
@@ -212,7 +288,9 @@ function bindPrompt(home) {
         error.hidden = true;
         try {
             await apiClient.updateProfile({ areaId, stage: stage || null });
-            await renderMember();                   // draws the page again, without the prompt
+            // Draws the page again: the suggestions, the greeting and the cards follow the new area and stage
+            await renderMember("Đã lưu. Gợi ý bên dưới đã theo khu vực và giai đoạn mới của bạn.");
+            document.querySelector("#foryou").scrollIntoView({ block: "start" });
         } catch (err) {
             // The choices stay; "Lưu" can be pressed again (also when the page could not be reloaded after saving)
             save.disabled = false;
@@ -226,16 +304,15 @@ function bindPrompt(home) {
         }
     });
     prompt.querySelector("[data-later]").addEventListener("click", () => {
-        try {
-            sessionStorage.setItem("asvsj.hidePrompt", "1");
-        } catch {
-            // storage blocked
+        if (!(home.areaName && home.stage)) {
+            try {
+                sessionStorage.setItem("asvsj.hidePrompt", "1");    // "Để sau": not opened by itself again this session
+            } catch {
+                // storage blocked
+            }
         }
-        prompt.remove();
-        const hint = document.querySelector("#foryou-hint");
-        if (hint) {
-            hint.innerHTML = forYouHint(false);
-        }
+        show(false);
+        tune.focus();
     });
 }
 

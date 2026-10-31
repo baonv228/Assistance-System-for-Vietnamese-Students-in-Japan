@@ -112,6 +112,9 @@ export const apiClient = {
     // Homepage and "Tôi"
     guestHome: () => request("/home"),
     memberHome: () => request("/me/home"),
+    // "Review mới": { scope, areaName, prefectureName, scopes: [{ code, count }], page, hasMore, items }; scope AREA,
+    // PREFECTURE or ALL (left out: the first one holding reviews)
+    homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),

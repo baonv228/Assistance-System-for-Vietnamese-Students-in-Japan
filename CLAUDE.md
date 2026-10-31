@@ -141,7 +141,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`,
   `/messages`, `/messages/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
@@ -184,11 +184,30 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
-- Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to 5 published
-  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực
-  của bạn"), then in its prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage
-  (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest). "Review mới" orders the same
-  way (area, prefecture, rest). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+- Personalized feed = the member Home, which leads with it: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
+  5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
+  30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
+  prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic
+  name), then one of the user's interests ("Chủ đề bạn quan tâm"), then likes + 2 × comments, then newest) and
+  `interests`: up to 3 topics learnt from the last 90 days (like 1, save 2, published comment 2 once per post, own
+  published post or question 3; at least 2 points; "Khác" and inactive topics left out; "cần chốt" constants in
+  `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
+  linked place or the matching topic) and `reason` = the first label. Feed preferences = the user's area + stage
+  (`PUT /api/me/profile`); no table of their own.
+  Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
+  "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
+  first post across the width), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
+- "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
+  newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"
+  through `GuideNext.placeId`), `placeArea` and `near` (AREA / PREFECTURE / null). The title says "quanh <khu vực>" only
+  when one review is in the area ("ở <tỉnh>" for the prefecture, else "Review mới" and a line saying so). "Tất cả" opens
+  page `/reviews` (`pages/reviews.html`, `reviews.js`, `reviews.css`; `HomeReviewService`, `GET /api/home/reviews?scope=
+  &page=`, public): every review the card draws from (`HomeReviewService.SHOWN`: published place reviews of ACTIVE
+  places by active accounts, not the viewer's own), newest first, 10 a page ("Xem thêm review", pages kept within
+  0–199), in scope AREA ("Quanh …"), PREFECTURE ("Cả tỉnh …") or ALL ("Tất cả") with each scope's count; guests and
+  members without an area get ALL only (with a hint), and without `scope` the page opens on the first scope holding
+  reviews. Each review: place (category, area, "Đã đóng cửa"), stars, "Gần bạn" / "Cùng tỉnh", "Hữu ích" (> 10 likes),
+  excerpt (240), first photo that passed the scan + count, author with tags, "Xem trên bản đồ".
 - Living areas (V10, `feature/area`: `AreaService`, `AreaController`, `AreaDtos`): all of Japan, prefecture
   (`prefectures`, 47) → municipality, the 20 designated cities split into wards (`areas`, 1,892 rows: `code` = 6-digit
   official code, `prefecture_code`, `name_ja`/`name_kana`/`name_en`, `lat`/`lng` representative point, `display_name`
@@ -200,8 +219,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   confirms), `/api/areas/{id}`. Picker `components/area-picker.js` (Tôi and the Home prompt): prefecture + area selects,
   quick search, "Chọn trên bản đồ" (click, or "Vị trí của tôi" through the browser's permission prompt /
   `app.map.dev-location`); only the area id is saved, the point never is. Label by stage: PRE "Khu vực bạn sắp đến",
-  HOME "Khu vực bạn từng sống", else "Khu vực bạn đang sống". Not required: the Home keeps a gentle prompt ("Mong bạn
-  cho Senpai ơi biết khu vực…") until area and stage are set or "Để sau". New places in Japan get the area nearest to
+  HOME "Khu vực bạn từng sống", else "Khu vực bạn đang sống". Not required: "Dành cho bạn" on the Home keeps a gentle
+  prompt ("Mong bạn cho Senpai ơi biết khu vực…") open until area and stage are set or "Để sau" (then "Điều chỉnh"
+  opens it; the picker loads only once it is shown). New places in Japan get the area nearest to
   their position (`AreaService.assignPlace`: OSM places, pins; Moderator create/update through `areaIdAt`, only when the
   place is moved); places in Vietnam have none.
 - Points (UC-U10): the Tôi card shows the total, the rank badge, progress, ranks with perks and the point rules;
@@ -459,7 +479,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   the camera), `sceneText` (signs, posters and menus where they hang: stored, never checked, because of パチンコ signs),
   `speech` (no song lyrics or background sound), `qrCode` (any QR code it can see, however small: the second layer
   after ZXing for photos, the only one for videos) and flags (SEXUAL, MINOR_SEXUAL, GRAPHIC_VIOLENCE, SELF_HARM,
-  GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); ID, bank and card numbers come back as "[số]". A flag or Google's
+  GAMBLING, GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); GAMBLING = gambling itself (cards, dice, mahjong… with
+  money or chips in sight, casino tables, pachinko being played, betting slips), not a game without stakes, a pachinko
+  sign in a street, lottery or horse racing (as V6); OpenAI scores no gambling in photos, so without a Gemini key a
+  gambling photo passes. ID, bank and card numbers come back as "[số]". A flag or Google's
   own refusal → REJECTED; then the banned keywords line by line and BR-22 (`ContentFilter.linkProblem`) on messageText
   and speech for the file's owner; a QR code counts as a link. The Vietnamese reason (naming the keyword,
   link or number) is stored in `moderation_scans.detail` (`reason`, engine GEMINI, V9) and put into the rejection

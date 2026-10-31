@@ -286,6 +286,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 }
 .mini:hover { background: var(--surface-2); }
 .mini > .ic { color: var(--brand); }
+.mini-where .ic { font-size: 15px; vertical-align: -3px; margin-right: 2px; }
 .mini .when {
     flex: none;
     width: 52px;
@@ -301,12 +302,91 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .mini .when b { display: block; font-size: 18px; }
 .stars { color: var(--lantern); letter-spacing: 1px; }
 .blogcard h3 { font-size: 20px; }
-.feeditem { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); min-width: 0; }
-.feeditem:first-of-type { border-top: 0; }
+
+/* "Dành cho bạn": the personal feed leads the member Home and stands out from the white cards below it */
+.spot {
+    display: grid;
+    gap: 14px;
+    padding: 22px;
+    border: 1px solid rgba(194, 69, 110, .3);
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at 100% 0, rgba(232, 163, 60, .2), transparent 42%),
+        radial-gradient(circle at 0 100%, rgba(194, 69, 110, .14), transparent 50%),
+        var(--brand-soft);
+    box-shadow: 0 14px 36px rgba(194, 69, 110, .14);
+    scroll-margin-top: 76px;                    /* below the sticky top bar */
+}
+.spot-head { display: flex; gap: 12px; align-items: center; }
+.spot-head h2 { display: flex; gap: 8px; align-items: center; font-size: 30px; font-weight: 800; }
+.spot-head h2 .ic { font-size: 32px; color: var(--brand); }
+.spot-sub { margin-top: -8px; font-size: 15px; }
+.spot-head .btn { flex: none; }
+.spot-more { display: none; }                   /* phones: "Xem thêm" under the posts, so the title keeps one line */
+.spot-basis { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.spot-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-text); }
+.spot-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 4px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 13.5px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.spot-chip .ic { font-size: 17px; color: var(--brand); }
+.spot-chip.off { border: 1px dashed var(--brand); background: transparent; color: var(--muted); font-weight: 500; }
+.spot .promptcard { background: var(--surface); }
+/* the first post across the whole width, the others two by two (an odd last one takes the whole row) */
+.spot-posts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.spot-lead, .spot-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    transition: border-color .15s, box-shadow .15s;
+}
+.spot-lead { grid-column: 1 / -1; gap: 12px; padding: 20px 22px; border-top: 4px solid var(--brand); border-radius: var(--radius); }
+.spot-item { padding: 14px 16px; border-radius: 12px; }
+.spot-item:nth-child(even):last-child { grid-column: 1 / -1; }
+.spot-item .spot-meta { margin-top: auto; }
+.spot-lead:hover, .spot-item:hover { border-color: var(--brand); box-shadow: 0 6px 18px rgba(194, 69, 110, .14); }
+.spot-lead:has(.feedtitle:focus-visible), .spot-item:has(.feedtitle:focus-visible) { box-shadow: var(--focus); }
 .feedtitle { color: inherit; font-weight: 700; font-size: 16px; text-decoration: none; overflow-wrap: anywhere; }
 .feedtitle:hover { color: var(--brand-text); text-decoration: underline; }
-.feeditem .note { overflow-wrap: anywhere; }
-.feeditem .note .ic { font-size: 15px; vertical-align: -3px; margin: 0 2px 0 4px; }
+.feedtitle:focus-visible { outline: none; }
+/* the whole post is the link to it */
+.spot .feedtitle::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.spot-lead .feedtitle { font-family: var(--font-display); font-size: 23px; line-height: 1.25; }
+.spot-excerpt { max-width: 760px; color: var(--muted); overflow-wrap: anywhere; }
+.spot-meta .note { overflow-wrap: anywhere; }
+.spot-meta .note .ic { font-size: 15px; vertical-align: -3px; margin: 0 2px 0 4px; }
+.whys { display: flex; flex-wrap: wrap; gap: 6px; }
+.why {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-text);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+.why .ic { font-size: 16px; }
+.why.stage { background: var(--lantern-soft); color: var(--lantern-text); }
+.why.interest { background: var(--ai-soft); color: var(--ink); }
+.spot-empty { padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
 
 /* ---------------- "Tôi" ---------------- */
 .ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -362,7 +442,15 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     .page { padding: 18px 16px 32px; }
     .hero-in { grid-template-columns: 1fr; padding: 28px 16px 0; gap: 18px; }
     .hero-txt { padding-bottom: 0; }
-    .homegrid, .two, .ranks { grid-template-columns: 1fr; }
+    .homegrid, .two, .ranks, .spot-posts { grid-template-columns: 1fr; }
+    .spot { padding: 16px; border-radius: 16px; }
+    .spot-head .btn { display: none; }
+    .spot .spot-more { display: inline-flex; justify-self: center; }
+    .spot-head h2 { gap: 6px; font-size: 24px; }
+    .spot-head h2 .ic { font-size: 24px; }
+    .spot-sub { font-size: 14px; }
+    .spot-lead { padding: 16px; }
+    .spot-lead .feedtitle { font-size: 20px; }
     .desk { grid-template-columns: 1fr; }
     .desk-side { border-right: 0; border-bottom: 1px solid var(--line); grid-auto-flow: column; overflow-x: auto; }
     .desk-side .side-title { display: none; }

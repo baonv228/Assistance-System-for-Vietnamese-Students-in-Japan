@@ -36,6 +36,7 @@ public final class CleanUrls {
         PAGES.put("/profile", "/pages/profile.html");
         PAGES.put("/saved", "/pages/saved.html");
         PAGES.put("/notifications", "/pages/notifications.html");
+        PAGES.put("/reviews", "/pages/reviews.html");
         PAGES.put("/messages", "/pages/messages.html");
         PAGES.put("/map", "/pages/map.html");
         PAGES.put("/coming-soon", "/pages/coming-soon.html");
