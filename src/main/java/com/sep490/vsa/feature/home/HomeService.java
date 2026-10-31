@@ -5,6 +5,7 @@ import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.home.HomeDtos.EventItem;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
+import com.sep490.vsa.feature.home.HomeDtos.FeedReason;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
 import com.sep490.vsa.feature.home.HomeDtos.GuideNext;
 import com.sep490.vsa.feature.home.HomeDtos.GuideProgress;
@@ -15,6 +16,8 @@ import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
 import com.sep490.vsa.feature.home.HomeDtos.Stats;
 import com.sep490.vsa.feature.home.HomeDtos.Tag;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +29,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -43,9 +45,17 @@ public class HomeService {
     /** "Dành cho bạn": up to 5 posts, those of the last 30 days first, older ones fill the rest. */
     private static final int FOR_YOU_SIZE = 5;
     private static final int FOR_YOU_DAYS = 30;
+    /**
+     * "Chủ đề bạn quan tâm" ("cần chốt"): topics of what the user did in the last 90 days, weighted like 1, save 2,
+     * comment 2 (once per post), own post or question 3; the 3 heaviest with at least 2 points, so one like is not enough.
+     */
+    static final int INTEREST_DAYS = 90;
+    static final int INTEREST_MIN_WEIGHT = 2;
+    static final int INTEREST_TOPICS = 3;
     static final String REASON_AREA = "Gần khu vực của bạn";
     static final String REASON_PREFECTURE = "Cùng tỉnh với bạn";
     static final String REASON_STAGE = "Hợp giai đoạn của bạn";
+    static final String REASON_INTEREST = "Chủ đề bạn quan tâm";
     /** Blog topics that suit each stage, by name so the ids do not matter. */
     static final Map<String, List<String>> STAGE_TOPICS = Map.of(
             "PRE", List.of("Thủ tục giấy tờ", "Visa và cư trú", "Nhà ở", "Học tiếng Nhật"),
@@ -55,11 +65,13 @@ public class HomeService {
             "HOME", List.of("Sau khi về nước", "Kinh nghiệm"));
 
     private final JdbcTemplate jdbc;
+    private final NamedParameterJdbcTemplate named;
     private final Clock clock;
     private final FeaturedSnapshotService featuredPosts;
 
     public HomeService(JdbcTemplate jdbc, Clock clock, FeaturedSnapshotService featuredPosts) {
         this.jdbc = jdbc;
+        this.named = new NamedParameterJdbcTemplate(jdbc);
         this.clock = clock;
         this.featuredPosts = featuredPosts;
     }
@@ -99,63 +111,138 @@ public class HomeService {
         String rankName = jdbc.query("SELECT name FROM ranks WHERE min_points <= ? ORDER BY min_points DESC LIMIT 1",
                 (rs, i) -> rs.getString(1), points).stream().findFirst().orElse("Người mới");
 
+        List<Topic> interests = interests(userId);
         return new MemberHome((String) me.get("display_name"), stage, areaId, (String) me.get("area_name"), points,
                 rankName,
                 phraseOfToday(), guide(userId, stage == null ? "ARR" : stage), events(), reviews(userId, area),
-                featured(), forYou(userId, area, stage));
+                featured(), forYou(userId, area, stage, interests), interests.stream().map(Topic::name).toList());
     }
 
     /** The user's area and its prefecture (null for an area without one). */
     private record Area(long id, String prefectureCode) {
     }
 
+    private record Topic(long id, String name) {
+    }
+
+    /**
+     * Topics the user cares about, learnt from what they did on posts and questions in the last {@link #INTEREST_DAYS}
+     * days (likes, saves, published comments, own published posts and questions), heaviest first. "Khác" and topics
+     * the Admin switched off are left out.
+     */
+    private List<Topic> interests(Long userId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("userId", userId)
+                .addValue("since", Timestamp.from(clock.instant().minus(Duration.ofDays(INTEREST_DAYS))))
+                .addValue("minWeight", INTEREST_MIN_WEIGHT)
+                .addValue("limit", INTEREST_TOPICS);
+        return named.query("""
+                SELECT t.id, t.name FROM (
+                    SELECT l.blog_id, 1 AS weight FROM blog_likes l WHERE l.user_id = :userId AND l.created_at >= :since
+                    UNION ALL
+                    SELECT s.blog_id, 2 FROM saved_blogs s WHERE s.user_id = :userId AND s.created_at >= :since
+                    UNION ALL
+                    SELECT DISTINCT c.blog_id, 2 FROM comments c
+                    WHERE c.author_id = :userId AND c.status = 'PUBLISHED' AND c.created_at >= :since
+                    UNION ALL
+                    SELECT b.id, 3 FROM blogs b
+                    WHERE b.author_id = :userId AND b.status = 'PUBLISHED' AND b.created_at >= :since
+                ) acts
+                JOIN blog_topic_links btl ON btl.blog_id = acts.blog_id
+                JOIN blog_topics t ON t.id = btl.topic_id AND t.is_active AND NOT t.is_other
+                GROUP BY t.id, t.name, t.sort_order
+                HAVING SUM(acts.weight) >= :minWeight
+                ORDER BY SUM(acts.weight) DESC, t.sort_order, t.name
+                LIMIT :limit""", params, (rs, i) -> new Topic(rs.getLong(1), rs.getString(2)));
+    }
+
     /**
      * Published posts (not questions) by other people for "Dành cho bạn", never those of a locked or deleted account
-     * ({@link ActiveAuthors}). Posts of the last 30 days come first and older ones only fill the list; within each
-     * group: linked to a place in the user's area, then in the same prefecture, then a topic that suits the user's
-     * stage, then likes + 2 × comments, then newest.
+     * ({@link ActiveAuthors}). Posts the user already liked, saved or commented on only fill the list, then posts of
+     * the last 30 days come first and older ones fill the rest; within each group: linked to a place in the user's
+     * area, then in the same prefecture, then a topic that suits the user's stage, then one of their interests, then
+     * likes + 2 × comments, then newest. Each post says which of these reasons matched and what matched.
      */
-    private List<FeedPost> forYou(Long userId, Area area, String stage) {
-        List<String> topics = stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
-        // 2 = a linked place in the user's area, 1 = in the same prefecture, 0 = elsewhere or no place
-        String near = area == null ? "0" : """
-                COALESCE((SELECT MAX(CASE WHEN shown.area_id = ? THEN 2 WHEN sa.prefecture_code = ? THEN 1 ELSE 0 END)
-                          FROM blog_place_links bpl JOIN places p ON p.id = bpl.place_id
-                          JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
-                          LEFT JOIN areas sa ON sa.id = shown.area_id
-                          WHERE bpl.blog_id = b.id AND shown.status = 'ACTIVE'), 0)""";
-        String fits = topics.isEmpty() ? "FALSE" : """
-                EXISTS (SELECT 1 FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
-                        WHERE btl.blog_id = b.id AND t.is_active AND t.name IN (%s))"""
-                .formatted(String.join(", ", Collections.nCopies(topics.size(), "?")));
-        List<Object> params = new ArrayList<>();
+    private List<FeedPost> forYou(Long userId, Area area, String stage, List<Topic> interests) {
+        List<String> stageTopics = stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("userId", userId)
+                .addValue("since", Timestamp.from(clock.instant().minus(Duration.ofDays(FOR_YOU_DAYS))))
+                .addValue("limit", FOR_YOU_SIZE);
+        // 2 = a linked place in the user's area, 1 = in the same prefecture, 0 = elsewhere or no place; and that
+        // place's name (a merged place counts as the place it was merged into)
+        String near = "0";
+        String nearPlace = "NULL";
         if (area != null) {
-            params.add(area.id());
-            params.add(area.prefectureCode());
+            params.addValue("areaId", area.id()).addValue("prefecture", area.prefectureCode());
+            String linked = """
+                    FROM blog_place_links bpl JOIN places p ON p.id = bpl.place_id
+                    JOIN places shown ON shown.id = CASE WHEN p.status = 'MERGED' THEN p.merged_into_id ELSE p.id END
+                    LEFT JOIN areas sa ON sa.id = shown.area_id
+                    WHERE bpl.blog_id = b.id AND shown.status = 'ACTIVE'""";
+            near = """
+                    COALESCE((SELECT MAX(CASE WHEN shown.area_id = :areaId THEN 2
+                                              WHEN sa.prefecture_code = :prefecture THEN 1 ELSE 0 END)
+                              %s), 0)""".formatted(linked);
+            nearPlace = """
+                    (SELECT shown.name_vi %s AND (shown.area_id = :areaId OR sa.prefecture_code = :prefecture)
+                     ORDER BY shown.area_id = :areaId DESC, shown.name_vi LIMIT 1)""".formatted(linked);
         }
-        params.addAll(topics);
-        params.add(userId);
-        params.add(Timestamp.from(clock.instant().minus(Duration.ofDays(FOR_YOU_DAYS))));
-        params.add(FOR_YOU_SIZE);
-        return jdbc.query("""
-                SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
-                       b.comment_count, b.created_at,
-                       (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
-                        WHERE btl.blog_id = b.id AND t.is_active ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)
-                         AS topic_name,
-                       %s AS near, %s AS fits
-                FROM blogs b JOIN users u ON u.id = b.author_id
-                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> ? AND %s
-                ORDER BY (b.created_at >= ?) DESC, near DESC, fits DESC, b.like_count + 2 * b.comment_count DESC,
-                         b.created_at DESC, b.id DESC
-                LIMIT ?""".formatted(near, fits, ActiveAuthors.of("b")),
-                (rs, i) -> new FeedPost(rs.getLong("id"), rs.getString("title"),
-                        excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
-                        rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
-                        rs.getTimestamp("created_at").toInstant(),
-                        rs.getInt("near") == 2 ? REASON_AREA : rs.getInt("near") == 1 ? REASON_PREFECTURE
-                                : rs.getBoolean("fits") ? REASON_STAGE : null),
-                params.toArray());
+        String stageTopic = "NULL";
+        if (!stageTopics.isEmpty()) {
+            params.addValue("stageTopics", stageTopics);
+            stageTopic = """
+                    (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                     WHERE btl.blog_id = b.id AND t.is_active AND t.name IN (:stageTopics)
+                     ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)""";
+        }
+        // The user's strongest interest among the post's topics
+        String interestTopic = "NULL";
+        if (!interests.isEmpty()) {
+            params.addValue("interestIds", interests.stream().map(Topic::id).toList());
+            interestTopic = """
+                    (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                     WHERE btl.blog_id = b.id AND t.id IN (:interestIds) ORDER BY FIELD(t.id, :interestIds) LIMIT 1)""";
+        }
+        return named.query("""
+                SELECT * FROM (
+                    SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
+                           b.comment_count, b.created_at, b.created_at >= :since AS recent,
+                           (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                            WHERE btl.blog_id = b.id AND t.is_active ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)
+                             AS topic_name,
+                           %s AS near, %s AS near_place, %s AS stage_topic, %s AS interest_topic,
+                           (EXISTS (SELECT 1 FROM blog_likes l WHERE l.blog_id = b.id AND l.user_id = :userId)
+                            OR EXISTS (SELECT 1 FROM saved_blogs s WHERE s.blog_id = b.id AND s.user_id = :userId)
+                            OR EXISTS (SELECT 1 FROM comments c WHERE c.blog_id = b.id AND c.author_id = :userId))
+                             AS engaged
+                    FROM blogs b JOIN users u ON u.id = b.author_id
+                    WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> :userId AND %s
+                ) f
+                ORDER BY engaged, recent DESC, near DESC, stage_topic IS NOT NULL DESC, interest_topic IS NOT NULL DESC,
+                         like_count + 2 * comment_count DESC, created_at DESC, id DESC
+                LIMIT :limit""".formatted(near, nearPlace, stageTopic, interestTopic, ActiveAuthors.of("b")),
+                params,
+                (rs, i) -> {
+                    List<FeedReason> reasons = new ArrayList<>();
+                    int nearRank = rs.getInt("near");
+                    if (nearRank > 0) {
+                        reasons.add(nearRank == 2
+                                ? new FeedReason("AREA", REASON_AREA, rs.getString("near_place"))
+                                : new FeedReason("PREFECTURE", REASON_PREFECTURE, rs.getString("near_place")));
+                    }
+                    if (rs.getString("stage_topic") != null) {
+                        reasons.add(new FeedReason("STAGE", REASON_STAGE, rs.getString("stage_topic")));
+                    }
+                    if (rs.getString("interest_topic") != null) {
+                        reasons.add(new FeedReason("INTEREST", REASON_INTEREST, rs.getString("interest_topic")));
+                    }
+                    return new FeedPost(rs.getLong("id"), rs.getString("title"),
+                            excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
+                            rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
+                            rs.getTimestamp("created_at").toInstant(),
+                            reasons.isEmpty() ? null : reasons.get(0).label(), List.copyOf(reasons));
+                });
     }
 
     private GuideProgress guide(Long userId, String stageCode) {

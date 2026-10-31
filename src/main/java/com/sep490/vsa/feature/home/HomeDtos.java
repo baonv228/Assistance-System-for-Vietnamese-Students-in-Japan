@@ -41,13 +41,24 @@ public final class HomeDtos {
                            int readMinutes, String period) {
     }
 
+    /** {@code interests}: the topics "Dành cho bạn" learnt from what the user liked, saved, commented on or wrote. */
     public record MemberHome(String displayName, String stage, Long areaId, String areaName, int points, String rankName,
                              Phrase phrase, GuideProgress guide, List<EventItem> events, List<ReviewItem> reviews,
-                             Featured featured, List<FeedPost> forYou) {
+                             Featured featured, List<FeedPost> forYou, List<String> interests) {
     }
 
-    /** A post chosen for the user; {@code reason} is the badge text ("Gần khu vực của bạn"…) or null. */
+    /**
+     * A post chosen for the user; {@code reason} is the first badge text ("Gần khu vực của bạn"…) or null, {@code reasons}
+     * every reason that matched, in ranking order.
+     */
     public record FeedPost(Long id, String title, String excerpt, String authorName, String topicName, int likeCount,
-                           int commentCount, Instant createdAt, String reason) {
+                           int commentCount, Instant createdAt, String reason, List<FeedReason> reasons) {
+    }
+
+    /**
+     * Why a post is in "Dành cho bạn": {@code code} AREA, PREFECTURE, STAGE or INTEREST, {@code label} the badge text,
+     * {@code detail} what matched (the linked place for AREA and PREFECTURE, the topic for STAGE and INTEREST).
+     */
+    public record FeedReason(String code, String label, String detail) {
     }
 }

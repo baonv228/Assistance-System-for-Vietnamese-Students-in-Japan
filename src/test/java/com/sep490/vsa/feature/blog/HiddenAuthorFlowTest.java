@@ -111,6 +111,8 @@ class HiddenAuthorFlowTest {
     private long admin;
     private long viewer;
     private long other;
+    /** A member in V's area who has not read X's post: V saved it, so "Dành cho bạn" no longer suggests it to V. */
+    private long reader;
 
     /** What X wrote, and what others wrote around it. */
     private record World(long x, long postX, long questionX, long postO, long cX1, long cX2, long rV, long cV,
@@ -133,7 +135,8 @@ class HiddenAuthorFlowTest {
         admin = user("ADMIN");
         viewer = user("USER");
         other = user("USER");
-        jdbc.update("UPDATE users SET area_id = ?, stage = 'ARR' WHERE id = ?", area, viewer);
+        reader = user("USER");
+        jdbc.update("UPDATE users SET area_id = ?, stage = 'ARR' WHERE id IN (?, ?)", area, viewer, reader);
         jdbc.update("""
                 INSERT INTO places (name_vi, category_id, area_id, lat, lng, source, status, created_by)
                 VALUES (?, (SELECT MIN(id) FROM place_categories), ?, 35.7, 139.7, 'TEAM', 'ACTIVE', ?)""",
@@ -358,8 +361,8 @@ class HiddenAuthorFlowTest {
         assertThat((Integer) JsonPath.read(saved, "$.data.counts.total")).isEqualTo(4);
         assertThat(savedCount()).isEqualTo(4);
 
-        // Home of that member: "Dành cho bạn" (X's post is in their area) and the featured post
-        String home = body("/api/me/home", session(viewer, "USER"));
+        // Home of a member in that area: "Dành cho bạn" (X's post is in their area) and the featured post
+        String home = body("/api/me/home", session(reader, "USER"));
         assertThat(ids(home, "$.data.forYou[*].id")).startsWith(w.postX());
         assertThat(((Number) JsonPath.read(home, "$.data.featured.id")).longValue()).isEqualTo(w.postX());
 
@@ -419,7 +422,7 @@ class HiddenAuthorFlowTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM saved_blogs WHERE user_id = ?", Long.class, viewer))
                 .isEqualTo(4);
 
-        String home = body("/api/me/home", session(viewer, "USER"));
+        String home = body("/api/me/home", session(reader, "USER"));
         assertThat(ids(home, "$.data.forYou[*].id")).doesNotContain(w.postX());
         Map<String, Object> featured = JsonPath.read(home, "$.data.featured");
         assertThat(featured == null ? null : ((Number) featured.get("id")).longValue()).isNotEqualTo(w.postX());

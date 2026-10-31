@@ -184,11 +184,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
-- Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to 5 published
-  POST blogs by others; last 30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực
-  của bạn"), then in its prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage
-  (`HomeService.STAGE_TOPICS`, by topic name), then likes + 2 × comments, then newest). "Review mới" orders the same
-  way (area, prefecture, rest). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+- Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
+  5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
+  30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
+  prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic
+  name), then one of the user's interests ("Chủ đề bạn quan tâm"), then likes + 2 × comments, then newest) and
+  `interests`: up to 3 topics learnt from the last 90 days (like 1, save 2, published comment 2 once per post, own
+  published post or question 3; at least 2 points; "Khác" and inactive topics left out; "cần chốt" constants in
+  `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
+  linked place or the matching topic) and `reason` = the first label. Feed preferences = the user's area + stage
+  (`PUT /api/me/profile`); no table of their own.
 - Living areas (V10, `feature/area`: `AreaService`, `AreaController`, `AreaDtos`): all of Japan, prefecture
   (`prefectures`, 47) → municipality, the 20 designated cities split into wards (`areas`, 1,892 rows: `code` = 6-digit
   official code, `prefecture_code`, `name_ja`/`name_kana`/`name_en`, `lat`/`lng` representative point, `display_name`
