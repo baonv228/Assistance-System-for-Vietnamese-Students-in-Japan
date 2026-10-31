@@ -94,6 +94,7 @@ public class MediaScanService {
             + " có lời bài hát), hãy thay bằng ảnh hoặc video khác";
     /** The violations the reader saw that have their own reason; the others get the generic text. */
     static final Map<Flag, String> FLAG_REASONS = Map.of(
+            Flag.GAMBLING, "ảnh hoặc video có cảnh cờ bạc, cá cược",
             Flag.GAMBLING_PROMOTION, "ảnh hoặc video quảng cáo cờ bạc, cá cược",
             Flag.SEX_SOLICITATION, "ảnh hoặc video mời chào mua bán dâm hoặc “bao nuôi”",
             Flag.DRUG_SALE, "ảnh hoặc video mua bán ma túy");
@@ -189,8 +190,8 @@ public class MediaScanService {
 
     /**
      * The reason stored with the earliest FLAG of these files that has one (the text read from a photo or video held a
-     * banned keyword, a link, a contact detail or a QR code; the reader saw gambling ads, sex solicitation or drug
-     * sales; it refused a file showing sensitive personal data; it could not read the file), for the rejection
+     * banned keyword, a link, a contact detail or a QR code; the reader saw gambling, gambling ads, sex solicitation
+     * or drug sales; it refused a file showing sensitive personal data; it could not read the file), for the rejection
      * notification. Empty when none has one (the image scanner, another violation or refusal of the reader): the
      * notification then names the Community Rules.
      */

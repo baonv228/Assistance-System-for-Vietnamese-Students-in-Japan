@@ -47,6 +47,8 @@ public interface MediaReader {
         GRAPHIC_VIOLENCE,
         /** Self-harm or suicide shown or encouraged. */
         SELF_HARM,
+        /** Gambling itself: a game played for money or chips, a casino table, pachinko being played, betting slips. */
+        GAMBLING,
         /** Advertising or inviting people to gambling or betting. */
         GAMBLING_PROMOTION,
         /** Offering or seeking paid sex, escort or "sugar dating" (bao nuôi, パパ活). */

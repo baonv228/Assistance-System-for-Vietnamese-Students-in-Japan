@@ -366,6 +366,14 @@ class GeminiMediaReaderTest {
                 .doesNotContain("False for any QR code on a poster")
                 .contains("Not a minor injury, burn or rash shown to ask for advice.")
                 .contains("Not prevention or help information (hotline posters).")
+                // Gambling itself is refused (a card game with money in sight), a game without stakes or a pachinko
+                // sign in a street is not; lottery and horse racing are left out as in the keyword list (V6)
+                .contains("GAMBLING: gambling itself shown: people playing cards, dice, mahjong, bầu cua, xóc đĩa or a"
+                        + " similar game with money, chips or other stakes in sight")
+                .contains("Not card, board or video games played without stakes (no money or chips in sight), a street"
+                        + " or building that merely includes a pachinko parlour, lottery shop or casino, lottery"
+                        + " tickets, or horse racing.")
+                .doesNotContain("not people simply playing a game")
                 .endsWith("keep the first 1500 characters.\n");
         assertThat(body.at("/systemInstruction/parts")).hasSize(1);
 
@@ -403,8 +411,8 @@ class GeminiMediaReaderTest {
         assertThat(schema.at("/properties/flags/type").asText()).isEqualTo("array");
         assertThat(schema.at("/properties/flags/items/type").asText()).isEqualTo("string");
         assertThat(schema.at("/properties/flags/items/enum")).extracting(JsonNode::asText).containsExactly(
-                "SEXUAL", "MINOR_SEXUAL", "GRAPHIC_VIOLENCE", "SELF_HARM", "GAMBLING_PROMOTION", "SEX_SOLICITATION",
-                "DRUG_SALE");
+                "SEXUAL", "MINOR_SEXUAL", "GRAPHIC_VIOLENCE", "SELF_HARM", "GAMBLING", "GAMBLING_PROMOTION",
+                "SEX_SOLICITATION", "DRUG_SALE");
         assertThat(schema.get("properties")).allSatisfy(p -> assertThat(p.get("description").asText()).isNotBlank());
         assertThat(schema.at("/properties/messageText/description").asText()).contains("lying on a table")
                 .contains("one line per sentence").contains("[số]");

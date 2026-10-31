@@ -459,7 +459,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   the camera), `sceneText` (signs, posters and menus where they hang: stored, never checked, because of パチンコ signs),
   `speech` (no song lyrics or background sound), `qrCode` (any QR code it can see, however small: the second layer
   after ZXing for photos, the only one for videos) and flags (SEXUAL, MINOR_SEXUAL, GRAPHIC_VIOLENCE, SELF_HARM,
-  GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); ID, bank and card numbers come back as "[số]". A flag or Google's
+  GAMBLING, GAMBLING_PROMOTION, SEX_SOLICITATION, DRUG_SALE); GAMBLING = gambling itself (cards, dice, mahjong… with
+  money or chips in sight, casino tables, pachinko being played, betting slips), not a game without stakes, a pachinko
+  sign in a street, lottery or horse racing (as V6); OpenAI scores no gambling in photos, so without a Gemini key a
+  gambling photo passes. ID, bank and card numbers come back as "[số]". A flag or Google's
   own refusal → REJECTED; then the banned keywords line by line and BR-22 (`ContentFilter.linkProblem`) on messageText
   and speech for the file's owner; a QR code counts as a link. The Vietnamese reason (naming the keyword,
   link or number) is stored in `moderation_scans.detail` (`reason`, engine GEMINI, V9) and put into the rejection

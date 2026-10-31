@@ -317,6 +317,14 @@ class MediaScanFlowTest {
         assertThat(detail.path("flags").get(0).asText()).isEqualTo("GAMBLING_PROMOTION");
         assertThat(detail.path("reason").asText()).isEqualTo("ảnh hoặc video quảng cáo cờ bạc, cá cược");
 
+        // Gambling itself (a card game played for money), not only its ads
+        reads(Reading.read("", "", "", false, List.of(Flag.GAMBLING), READ_DETAIL));
+        long cards = postWithPhoto(owner, "Tối thứ bảy");
+        awaitStatus(cards, "REJECTED");
+        assertThat(notification(owner, cards)).isEqualTo(rejected("Tối thứ bảy",
+                "ảnh hoặc video có cảnh cờ bạc, cá cược"));
+        assertThat(geminiDetail(cards).path("flags").get(0).asText()).isEqualTo("GAMBLING");
+
         reads(Reading.read("", "", "", false, List.of(Flag.SEX_SOLICITATION), READ_DETAIL));
         long solicitation = postWithPhoto(owner, "Làm quen");
         awaitStatus(solicitation, "REJECTED");
