@@ -85,7 +85,7 @@ async function renderMember(notice = "") {
                     <div class="bar2"><span style="width:${g.total ? (g.done / g.total) * 100 : 0}%"></span></div>
                     ${g.next ? `<b>${esc(g.next.title)}</b>
                         ${g.next.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(g.next.dueNote)}</span></span>` : ""}
-                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="/map">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
+                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="${placeUrl(g.next.placeId)}">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
                             <a class="btn sm" href="/guides">Mở cẩm nang</a></div>`
                         : `<p>${g.total ? "Bạn đã xong giai đoạn này." : "Cẩm nang cho giai đoạn này đang được biên soạn."}</p>`}
                 </div>
@@ -178,6 +178,9 @@ const postMeta = (p) => `<span class="row spot-meta">${p.topicName ? `<span clas
     <span class="note">${esc(p.authorName)} · ${esc(timeAgo(p.createdAt))} ·
         <span aria-label="${p.likeCount} lượt thích">${ic("favorite")}${p.likeCount}</span>
         <span aria-label="${p.commentCount} bình luận">${ic("chat_bubble")}${p.commentCount}</span></span></span>`;
+
+/** The place's panel on the Map. */
+const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;
 
 function promptHidden() {
     try {

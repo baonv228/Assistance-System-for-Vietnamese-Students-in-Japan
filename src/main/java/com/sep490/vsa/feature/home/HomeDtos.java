@@ -24,7 +24,8 @@ public final class HomeDtos {
     public record GuestHome(Stats stats, List<Quote> quotes, Phrase phrase) {
     }
 
-    public record GuideNext(String title, String dueNote, String placeName) {
+    /** {@code placeId} opens the place on the Map ({@code /map?place=}). */
+    public record GuideNext(String title, String dueNote, String placeName, Long placeId) {
     }
 
     public record GuideProgress(String stageCode, String stageTitle, int done, int total, GuideNext next) {

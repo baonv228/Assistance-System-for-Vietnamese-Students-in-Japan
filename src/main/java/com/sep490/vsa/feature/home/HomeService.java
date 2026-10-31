@@ -248,18 +248,19 @@ public class HomeService {
     private GuideProgress guide(Long userId, String stageCode) {
         String title = jdbc.query("SELECT title FROM guide_stages WHERE code = ?", (rs, i) -> rs.getString(1), stageCode)
                 .stream().findFirst().orElse(stageCode);
-        record Item(String title, String due, String place, boolean done) {
+        record Item(String title, String due, String place, Long placeId, boolean done) {
         }
         List<Item> items = jdbc.query("""
-                SELECT gi.title, gi.due_note, p.name_vi, (ugp.item_id IS NOT NULL) FROM guide_items gi
+                SELECT gi.title, gi.due_note, p.name_vi, p.id, (ugp.item_id IS NOT NULL) FROM guide_items gi
                 LEFT JOIN places p ON p.id = gi.place_id AND p.status = 'ACTIVE'
                 LEFT JOIN user_guide_progress ugp ON ugp.item_id = gi.id AND ugp.user_id = ?
                 WHERE gi.stage_code = ? AND gi.published = TRUE AND gi.deleted_at IS NULL ORDER BY gi.sort_order, gi.id""",
-                (rs, i) -> new Item(rs.getString(1), rs.getString(2), rs.getString(3), rs.getBoolean(4)),
+                (rs, i) -> new Item(rs.getString(1), rs.getString(2), rs.getString(3), rs.getObject(4, Long.class),
+                        rs.getBoolean(5)),
                 userId, stageCode);
         int done = (int) items.stream().filter(Item::done).count();
         GuideNext next = items.stream().filter(it -> !it.done()).findFirst()
-                .map(it -> new GuideNext(it.title(), it.due(), it.place())).orElse(null);
+                .map(it -> new GuideNext(it.title(), it.due(), it.place(), it.placeId())).orElse(null);
         return new GuideProgress(stageCode, title, done, items.size(), next);
     }
 

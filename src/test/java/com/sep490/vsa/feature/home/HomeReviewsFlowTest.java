@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.home;
 
 import com.jayway.jsonpath.JsonPath;
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.home.HomeDtos.GuideNext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,9 +36,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The page "Review mới" ({@code GET /api/home/reviews}), end to end against MySQL ({@code asvsj_test}, like
- * HomeFeedFlowTest). Each test makes its own area in Okinawa, where no other test puts places, and dates its reviews
- * ten days ahead, so they lead every newest-first list of the shared database.
+ * The place of "Việc tiếp theo" on the member Home and the page "Review mới" ({@code GET /api/home/reviews}), end to
+ * end against MySQL ({@code asvsj_test}, like HomeFeedFlowTest). Each test makes its own area in Okinawa, where no
+ * other test puts places, and dates its reviews ten days ahead, so they lead every newest-first list of the shared
+ * database.
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:mysql://localhost:3306/asvsj_test?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
@@ -53,6 +55,8 @@ class HomeReviewsFlowTest {
     private MockMvc mvc;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private HomeService home;
 
     private final List<Long> users = new ArrayList<>();
     private final List<Long> places = new ArrayList<>();
@@ -94,6 +98,22 @@ class HomeReviewsFlowTest {
             jdbc.update("DELETE FROM users WHERE id = ?", id);
         }
         jdbc.update("DELETE FROM areas WHERE id = ?", area);
+    }
+
+    // ---------------------------------------------------------------- the member Home
+
+    @Test
+    void nextGuideItemCarriesItsPlace() {
+        long inArea = place("Văn phòng " + word, area, "ACTIVE");
+        jdbc.update("""
+                INSERT INTO guide_items (stage_code, title, place_id, sort_order, published)
+                VALUES ('ARR', ?, ?, -1000000000, TRUE)""", "Đăng ký " + word, inArea);
+        try {
+            GuideNext next = home.member(viewer).guide().next();
+            assertThat(next).isEqualTo(new GuideNext("Đăng ký " + word, null, "Văn phòng " + word, inArea));
+        } finally {
+            jdbc.update("DELETE FROM guide_items WHERE title = ?", "Đăng ký " + word);
+        }
     }
 
     // ---------------------------------------------------------------- the page "Review mới"
