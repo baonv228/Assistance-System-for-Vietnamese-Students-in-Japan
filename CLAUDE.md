@@ -184,7 +184,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
-- Personalized feed = the member Home: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
+- Personalized feed = the member Home, which leads with it: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
   5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
   30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
   prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic
@@ -194,6 +194,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
   linked place or the matching topic) and `reason` = the first label. Feed preferences = the user's area + stage
   (`PUT /api/me/profile`); no table of their own.
+  Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
+  "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
+  first post across the width), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
 - Living areas (V10, `feature/area`: `AreaService`, `AreaController`, `AreaDtos`): all of Japan, prefecture
   (`prefectures`, 47) → municipality, the 20 designated cities split into wards (`areas`, 1,892 rows: `code` = 6-digit
   official code, `prefecture_code`, `name_ja`/`name_kana`/`name_en`, `lat`/`lng` representative point, `display_name`
@@ -205,8 +208,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   confirms), `/api/areas/{id}`. Picker `components/area-picker.js` (Tôi and the Home prompt): prefecture + area selects,
   quick search, "Chọn trên bản đồ" (click, or "Vị trí của tôi" through the browser's permission prompt /
   `app.map.dev-location`); only the area id is saved, the point never is. Label by stage: PRE "Khu vực bạn sắp đến",
-  HOME "Khu vực bạn từng sống", else "Khu vực bạn đang sống". Not required: the Home keeps a gentle prompt ("Mong bạn
-  cho Senpai ơi biết khu vực…") until area and stage are set or "Để sau". New places in Japan get the area nearest to
+  HOME "Khu vực bạn từng sống", else "Khu vực bạn đang sống". Not required: "Dành cho bạn" on the Home keeps a gentle
+  prompt ("Mong bạn cho Senpai ơi biết khu vực…") open until area and stage are set or "Để sau" (then "Điều chỉnh"
+  opens it; the picker loads only once it is shown). New places in Japan get the area nearest to
   their position (`AreaService.assignPlace`: OSM places, pins; Moderator create/update through `areaIdAt`, only when the
   place is moved); places in Vietnam have none.
 - Points (UC-U10): the Tôi card shows the total, the rank badge, progress, ranks with perks and the point rules;
