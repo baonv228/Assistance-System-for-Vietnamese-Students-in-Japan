@@ -92,7 +92,7 @@ async function list() {
 }
 async function detail() {
  $("#browse-listing").hidden = true;
- $("#browse-back").href = url("/guides"); $("#browse-back").hidden = false;
+ for (const back of document.querySelectorAll(".guide-back")) { back.href = url("/guides"); back.hidden = false; }
  const target = $("#browse-detail"); target.hidden = false;
  target.append(el("p", "note", "Đang tải cẩm nang…"));
  try {
