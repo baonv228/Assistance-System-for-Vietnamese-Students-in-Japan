@@ -74,6 +74,15 @@ async function request(path, options = {}, retried = false) {
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const apiClient = {
+    faqs: (params = {}) => request(`/faqs?${toQuery(params)}`),
+    faqTopics: (q = "") => request(`/faqs/topics?${toQuery({ q })}`),
+    faq: (id) => request(`/faqs/${id}`),
+    moderatorFaqs: (params = {}) => request(`/moderator/faqs?${toQuery(params)}`),
+    moderatorFaqTopics: () => request("/moderator/faqs/topics"),
+    faqSuggestions: (params = {}) => request(`/moderator/faqs/suggestions?${toQuery(params)}`),
+    moderatorFaq: (id) => request(`/moderator/faqs/${id}`),
+    saveFaq: (id, body) => id ? request(`/moderator/faqs/${id}`, { method: "PUT", body: JSON.stringify(body) }) : post("/moderator/faqs", body),
+    faqVisibility: (id, published) => request(`/moderator/faqs/${id}/visibility`, { method: "PUT", body: JSON.stringify({ published }) }),
     getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
     guideTopics: () => request("/guides/topics"),
     guideSubjects: () => request("/guides/subjects"),

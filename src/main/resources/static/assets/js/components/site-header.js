@@ -15,6 +15,7 @@ const TABS = [
     ["blog", "Blog", "forum", "/blog"],
     ["qa", "Hỏi-Đáp", "contact_support", "/qa"],
     ["guide", "Cẩm nang", "menu_book", "/guides"],
+    ["faq", "FAQ", "quiz", "/faq"],
     ["me", "Tôi", "person", "/profile"]
 ];
 
