@@ -40,6 +40,9 @@ public final class CleanUrls {
         PAGES.put("/messages", "/pages/messages.html");
         PAGES.put("/map", "/pages/map.html");
         PAGES.put("/coming-soon", "/pages/coming-soon.html");
+        PAGES.put("/faq", "/pages/faq.html");
+        PAGES.put("/moderator/faqs", "/pages/moderator/faqs.html");
+        PAGES.put("/moderator/faq-suggestions", "/pages/moderator/faqs.html");
         PAGES.put("/guides", "/pages/guides.html");
         PAGES.put("/scholarships", "/pages/scholarships.html");
         PAGES.put("/blog", "/pages/blog.html");
