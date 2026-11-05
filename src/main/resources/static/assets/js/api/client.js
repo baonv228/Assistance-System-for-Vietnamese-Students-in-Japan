@@ -259,6 +259,33 @@ export const apiClient = {
     chooseBestAnswer: (id, answerId) =>
         request(`/questions/${id}/best-answer`, { method: "PUT", body: JSON.stringify({ answerId }) }),
 
+    // "Nhật ngữ". overview: { parts: [{ kind, name, icon, count, learned, topics, categories }], member, reportReasons };
+    // phrases params: { topic, category, mine: learning|learned, q } → [PhraseCard]; marks answer
+    // { learning, learned }; flash: learned true ("Đã thuộc") / false ("Chưa thuộc")
+    phraseOverview: () => request("/phrases/overview"),
+    phrases: (params = {}) => request(`/phrases?${toQuery(params)}`),
+    phraseFlash: (id, learned) => post(`/phrases/${id}/flash`, { learned }),
+    phraseClearFlash: (id) => request(`/phrases/${id}/flash`, { method: "DELETE" }),
+    reportPhrase: (id, body) => post(`/phrases/${id}/report`, body),
+
+    // Academic Manager. phrase body: { categoryId, kind: PHRASE|VOCAB, japanese, romaji, meaningVi, topicIds,
+    // confirmDuplicate, reportCaseId } → { saved, duplicate, message }; topic body: { name, icon }
+    acadOverview: () => request("/academic/overview"),
+    acadOptions: () => request("/academic/options"),
+    acadTopics: () => request("/academic/topics"),
+    acadCreateTopic: (body) => post("/academic/topics", body),
+    acadUpdateTopic: (id, body) => request(`/academic/topics/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+    acadDeleteTopic: (id) => request(`/academic/topics/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    // params: { category, topic, kind, q, page } → { items, page, size, total }
+    acadPhrases: (params = {}) => request(`/academic/phrases?${toQuery(params)}`),
+    acadPhrase: (id) => request(`/academic/phrases/${id}`),
+    acadCreatePhrase: (body) => post("/academic/phrases", body),
+    acadUpdatePhrase: (id, body) => request(`/academic/phrases/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    acadDeletePhrase: (id) => request(`/academic/phrases/${id}`, { method: "DELETE" }),
+    // open reports on phrases → [{ caseId, priority, reportCount, createdAt, reasons, reporters, phrase }]
+    acadReports: () => request("/academic/reports"),
+    acadDismissReport: (caseId) => post(`/academic/reports/${caseId}/dismiss`),
+
     // Lễ hội và sự kiện. events: [EventCard] soonest first; event: { event, tip, album, albumCount, reviews, viewer,
     // reportReasons }
     events: (q) => request(`/events?${toQuery({ q })}`),

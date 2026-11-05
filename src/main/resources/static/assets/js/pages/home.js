@@ -4,7 +4,6 @@ import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, STAGES, stars, tagChips, timeAgo } from "../lib/ui.js";
 
-const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
 
 // ---------------------------------------------------------------- guest
@@ -43,7 +42,7 @@ function renderGuest(data) {
             </div>` : ""}
             <div class="feat">
                 ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", "/map")}
-                ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", soon("learn"))}
+                ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", "/phrases")}
                 ${feature("contact_support", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/qa")}
                 ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", "/events")}
             </div>
@@ -253,10 +252,15 @@ function phraseCard(phrase) {
         <div>${esc(phrase.meaningVi)}</div>
         <div class="row">
             <button class="btn sm" type="button" data-speak="${esc(phrase.japanese)}">${ic("volume_up")}Nghe</button>
-            <a class="btn sm" href="${soon("learn")}">${ic("school")}Học thêm chủ đề này</a>
+            <a class="btn sm" href="${phraseLink(phrase)}">${ic("school")}Học thêm chủ đề này</a>
         </div>
     </div>`;
 }
+
+/** "Học thêm chủ đề này": the phrase's topic on "Nhật ngữ", else its place category. */
+const phraseLink = (phrase) => (phrase.topicId
+    ? `/phrases?topic=${encodeURIComponent(phrase.topicId)}`
+    : `/phrases?category=${encodeURIComponent(phrase.categoryId)}`);
 
 /** Reads the Japanese phrase aloud with the browser's built-in voice (free, no API). */
 function bindSpeak() {

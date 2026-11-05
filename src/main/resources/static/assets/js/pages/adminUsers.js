@@ -39,7 +39,7 @@ async function main() {
                 <option value="">Tất cả vai trò</option>
                 <option value="USER">Người dùng (USER)</option>
                 <option value="MODERATOR">Moderator (Tối đa 3)</option>
-                <option value="ACADEMIC_MANAGER">QL Học thuật</option>
+                <option value="ACADEMIC_MANAGER">BTV tiếng Nhật</option>
                 <option value="ADMIN">Quản trị viên (ADMIN)</option>
             </select>
 
@@ -262,7 +262,7 @@ function openChangeRoleModal(user) {
     const roles = [
         { code: "USER", label: "Người dùng (Kouhai / Mentor)", note: "Quyền thành viên tiêu chuẩn" },
         { code: "MODERATOR", label: "Moderator (Tối đa 3 người)", note: "Kiểm duyệt nội dung, duyệt ghim địa điểm, xử lý khiếu nại" },
-        { code: "ACADEMIC_MANAGER", label: "Người quản lý học thuật", note: "Quản lý mẫu câu và kiểm duyệt bài luyện tập tiếng Nhật" },
+        { code: "ACADEMIC_MANAGER", label: "Biên tập viên nội dung tiếng Nhật", note: "Quản lý mẫu câu, từ vựng tiếng Nhật và xử lý báo lỗi" },
         { code: "ADMIN", label: "Quản trị viên (Admin)", note: "Toàn quyền quản trị tài khoản, cấu hình và theo dõi kiểm toán" }
     ];
 

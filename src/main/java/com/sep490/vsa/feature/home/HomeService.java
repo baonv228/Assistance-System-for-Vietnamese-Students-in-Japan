@@ -246,11 +246,13 @@ public class HomeService {
         }
         long offset = LocalDate.now(clock.withZone(JAPAN)).toEpochDay() % total;
         return jdbc.query("""
-                SELECT ph.japanese, ph.romaji, ph.meaning_vi, c.name_vi, c.icon FROM phrases ph
+                SELECT ph.japanese, ph.romaji, ph.meaning_vi, c.id, c.name_vi, c.icon,
+                       (SELECT MIN(l.topic_id) FROM phrase_topic_links l WHERE l.phrase_id = ph.id)
+                FROM phrases ph
                 JOIN place_categories c ON c.id = ph.category_id
                 WHERE ph.kind = 'PHRASE' AND ph.deleted_at IS NULL ORDER BY ph.id LIMIT 1 OFFSET ?""",
                 (rs, i) -> new Phrase(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5)), offset).stream().findFirst().orElse(null);
+                        rs.getString(5), rs.getString(6), rs.getString(7)), offset).stream().findFirst().orElse(null);
     }
 
     /** Approved, not revoked identity tags whose tag type is still active (like the Blog's tags). */

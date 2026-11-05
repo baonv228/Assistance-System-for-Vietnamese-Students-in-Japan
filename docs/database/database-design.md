@@ -22,7 +22,7 @@
 | 6. Review | `reviews`, `review_media`, `review_likes` |
 | 7. Sự kiện | `events` |
 | 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots` |
-| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks`, `practice_sentences` |
+| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks` (`practice_sentences` bỏ ở V17) |
 | 10. Kiểm duyệt và báo cáo | `reason_options`, `banned_keywords`, `moderation_scans`, `report_cases`, `reports`, `appeals` |
 | 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress` |
 | 12. Thông báo và hệ thống | `notifications`, `system_settings`, `activity_logs`, `api_usage` |
@@ -205,8 +205,8 @@ Chỉ lưu bản băm SHA-256 của mã; mã gốc chỉ nằm trong link gửi 
 | id | BIGINT | PK | |
 | user_id | BIGINT | FK → users, NN | |
 | delta | INT | NN | +10, -20… |
-| reason | VARCHAR(40) | NN | `REVIEW_CREATED`, `BLOG_CREATED`, `BEST_ANSWER`, `PRACTICE_CORRECT`, `CONTENT_REMOVED`, `CONTENT_DELETED`… |
-| ref_type | VARCHAR(20) | | `REVIEW`, `BLOG`, `COMMENT`, `PRACTICE` |
+| reason | VARCHAR(40) | NN | `REVIEW_CREATED`, `BLOG_CREATED`, `BEST_ANSWER`, `PIN_APPROVED`, `CONTENT_REMOVED`, `CONTENT_DELETED`… |
+| ref_type | VARCHAR(20) | | `REVIEW`, `BLOG`, `COMMENT`, `PLACE` |
 | ref_id | BIGINT | | |
 | created_at | DATETIME | NN | |
 
@@ -344,7 +344,7 @@ Từ V4 tìm địa điểm dùng OpenStreetMap (`category_osm_tags`); bảng n�
 | like_count | INT | NN, mặc định 0 | > 10 → "Hữu ích" |
 | created_at, updated_at | DATETIME | NN | |
 | | | CHECK (place_id hoặc event_id, đúng một) | |
-| removed_at, purge_at | DATETIME | | Thời điểm gỡ; purge_at = removed_at + 30 ngày, giữ để khiếu nại rồi xóa hẳn (áp dụng cả cho `blogs`, `comments`, `practice_sentences`) |
+| removed_at, purge_at | DATETIME | | Thời điểm gỡ; purge_at = removed_at + 30 ngày, giữ để khiếu nại rồi xóa hẳn (áp dụng cả cho `blogs`, `comments`) |
 | | | UQ(author_id, place_id), UQ(author_id, event_id, event_year) | Mỗi người một review cho một địa điểm, một review cho mỗi năm của sự kiện |
 
 ### `review_media` – Ảnh và video của review (tối đa 5 ảnh, 1 video)
@@ -493,7 +493,7 @@ Bài "Cảnh báo lừa đảo" gắn địa điểm thì ghim đó hiện dấu
 | japanese | VARCHAR(200) | NN | 袋はいりません。 |
 | romaji | VARCHAR(200) | NN | |
 | meaning_vi | VARCHAR(300) | NN | |
-| created_by | BIGINT | FK → users, NN | Người quản lý học thuật |
+| created_by | BIGINT | FK → users, NN | Biên tập viên nội dung tiếng Nhật |
 | created_at, updated_at | DATETIME | NN | |
 | deleted_at | DATETIME | | |
 
@@ -503,28 +503,14 @@ Bài "Cảnh báo lừa đảo" gắn địa điểm thì ghim đó hiện dấu
 | phrase_id | BIGINT | PK, FK → phrases |
 | topic_id | VARCHAR(20) | PK, FK → learning_topics |
 
-### `user_phrase_marks` – Đã học / Sổ tay của người dùng
+### `user_phrase_marks` – Kết quả lật thẻ của người dùng
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
 | user_id | BIGINT | PK, FK → users | |
 | phrase_id | BIGINT | PK, FK → phrases | |
-| is_learned | BOOLEAN | NN, mặc định false | |
-| in_notebook | BOOLEAN | NN, mặc định false | |
+| is_learned | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Đã thuộc" |
+| is_learning | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Chưa thuộc" (V16); không bao giờ cùng true với is_learned (`ck_mark_card`) |
 | updated_at | DATETIME | NN | |
-
-### `practice_sentences` – Câu luyện tập của người dùng
-| Cột | Kiểu | Ràng buộc | Mô tả |
-|---|---|---|---|
-| id | BIGINT | PK | |
-| phrase_id | BIGINT | FK → phrases, NN | |
-| author_id | BIGINT | FK → users, NN | |
-| content | VARCHAR(500) | NN | |
-| status | VARCHAR(20) | NN | `PUBLISHED`, `HIDDEN`, `REMOVED` |
-| is_correct | BOOLEAN | NN, mặc định false | "Câu đúng" (+3 điểm) |
-| correction | VARCHAR(500) | | Góp ý sửa |
-| reviewed_by | BIGINT | FK → users | Người quản lý học thuật |
-| reviewed_at | DATETIME | | |
-| created_at, updated_at | DATETIME | NN | |
 
 ---
 
@@ -556,7 +542,7 @@ hoặc thêm như từ khóa khác.
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
 | id | BIGINT | PK | |
-| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `PRACTICE`, `MEDIA` |
+| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `MEDIA` |
 | target_id | BIGINT | NN | |
 | engine | VARCHAR(20) | NN | `KEYWORD`, `OPENAI` |
 | result | VARCHAR(10) | NN | `PASS`, `FLAG`, `ERROR` |
@@ -567,7 +553,7 @@ hoặc thêm như từ khóa khác.
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
 | id | BIGINT | PK | |
-| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `PHRASE`, `PRACTICE`, `MESSAGE` (tin nhắn riêng, từ V14; tin mã hóa kèm `chat_report_evidence`) |
+| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `PHRASE`, `MESSAGE` (tin nhắn riêng, từ V14; tin mã hóa kèm `chat_report_evidence`) |
 | target_id | BIGINT | NN | |
 | handler_role | VARCHAR(20) | NN | `MODERATOR` hoặc `ACADEMIC_MANAGER` |
 | report_count | INT | NN, mặc định 0 | |
@@ -597,7 +583,7 @@ hoặc thêm như từ khóa khác.
 |---|---|---|---|
 | id | BIGINT | PK | |
 | user_id | BIGINT | FK → users, NN | |
-| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT`, `PRACTICE` |
+| target_type | VARCHAR(20) | NN | `REVIEW`, `BLOG`, `COMMENT` |
 | target_id | BIGINT | NN | |
 | content | VARCHAR(1000) | NN | Lý do khiếu nại |
 | status | VARCHAR(20) | NN | `PENDING`, `ACCEPTED`, `REJECTED` |

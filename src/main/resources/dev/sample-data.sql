@@ -131,7 +131,7 @@ SELECT @minh, id FROM guide_items WHERE stage_code = 'PRE' AND sort_order IN (1,
 INSERT INTO learning_topics (id, name, icon) VALUES
  ('pay', 'Thanh toán', 'payments'), ('ask', 'Hỏi đường, hỏi đồ', 'help'), ('order', 'Gọi món', 'restaurant_menu'),
  ('train', 'Đi tàu', 'train'), ('health', 'Khám bệnh, mua thuốc', 'medical_services'),
- ('paper', 'Giấy tờ, thủ tục', 'description'), ('polite', 'Lịch sự cơ bản', 'waving_hand');
+ ('paper', 'Giấy tờ, thủ tục', 'description');
 
 INSERT INTO phrases (category_id, kind, japanese, romaji, meaning_vi, created_by) VALUES
  ('konbini', 'PHRASE', '袋はいりません。', 'Fukuro wa irimasen.', 'Tôi không cần túi.', @acad),
@@ -161,9 +161,8 @@ INSERT INTO phrases (category_id, kind, japanese, romaji, meaning_vi, created_by
 
 INSERT INTO phrase_topic_links (phrase_id, topic_id)
 SELECT ph.id, t.topic FROM phrases ph JOIN (
-           SELECT '袋はいりません。' AS ja, 'pay' AS topic UNION ALL SELECT '袋はいりません。', 'polite'
- UNION ALL SELECT '温めてください。', 'polite'      UNION ALL SELECT 'カードで払えますか。', 'pay'
- UNION ALL SELECT '〜てください', 'polite'          UNION ALL SELECT '〜てください', 'ask'
+           SELECT '袋はいりません。' AS ja, 'pay' AS topic UNION ALL SELECT 'カードで払えますか。', 'pay'
+ UNION ALL SELECT '〜てください', 'ask'
  UNION ALL SELECT '注文お願いします。', 'order'     UNION ALL SELECT 'おすすめは何ですか。', 'order'
  UNION ALL SELECT 'おすすめは何ですか。', 'ask'     UNION ALL SELECT 'お会計お願いします。', 'pay'
  UNION ALL SELECT 'お会計お願いします。', 'order'   UNION ALL SELECT '〜にします', 'order'
@@ -172,10 +171,9 @@ SELECT ph.id, t.topic FROM phrases ph JOIN (
  UNION ALL SELECT '乗り換え', 'train'               UNION ALL SELECT 'これはどこにありますか。', 'ask'
  UNION ALL SELECT '割引', 'pay'                     UNION ALL SELECT '転入届を出したいです。', 'paper'
  UNION ALL SELECT '在留カード', 'paper'             UNION ALL SELECT '〜たいです', 'paper'
- UNION ALL SELECT '〜たいです', 'polite'            UNION ALL SELECT '熱があります。', 'health'
+ UNION ALL SELECT '熱があります。', 'health'
  UNION ALL SELECT 'ここが痛いです。', 'health'      UNION ALL SELECT '口座を開きたいです。', 'paper'
  UNION ALL SELECT '口座を開きたいです。', 'pay'     UNION ALL SELECT '荷物を送りたいです。', 'paper'
  UNION ALL SELECT '風邪薬はありますか。', 'health'  UNION ALL SELECT '風邪薬はありますか。', 'ask'
- UNION ALL SELECT 'もう一度お願いします。', 'polite' UNION ALL SELECT 'もう一度お願いします。', 'ask'
- UNION ALL SELECT '遅れてすみません。', 'polite'    UNION ALL SELECT '両替機', 'pay'
+ UNION ALL SELECT 'もう一度お願いします。', 'ask'  UNION ALL SELECT '両替機', 'pay'
 ) t ON t.ja = ph.japanese;

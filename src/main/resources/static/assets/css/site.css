@@ -328,14 +328,21 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .module .ic.big { font-size: 28px; color: var(--brand); }
 
 /* ---------------- responsive ---------------- */
-@media (max-width: 1180px) and (min-width: 861px) {
+/* staff accounts: the link to their own pages keeps only its icon (and title) until the header has room */
+@media (max-width: 1500px) {
+    .site-account .desk-link .who { display: none; }
+}
+@media (max-width: 1320px) and (min-width: 861px) {
     .site-top { gap: 12px; padding: 10px 16px; }
     .site-nav { gap: 0; }
     .site-nav a { padding: 8px 7px; gap: 4px; font-size: 14px; }
     .site-account .who { display: none; }
 }
-@media (max-width: 1000px) and (min-width: 861px) {
+@media (max-width: 1100px) and (min-width: 861px) {
     .site-nav a .ic { display: none; }
+}
+@media (max-width: 960px) and (min-width: 861px) {
+    .logo .logo-name { display: none; }
 }
 @media (max-width: 860px) {
     .site-top { padding: 10px 16px; }
@@ -355,7 +362,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
         padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
     }
     /* 8 tabs: small labels, and each tab is its label's width plus an equal share of the rest, so long labels
-       ("Trang chủ", "Cẩm nang") borrow room from short ones ("Học", "Tôi") and still keep a gap on a 360 px screen */
+       ("Trang chủ", "Cẩm nang") borrow room from short ones ("Blog", "Tôi") and still keep a gap on a 360 px screen */
     .tabbar a { flex: 1 1 auto; flex-direction: column; gap: 2px; padding: 6px 0; font-size: 10px; letter-spacing: -.01em; justify-content: center; min-width: 0; white-space: nowrap; }
     .tabbar a[aria-current="page"] { color: var(--brand-text); }
     body.app.has-tabbar { padding-bottom: 72px; }
@@ -367,6 +374,10 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     .desk-side { border-right: 0; border-bottom: 1px solid var(--line); grid-auto-flow: column; overflow-x: auto; }
     .desk-side .side-title { display: none; }
     .desk-main { padding: 18px 16px; }
+}
+/* the logo's name leaves room for "Tin nhắn", the bell and "Đăng xuất" on the smallest phones */
+@media (max-width: 360px) {
+    .logo .logo-name { display: none; }
 }
 /* "Xin tag định danh" (UC-U09) */
 .tag-form { display: grid; gap: 14px; }

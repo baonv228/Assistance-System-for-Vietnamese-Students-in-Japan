@@ -12,7 +12,9 @@ public final class HomeDtos {
     public record Tag(String name, String color) {
     }
 
-    public record Phrase(String japanese, String romaji, String meaningVi, String categoryName, String categoryIcon) {
+    /** {@code topicId}: one learning topic of the phrase (null when it has none), for "Học thêm chủ đề này". */
+    public record Phrase(String japanese, String romaji, String meaningVi, String categoryId, String categoryName,
+                         String categoryIcon, String topicId) {
     }
 
     public record Stats(long placesWithReviews, long reviews, long phrases) {

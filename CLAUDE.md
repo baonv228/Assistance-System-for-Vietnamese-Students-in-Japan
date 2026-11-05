@@ -496,6 +496,86 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.
 - Navbar has 8 tabs (Hỏi-Đáp after Blog); on phones the tab bar sizes each tab by its label so all fit at 320 px.
 
+## Nhật ngữ (feature/phrase)
+- The prototype's "Học" tab, named "Nhật ngữ" in the navbar (key `learn`, icon `translate`; was "Mẫu câu & Từ vựng").
+  Page `/phrases` (`pages/phrases.html`, `assets/js/pages/phrases.js`, `assets/css/phrases.css`); the view is in the
+  address: none = "Chủ đề", `?by=category` = "Địa điểm", `?topic=pay&kind=VOCAB`, `?category=konbini&kind=PHRASE`,
+  `?view=learning|learned` (the Member's own lists, guests go to sign in), `&status=`, `?q=` (search). Old
+  `?view=favorites` / `?view=notebook` links open the start page.
+  Home's "Học thêm chủ đề này" opens the phrase's topic (`HomeDtos.Phrase.topicId`, else its category). Tables:
+  `phrases` (kind PHRASE "Mẫu câu" / VOCAB "Từ vựng", one place
+  category), `learning_topics`, `phrase_topic_links`, `user_phrase_marks` (`is_learning` "Chưa thuộc", `is_learned` "Đã
+  thuộc", never both, CHECK `ck_mark_card`, V16; the old `in_notebook` / `is_favorite` column was dropped in V17).
+  Entries are written by the
+  Academic Manager (sample data in `dev/sample-data.sql`: six topics; "Lịch sự cơ bản" was dropped by the team and
+  `DevDataSeeder.dropPoliteTopic` removes it from databases that loaded it before).
+- Removed (user decisions): practice sentences ("Câu luyện tập": no Member form, no Academic Manager pages, no API;
+  V17 drops `practice_sentences` and the PRACTICE target of `ck_scan_target`, `ck_case_target`, `ck_appeal_target`,
+  after deleting the practice rows that only development databases held, points taken back), the
+  "Sổ tay" review deck (no review schedule, levels or suggestions: a flash card answer is simply kept) and "Yêu thích" /
+  "Đã lưu" (no heart, no list, no API; "Nhật ngữ đã lưu" left Tôi; the Academic Manager's library has no "Yêu thích"
+  count).
+- API (`PhraseController`, `PhraseService`, `PhraseRepository`, `PhraseDtos`; GETs public): `GET /api/phrases/overview`
+  (`parts`: Mẫu câu and Từ vựng, each with its topics, most entries first, and categories, each with `count` and the
+  Member's `learned`; `member`; ACADEMIC_REPORT reasons), `GET
+  /api/phrases?topic=&category=&mine=learning|learned&q=` (cards by category then id, at most 200: category,
+  topics, `learning`, `learned`; `q` matches Japanese, romaji, meaning, category and topic names, accents and case
+  ignored; an unknown `mine` → 400). Members only (role USER, ACTIVE; staff MSG18, guests 401): POST
+  `/api/phrases/{id}/flash` `{learned}` (the flash card answer, the last one counts), DELETE `/api/phrases/{id}/flash`
+  ("Bỏ đánh dấu"; each answers the phrase's marks), POST `/api/phrases/{id}/report` `{reasonId, note}`. The kind of a
+  set is filtered in the page, so the list takes no `kind`. Where each part of the page is drawn: the map at the top of
+  `phrases.js` (and of `academic.js` for the Academic Manager's pages).
+- Reports: `ContentReportService` takes PHRASE targets with the ACADEMIC_REPORT reasons (`academicReasons()`: Sai tiếng
+  Nhật, Sai nghĩa, Xúc phạm, Spam) and opens their case for handler ACADEMIC_MANAGER. A phrase is never hidden by
+  reports.
+- Page: "Đưa cho nhân viên xem" (full-screen dialog; phrases only, not on "Từ vựng" cards: user decision), "Nghe" (browser
+  `speechSynthesis`, ja-JP, rate 0.85) and "Bỏ đánh dấu" on each card with a "Chưa thuộc" / "Đã
+  thuộc" badge, progress bars per topic/category (Members, by "Đã thuộc"). "Luyện thẻ ghi nhớ" = flash cards over the
+  list on screen (everyone may flip; only a Member's answers are kept): flip, then "Chưa thuộc" / "Đã thuộc"; at the
+  end "Luyện lại N thẻ chưa thuộc". No automated tests for "Nhật ngữ" (removed, user decision).
+- Start page layout (user decisions): a "Luyện tập" button under the search; then two main sections,
+  "Chủ đề" and "Địa điểm" (big buttons, `?by=category`), each split into "Từ vựng" then "Mẫu câu" (`overview.parts[]`
+  {kind, name, icon, count, learned, topics, categories}, each counted over that kind only; a topic or category without
+  an entry of that kind is not under it). No "Tất cả từ vựng / mẫu câu" card. A topic or category set
+  (`?topic=pay&kind=VOCAB`) shows one kind at a time, with "Từ vựng (n) / Mẫu câu (m)" when it holds both; without
+  `kind` (links from Home, notifications) it opens the kind it has entries in, Mẫu câu first. Search covers both,
+  results under "Từ vựng" and "Mẫu câu".
+- "Luyện tập": a dialog over the library (`GET /api/phrases` without filters, read again each time, so at most
+  `LIST_MAX` 200 entries): "Luyện theo" "Tất cả / Chủ đề / Địa điểm" with a list of the topics or places that hold
+  entries (count in brackets; the first one picked by default), kind "Cả hai / Từ vựng / Mẫu câu", for Members the mark
+  "Tất cả / Chưa thuộc / Đã thuộc / Chưa luyện" (every count follows the choices above it), "Xáo trộn thứ tự thẻ" (on),
+  then the flash cards. The choices stay while the page is open. Closing it redraws the start page's numbers.
+- The "Chưa thuộc" / "Đã thuộc" lists (both kinds, "Tất cả / Từ vựng / Mẫu câu" filter) have no button on the start page;
+  the end of a flash card round links to "Chưa thuộc". Every set has, for Members, the filter "Tất cả / Chưa thuộc / Đã
+  thuộc / Chưa luyện" (`&status=learning|learned|new`, client side; "Chưa luyện" = no flash card answer; not in the
+  lists "Chưa thuộc" / "Đã thuộc"); flash cards take the filtered list. Report toast: "Cảm ơn bạn. Báo cáo đã được
+  gửi." (UC 8 AF5).
+- Academic Manager side (spec `docs/use-cases/dac-ta-uc-hoc-tieng-nhat-va-su-kien.md` UC 9–14, "Japanese Content Editor",
+  shown in the UI as "Biên tập viên nội dung tiếng Nhật" (short "BTV tiếng Nhật"; was "Người quản lý học thuật") =
+  role ACADEMIC_MANAGER). `AcademicController` (`/api/academic/**`, role-guarded), `AcademicService`,
+  `AcademicRepository`, `AcademicDtos`; pages `/academic` (Tổng quan), `/academic/phrases`, `/academic/topics`,
+  `/academic/phrase-reports` (`pages/academic/*.html` with `<body data-view>`, one script `assets/js/pages/academic.js`,
+  `assets/css/academic.css`, shell `components/staff-desk.js`). Every change goes to the activity log; READ COMMITTED;
+  the phrase row is locked before its report case (same order as a Member's report).
+  - Tổng quan: open reports, library counts by kind, categories without entries (link to add one), topics under 3
+    entries, the manager's last 5 actions.
+  - Chủ đề học (UC 9–11): name ≤ 60, not empty, unique by `VietnameseText.squash` ("Chủ đề học này đã có."), icon from
+    `AcademicService.ICONS` (default `label`), id "t" + base-36 time; names checked with every topic row locked. Delete
+    removes the links only (phrases and marks stay). Unchanged save = no log.
+  - Thư viện mẫu câu (UC 12–14): filters category, topic, kind, search (Japanese/romaji/meaning), 20 a page newest first,
+    with their open reports (column "Báo cáo"). Fields (all errors at once in `fields`): category, kind
+    PHRASE/VOCAB, Japanese with kana/kanji ≤ 200, romaji optional ≤ 200 (stored "" when empty, "cần chốt"), meaning ≤ 300,
+    topics that exist. Same Japanese in the same category (byte for byte) answers `saved:false` + `duplicate` until
+    `confirmDuplicate` (UC 12 AF5). After adding, the category stays for the next entry. Edit replaces the topics; with
+    `reportCaseId` ("Sửa mẫu câu này") the phrase's open reports close as CORRECTED. Delete is soft (`deleted_at`;
+    restore "cần chốt") and closes the open reports of the phrase (REMOVE).
+  - Báo cáo mẫu câu (UC 13 AF1/AF2): open PHRASE cases, urgent first, reasons counted, reporters with notes; "Sửa mẫu câu
+    này" → `/academic/phrases?edit=&case=`, "Không sai, bỏ qua" → KEEP. False reports are not counted yet (the
+    Moderator queue will add that rule).
+- Header: the nav is compact between 861 and 1320 px, icons hide below 1100 px, and the logo's name hides between 861
+  and 960 px and below 361 px, so the header never scrolls sideways. A staff account's link to its own pages
+  (`.desk-link`) shows only its icon below 1500 px.
+
 ## Places from OpenStreetMap (feature/place)
 - Why not Google Maps: Vietnam is a Google Maps Platform prohibited territory (every Places request from a
   Vietnamese IP gets a bare 403 "The caller does not have permission", and the terms forbid distributing a Google

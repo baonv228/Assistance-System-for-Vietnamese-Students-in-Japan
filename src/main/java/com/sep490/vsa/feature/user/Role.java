@@ -4,7 +4,7 @@ package com.sep490.vsa.feature.user;
 public enum Role {
     USER("/", "Người dùng"),
     MODERATOR("/moderator", "Moderator"),
-    ACADEMIC_MANAGER("/academic", "Người quản lý học thuật"),
+    ACADEMIC_MANAGER("/academic", "Biên tập viên nội dung tiếng Nhật"),
     ADMIN("/admin", "Quản trị viên");
 
     private final String homePath;
