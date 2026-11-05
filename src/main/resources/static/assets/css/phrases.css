@@ -1,0 +1,148 @@
+/* "Nhật ngữ" (pages/phrases.html, drawn by assets/js/pages/phrases.js). Load after site.css, blog.css (search box,
+   segmented buttons, check) and blog-detail.css (dialogs, toast, field error). Sections follow the page from top to
+   bottom; the names in brackets are the phrases.js functions that draw that part. */
+
+/* page frame: #content, the start page title (.phrase-head), the search results and set cards (.phrase-list),
+   #browse = everything under the search box on the start page (renderStart), the empty button box of a set */
+.phrasepage #content { display: grid; gap: 14px; min-width: 0; }
+.phrasepage #content > * { min-width: 0; }
+.phrase-head { display: grid; gap: 4px; }
+.phrase-head h2, .set-head h2 { margin: 0; }
+#set-tools:empty { display: none; }
+#browse { display: grid; gap: 14px; }
+#browse[hidden] { display: none; }
+.phrase-list { display: grid; gap: 12px; }
+.phrase-list:empty { display: none; }
+.phrase-list[aria-busy="true"] { opacity: .6; }
+
+/* start page: the "Luyện tập" button row (renderStart) */
+.start-actions { gap: 10px; }
+.start-actions .btn { flex: 1 1 0; justify-content: center; }
+
+/* start page: the "Chủ đề" / "Địa điểm" switch (.part-tabs, renderStart) and the "Từ vựng" / "Mẫu câu" headings
+   (.part-h, kindSection; also above the search results, search) */
+.part-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.part-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.part-tab .grow { display: grid; gap: 2px; min-width: 0; }
+.part-tab b { font-size: 16px; }
+.part-tab .ic { font-size: 28px; color: var(--muted); }
+.part-tab:hover { background: var(--surface-2); }
+.part-tab[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); box-shadow: inset 0 0 0 1px var(--brand); }
+.part-tab[aria-pressed="true"] .ic { color: var(--brand); }
+.part-tab:focus-visible { outline: none; box-shadow: var(--focus); }
+.part-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 16px; }
+.part-h .ic { color: var(--brand); }
+.part-h .note { margin-left: 4px; font-size: 13px; font-weight: 400; }
+/* start page: one kind section (kindSection); a set: the "Từ vựng / Mẫu câu" and "Chưa thuộc / Đã thuộc…" switches
+   (.set-filters, renderSetList; hidden while both are empty) */
+.kind-sec { display: grid; gap: 10px; }
+.set-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.set-filters .seg { flex-wrap: wrap; }
+.set-filters > :empty, .set-filters:has(> :empty + :empty) { display: none; }
+
+/* start page: the topic / category cards and their progress bar (groupCard, progress); a set: its head with icon,
+   name and progress (.set-head, loadSet / updateSetHead) */
+.topic-card .ic.big, .set-head .ic.big { font-size: 30px; color: var(--brand); }
+.topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.topic-card { gap: 6px; }
+.topic-card b { font-size: 15px; }
+.progress { flex-wrap: nowrap; }
+.set-head { flex-wrap: nowrap; align-items: flex-start; gap: 12px; }
+.set-head .grow { display: grid; gap: 6px; }
+
+/* dialog #flash-dlg, first mode: the "Luyện tập" choices and the topic / place list (renderPractice) */
+.practice-opt { display: grid; gap: 6px; }
+.practice-opt .seg { flex-wrap: wrap; justify-self: start; }
+.practice-opt .seg .ic { font-size: 18px; vertical-align: -4px; margin-right: 4px; }
+.practice-group {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+.practice-group:focus-visible { outline: none; box-shadow: var(--focus); border-color: var(--brand); }
+
+/* one card of a phrase or word: badges, the Japanese in large type (phraseCard) */
+.vocab { gap: 8px; }
+.vocab a.badge { text-decoration: none; }
+.vocab a.badge:hover { text-decoration: underline; }
+.vocab-ja { font-size: 22px; font-weight: 700; line-height: 1.35; }
+
+/* dialog #staff-dlg "Đưa cho nhân viên xem": as large as the screen allows (showStaff) */
+.staff-dlg {
+    width: min(720px, calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+    padding: 0;
+    border: 0;
+    border-radius: 20px;
+    background: var(--surface);
+    color: var(--ink);
+}
+.staff-dlg::backdrop { background: rgba(47, 62, 110, .55); }
+.staff-in { display: grid; gap: 16px; padding: 32px 24px; text-align: center; }
+.staff-ja { font-size: clamp(32px, 8vw, 56px); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.staff-in p:not(.note) { font-size: 18px; }
+.row.center { justify-content: center; }
+
+/* dialog #flash-dlg, second mode: the card to flip, the result at the end (renderFlash) and the ✕ button of both
+   modes (.icon-btn) */
+.flash-dlg { width: min(480px, calc(100vw - 24px)); }
+.flash-in { display: grid; gap: 14px; padding: 20px; }
+.flash-in h3 { margin: 0; }
+.flash-card {
+    display: grid;
+    gap: 8px;
+    place-items: center;
+    align-content: center;
+    min-height: 220px;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--brand-soft);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px;
+    text-align: center;
+    cursor: pointer;
+}
+.flash-card.flip { background: var(--surface-2); }
+.flash-card .ja { font-size: 28px; font-weight: 700; line-height: 1.35; }
+.flash-card:focus-visible { outline: none; box-shadow: var(--focus); }
+.flash-done { display: grid; gap: 6px; place-items: center; text-align: center; padding: 12px 0; }
+.flash-done .ic.big { font-size: 48px; color: var(--brand); }
+.flash-in .icon-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+.flash-in .icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.flash-in .icon-btn:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* phones and small tablets: smaller Japanese on the cards, two topic / category cards a row */
+@media (max-width: 860px) {
+    .vocab-ja { font-size: 20px; }
+    .topic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

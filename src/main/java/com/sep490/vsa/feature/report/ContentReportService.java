@@ -47,8 +47,15 @@ public class ContentReportService {
         this.clock = clock;
     }
 
-    /** What is reported. {@code type} is BLOG, COMMENT or REVIEW. */
+    /**
+     * What is reported. {@code type} is BLOG, COMMENT, REVIEW, MESSAGE, or PHRASE (Japanese phrases and words: their
+     * own reasons, handled by the Academic Manager).
+     */
     public record Target(String type, long id, long authorId) {
+
+        boolean academic() {
+            return "PHRASE".equals(type);
+        }
     }
 
     /**
@@ -65,16 +72,27 @@ public class ContentReportService {
     /** The reasons offered in the report dialog: Lừa đảo, Sai sự thật, Xúc phạm, Spam. */
     @Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
     public List<Reason> reasons() {
+        return reasons("REPORT");
+    }
+
+    /** The reasons for a phrase: Sai tiếng Nhật, Sai nghĩa, Xúc phạm, Spam. */
+    @Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+    public List<Reason> academicReasons() {
+        return reasons("ACADEMIC_REPORT");
+    }
+
+    private List<Reason> reasons(String scope) {
         return jdbc.query("""
-                SELECT id, label FROM reason_options WHERE scope = 'REPORT' AND is_active ORDER BY sort_order, id""",
-                (rs, i) -> new Reason(rs.getLong(1), rs.getString(2)));
+                SELECT id, label FROM reason_options WHERE scope = ? AND is_active ORDER BY sort_order, id""",
+                (rs, i) -> new Reason(rs.getLong(1), rs.getString(2)), scope);
     }
 
     public Outcome report(Target target, long reporterId, Long reasonId, String note) {
         if (target.authorId() == reporterId) {
             throw ApiException.badRequest("Bạn không thể báo cáo nội dung của chính mình.");
         }
-        if (reasonId == null || reasons().stream().noneMatch(r -> r.id() == reasonId)) {
+        List<Reason> offered = target.academic() ? academicReasons() : reasons();
+        if (reasonId == null || offered.stream().noneMatch(r -> r.id() == reasonId)) {
             throw ApiException.badRequest("Hãy chọn lý do báo cáo.");                       // MSG40
         }
         String cleanNote = note == null || note.isBlank() ? null : note.strip();
@@ -146,7 +164,8 @@ public class ContentReportService {
         try {
             jdbc.update("""
                     INSERT INTO report_cases (target_type, target_id, handler_role, created_at)
-                    VALUES (?, ?, 'MODERATOR', ?)""", target.type(), target.id(), Timestamp.from(now));
+                    VALUES (?, ?, ?, ?)""", target.type(), target.id(),
+                    target.academic() ? "ACADEMIC_MANAGER" : "MODERATOR", Timestamp.from(now));
         } catch (DuplicateKeyException e) {
             // Another report created the case at the same moment; use that one
         }

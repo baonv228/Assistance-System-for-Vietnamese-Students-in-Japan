@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nhật ngữ – Senpai ơi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=block">
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/site.css">
+    <link rel="stylesheet" href="/assets/css/blog.css">
+    <link rel="stylesheet" href="/assets/css/blog-detail.css">
+    <link rel="stylesheet" href="/assets/css/phrases.css">
+</head>
+<body class="app">
+<!-- "Nhật ngữ" (the prototype's "Học" tab): a "Luyện tập" button (flash cards by topic or place, kind and mark), then
+     two main sections, "Chủ đề" and "Địa điểm", each split into "Từ vựng" and "Mẫu câu"; search, flash cards ("Chưa
+     thuộc" / "Đã thuộc"), "Đưa cho nhân viên xem" and "Báo lỗi". The view is kept in the address: ?by=category,
+     ?topic=pay&kind=VOCAB, ?category=konbini, ?view=learning|learned, &status=learning|learned|new, ?q=… (see phrases.js) -->
+<!-- The header and bottom tab bar are added by components/site-header.js (mountSiteHeader("learn")).
+     Stylesheets: blog.css gives the search box (.blog-search), the segmented buttons (.seg) and .check;
+     blog-detail.css the dialogs (.dlg), the toast and .field-error; phrases.css the rest. -->
+<main class="page narrow blogpage phrasepage" id="phrases">
+    <!-- Filled by phrases.js: the start page (renderStart) or a set (loadSet / renderSetList); a map of what is drawn
+         where is at the top of phrases.js -->
+    <div id="content"><p class="note">Đang tải…</p></div>
+</main>
+
+<!-- "Báo lỗi" on a phrase or word: openReport() fills the reasons, the submit listener sends it (phrases.js, "report") -->
+<dialog class="dlg" id="report-dlg" aria-labelledby="report-title">
+    <form method="dialog" id="report-form">
+        <h3 id="report-title">Báo lỗi mẫu câu</h3>
+        <p class="note">Biên tập viên nội dung tiếng Nhật sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.</p>
+        <fieldset class="reasons" id="report-reasons"><legend class="sr-only">Lý do</legend></fieldset>
+        <p class="field-error" id="report-error" role="alert" hidden></p>
+        <div class="field">
+            <label for="report-note">Ghi chú thêm (không bắt buộc)</label>
+            <textarea id="report-note" maxlength="500" rows="3" placeholder="Ví dụ: câu đúng phải là…"></textarea>
+        </div>
+        <div class="row end">
+            <button class="btn" type="button" data-close>Hủy</button>
+            <button class="btn pri" type="submit" id="report-submit">Gửi báo cáo</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- "Đưa cho nhân viên xem": the phrase in large type, to hand the phone to a shop assistant (showStaff()) -->
+<dialog class="staff-dlg" id="staff-dlg" aria-labelledby="staff-ja">
+    <div class="staff-in">
+        <p class="note">Đưa màn hình này cho nhân viên</p>
+        <div class="ja staff-ja" id="staff-ja" lang="ja"></div>
+        <p id="staff-vi"></p>
+        <div class="row center">
+            <button class="btn" type="button" data-speak-staff><span class="ic" aria-hidden="true">volume_up</span>Nghe phát âm</button>
+            <button class="btn" type="button" data-close>Đóng</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- One dialog, two modes drawn into #flash-body: the "Luyện tập" choices (renderPractice()) and the flash cards
+     "Luyện thẻ ghi nhớ" with the result at the end (renderFlash()) -->
+<dialog class="dlg flash-dlg" id="flash-dlg" aria-labelledby="flash-title">
+    <div class="flash-in" id="flash-body"></div>
+</dialog>
+
+<!-- Short messages ("Đã bỏ đánh dấu.", "Cảm ơn bạn. Báo cáo đã được gửi.", errors): toast() -->
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script type="module" src="/assets/js/pages/phrases.js"></script>
+</body>
+</html>

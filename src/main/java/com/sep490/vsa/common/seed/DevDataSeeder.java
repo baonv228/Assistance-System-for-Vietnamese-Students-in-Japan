@@ -71,6 +71,18 @@ public class DevDataSeeder implements CommandLineRunner {
             log.info("Loaded sample content from dev/sample-data.sql");
         }
         upgradeSamplePlaces();
+        dropPoliteTopic();
+    }
+
+    /**
+     * The sample learning topic "Lịch sự cơ bản" (id polite) was dropped from dev/sample-data.sql (team decision);
+     * databases that loaded it before lose it too. Its phrases stay and are still found by place category.
+     */
+    private void dropPoliteTopic() {
+        jdbc.update("DELETE FROM phrase_topic_links WHERE topic_id = 'polite'");
+        if (jdbc.update("DELETE FROM learning_topics WHERE id = 'polite'") > 0) {
+            log.info("Removed the sample learning topic 'polite'");
+        }
     }
 
     /**

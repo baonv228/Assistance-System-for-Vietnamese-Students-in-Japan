@@ -18,7 +18,7 @@ Khi chạy với profile `local` (mặc định), lần đầu khởi động ap
 |---|---|---|
 | `user@gmail.com` | Người dùng (Trần Minh, mới đến Nippori) | Trang chủ `/` |
 | `moderator@gmail.com` | Moderator | `/moderator` |
-| `academic@gmail.com` | Người quản lý học thuật | `/academic` |
+| `academic@gmail.com` | Biên tập viên nội dung tiếng Nhật | `/academic` |
 | `admin@gmail.com` | Admin | `/admin` |
 | `mentor@gmail.com`, `kouhai@gmail.com` | Người dùng viết review, bài viết mẫu | Trang chủ `/` |
 

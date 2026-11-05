@@ -4,13 +4,10 @@ import { apiClient, currentUser } from "../api/client.js";
 import { liveOpen, onLive, startLive } from "../lib/live.js";
 import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
 
-/** Features other members are building link to a placeholder page for now. */
-const soon = (feature) => `/coming-soon?f=${feature}`;
-
 const TABS = [
     ["home", "Trang chủ", "home", "/"],
     ["map", "Bản đồ", "map", "/map"],
-    ["learn", "Học", "school", soon("learn")],
+    ["learn", "Nhật ngữ", "translate", "/phrases"],
     ["fest", "Sự kiện", "celebration", "/events"],
     ["blog", "Blog", "forum", "/blog"],
     ["qa", "Hỏi-Đáp", "contact_support", "/qa"],
@@ -20,7 +17,7 @@ const TABS = [
 ];
 
 const link = ([key, label, icon, href], active) =>
-    `<a href="${href}" ${key === active ? 'aria-current="page"' : ""}>${ic(icon)}<span>${label}</span></a>`;
+    `<a href="${href}" ${key === active ? 'aria-current="page"' : ""}>${ic(icon)}<span>${esc(label)}</span></a>`;
 
 /** The signed-in user's id, for what "Đăng xuất" clears in this browser. */
 let signedInId = null;
@@ -32,7 +29,7 @@ export async function mountSiteHeader(active) {
     const header = document.createElement("header");
     header.className = "site-top";
     header.innerHTML = `
-        <a class="logo" href="/">${LOGO_SVG}Senpai ơi</a>
+        <a class="logo" href="/" aria-label="Senpai ơi">${LOGO_SVG}<span class="logo-name">Senpai ơi</span></a>
         <nav class="site-nav" aria-label="Chính">${TABS.filter((t) => t[0] !== "me").map((t) => link(t, active)).join("")}</nav>
         <span class="grow"></span>
         <div class="site-account">${accountHtml(user, active)}</div>`;
@@ -69,7 +66,7 @@ function accountHtml(user, active) {
         return `<a class="btn pri sm" href="${esc(loginUrl())}" data-login>${ic("login")}Đăng nhập</a>`;
     }
     const staff = user.role !== "USER"
-        ? `<a class="btn sm" href="${esc(user.homePath)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`
+        ? `<a class="btn sm desk-link" href="${esc(user.homePath)}" title="Trang ${esc(user.roleLabel)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`
         : "";
     // "Tin nhắn" is for Members only (staff accounts do not chat)
     const chat = user.role === "USER"

@@ -27,15 +27,13 @@ export const DESKS = {
         ]
     },
     ACADEMIC_MANAGER: {
-        title: "Trang Người quản lý học thuật",
+        title: "Trang Biên tập viên nội dung tiếng Nhật",
         home: "/academic",
-        intro: "Quản lý mẫu câu tiếng Nhật và kiểm tra câu luyện tập của người dùng.",
+        intro: "Quản lý mẫu câu, từ vựng tiếng Nhật và xử lý báo lỗi của người dùng.",
         modules: [
-            ["phrases", "translate", "Thư viện mẫu câu", "UC-A01"],
-            ["learn-topics", "category", "Chủ đề học", "UC-A02"],
-            ["phrase-reports", "report", "Báo cáo mẫu câu", "UC-A03"],
-            ["practice-reports", "rule", "Báo cáo câu luyện tập", "UC-A04"],
-            ["practice", "spellcheck", "Duyệt câu luyện tập", "UC-A05"]
+            ["phrases", "translate", "Thư viện mẫu câu", "UC 12 – 14", "/academic/phrases"],
+            ["learn-topics", "category", "Chủ đề học", "UC 9 – 11", "/academic/topics"],
+            ["phrase-reports", "report", "Báo cáo mẫu câu", "UC 13 AF1, AF2", "/academic/phrase-reports"]
         ]
     },
     ADMIN: {

@@ -1,0 +1,57 @@
+/* Pages of the Academic Manager (pages/academic/*.html, drawn by assets/js/pages/academic.js into the content column
+   .desk-main of components/staff-desk.js). Load after site.css, blog-detail.css (dialogs, toast, field error, warnbox),
+   blog-write.css (inputs, search box) and mod-places.css (filters, pager, history list). The names in brackets
+   are the academic.js functions that draw that part. */
+
+/* every page: the title and the card headings */
+.desk-main h2 { margin: 0 0 4px; }
+.desk-main .card h3 { margin: 0; font-size: 16px; display: flex; gap: 6px; align-items: center; }
+
+/* Tổng quan /academic: the tiles and the category / topic chips (overview) */
+a.acad-tile { display: block; text-decoration: none; }
+a.acad-tile:hover { border-color: var(--brand); }
+.acad-tile > .ic { color: var(--brand); }
+.acad-tile.hot { border-color: var(--warn); background: var(--warn-soft); }
+.acad-chip { text-decoration: none; }
+.acad-chip:hover { text-decoration: underline; }
+
+/* the tables of Thư viện mẫu câu (loadLibrary) and Chủ đề học (loadTopics); .editing = the row in the form */
+.acad-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+/* below this the table scrolls sideways inside its box instead of squeezing the Japanese and the meaning */
+.acad-table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 14px; }
+.acad-table th { text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; padding: 10px 12px;
+    border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
+.acad-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.acad-table tbody tr:last-child td { border-bottom: 0; }
+.acad-table tr.editing td { background: var(--brand-soft); }
+.acad-table .badge { margin: 1px 0; }
+.acad-actions { flex-wrap: nowrap; gap: 6px; }
+.jp-strong { font-weight: 700; font-size: 15px; }
+
+/* the forms under the tables: phrase (renderForm, with the duplicate warning) and topic (renderTopicForm, with the
+   icon buttons .acad-icon) */
+.acad-form form { display: grid; gap: 12px; }
+.acad-form h3 { margin: 0; }
+.acad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.acad-grid .field { margin: 0; }
+.acad-wide { grid-column: 1 / -1; }
+.acad-form fieldset { margin: 0; padding: 0; border: 0; }
+.acad-form legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.acad-form .warnbox { display: grid; gap: 6px; padding: 12px 14px; border-radius: 10px; font-size: 14px; }
+.acad-icons { display: flex; flex-wrap: wrap; gap: 6px; }
+.acad-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.acad-icon:hover { background: var(--surface-2); }
+.acad-icon[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-text); }
+.acad-icon:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* Báo cáo mẫu câu /academic/phrase-reports: one card per case and its reporters (loadPhraseReports) */
+.acad-cases { display: grid; gap: 12px; }
+.acad-case { gap: 8px; }
+.acad-case p { margin: 0; }
+.acad-reporters { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+
+/* phones and small tablets: the phrase form in one column */
+@media (max-width: 860px) {
+    .acad-grid { grid-template-columns: 1fr; }
+}
