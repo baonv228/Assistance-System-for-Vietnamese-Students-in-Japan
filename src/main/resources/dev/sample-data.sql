@@ -102,26 +102,44 @@ OR (b.title LIKE 'Hai quán ăn%' AND p.name_vi IN ('Quán cơm Hana', 'Ramen Ao
 OR (b.title LIKE 'Checklist%' AND p.name_vi IN ('Văn phòng quận Arakawa', 'Bưu điện Nippori'));
 
 -- ---------------------------------------------------------------- guide (Moderator)
-INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by) VALUES
- ('PRE', 'Hộ chiếu, visa và giấy chứng nhận tư cách lưu trú', NULL, NULL, NULL, 1, @mod),
- ('PRE', 'Tiền mặt bằng yên cho hai tuần đầu', NULL, NULL, NULL, 2, @mod),
- ('PRE', 'Thuốc cá nhân kèm đơn tiếng Anh', NULL, NULL, NULL, 3, @mod),
- ('PRE', 'Ổ cắm chuyển đổi loại A', NULL, NULL, NULL, 4, @mod),
- ('ARR', 'Đăng ký cư trú tại văn phòng quận', 'Trong 14 ngày', @p_ward, NULL, 1, @mod),
- ('ARR', 'Tham gia bảo hiểm y tế quốc dân', NULL, @p_ward, NULL, 2, @mod),
- ('ARR', 'Mua thẻ IC đi tàu', NULL, @p_station, @b_week, 3, @mod),
- ('ARR', 'Mở tài khoản ngân hàng', NULL, @p_post, NULL, 4, @mod),
- ('ARR', 'Hỏi lịch đổ rác của tòa nhà', NULL, NULL, @b_rac, 5, @mod),
- ('ARR', 'Xin giấy phép làm thêm (資格外活動許可) nếu định đi làm', 'Trước khi đi làm', NULL, NULL, 6, @mod),
- ('LEAVE', 'Nộp báo chuyển đi (転出届) ở văn phòng quận', 'Trước ngày bay', @p_ward, @b_ve, 1, @mod),
- ('LEAVE', 'Đóng tài khoản ngân hàng, hủy hợp đồng điện thoại', NULL, @p_post, NULL, 2, @mod),
- ('LEAVE', 'Thanh toán hóa đơn điện, nước, gas', NULL, NULL, NULL, 3, @mod),
- ('LEAVE', 'Xin giấy chứng nhận tốt nghiệp (卒業証明書) và bảng điểm', NULL, @p_school, NULL, 4, @mod),
- ('LEAVE', 'Gửi đồ về Việt Nam', NULL, @p_post, NULL, 5, @mod),
- ('HOME', 'Nộp lại thẻ cư trú ở sân bay khi xuất cảnh', 'Ngày bay', NULL, NULL, 1, @mod),
- ('HOME', 'Nộp hồ sơ hoàn tiền lương hưu (脱退一時金)', 'Trong 2 năm', NULL, @b_ve, 2, @mod),
- ('HOME', 'Hợp pháp hóa lãnh sự bằng cấp nếu cần đi làm', NULL, NULL, NULL, 3, @mod),
- ('HOME', 'Xin tag Mentor để giúp các bạn đi sau', NULL, NULL, NULL, 4, @mod);
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'PRE', 'Hộ chiếu, visa và giấy chứng nhận tư cách lưu trú', NULL, NULL, NULL, 1, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='PRE' AND title='Hộ chiếu, visa và giấy chứng nhận tư cách lưu trú');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'PRE', 'Tiền mặt bằng yên cho hai tuần đầu', NULL, NULL, NULL, 2, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='PRE' AND title='Tiền mặt bằng yên cho hai tuần đầu');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'PRE', 'Thuốc cá nhân kèm đơn tiếng Anh', NULL, NULL, NULL, 3, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='PRE' AND title='Thuốc cá nhân kèm đơn tiếng Anh');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'PRE', 'Ổ cắm chuyển đổi loại A', NULL, NULL, NULL, 4, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='PRE' AND title='Ổ cắm chuyển đổi loại A');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'ARR', 'Đăng ký cư trú tại văn phòng quận', 'Trong 14 ngày', @p_ward, NULL, 1, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='ARR' AND title='Đăng ký cư trú tại văn phòng quận');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'ARR', 'Tham gia bảo hiểm y tế quốc dân', NULL, @p_ward, NULL, 2, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='ARR' AND title='Tham gia bảo hiểm y tế quốc dân');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'ARR', 'Mua thẻ IC đi tàu', NULL, @p_station, @b_week, 3, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='ARR' AND title='Mua thẻ IC đi tàu');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'ARR', 'Mở tài khoản ngân hàng', NULL, @p_post, NULL, 4, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='ARR' AND title='Mở tài khoản ngân hàng');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'ARR', 'Hỏi lịch đổ rác của tòa nhà', NULL, NULL, @b_rac, 5, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='ARR' AND title='Hỏi lịch đổ rác của tòa nhà');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'ARR', 'Xin giấy phép làm thêm (資格外活動許可) nếu định đi làm', 'Trước khi đi làm', NULL, NULL, 6, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='ARR' AND title='Xin giấy phép làm thêm (資格外活動許可) nếu định đi làm');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'LEAVE', 'Nộp báo chuyển đi (転出届) ở văn phòng quận', 'Trước ngày bay', @p_ward, @b_ve, 1, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='LEAVE' AND title='Nộp báo chuyển đi (転出届) ở văn phòng quận');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'LEAVE', 'Đóng tài khoản ngân hàng, hủy hợp đồng điện thoại', NULL, @p_post, NULL, 2, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='LEAVE' AND title='Đóng tài khoản ngân hàng, hủy hợp đồng điện thoại');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'LEAVE', 'Thanh toán hóa đơn điện, nước, gas', NULL, NULL, NULL, 3, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='LEAVE' AND title='Thanh toán hóa đơn điện, nước, gas');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'LEAVE', 'Xin giấy chứng nhận tốt nghiệp (卒業証明書) và bảng điểm', NULL, @p_school, NULL, 4, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='LEAVE' AND title='Xin giấy chứng nhận tốt nghiệp (卒業証明書) và bảng điểm');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'LEAVE', 'Gửi đồ về Việt Nam', NULL, @p_post, NULL, 5, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='LEAVE' AND title='Gửi đồ về Việt Nam');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'HOME', 'Nộp lại thẻ cư trú ở sân bay khi xuất cảnh', 'Ngày bay', NULL, NULL, 1, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='HOME' AND title='Nộp lại thẻ cư trú ở sân bay khi xuất cảnh');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'HOME', 'Nộp hồ sơ hoàn tiền lương hưu (脱退一時金)', 'Trong 2 năm', NULL, @b_ve, 2, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='HOME' AND title='Nộp hồ sơ hoàn tiền lương hưu (脱退一時金)');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'HOME', 'Hợp pháp hóa lãnh sự bằng cấp nếu cần đi làm', NULL, NULL, NULL, 3, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='HOME' AND title='Hợp pháp hóa lãnh sự bằng cấp nếu cần đi làm');
+INSERT INTO guide_items (stage_code, title, due_note, place_id, blog_id, sort_order, created_by)
+SELECT 'HOME', 'Xin tag Mentor để giúp các bạn đi sau', NULL, NULL, NULL, 4, @mod WHERE NOT EXISTS (SELECT 1 FROM guide_items WHERE stage_code='HOME' AND title='Xin tag Mentor để giúp các bạn đi sau');
 
 -- Minh already ticked the first two "before leaving" items
 INSERT INTO user_guide_progress (user_id, item_id)
