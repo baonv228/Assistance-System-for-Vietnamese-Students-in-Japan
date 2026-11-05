@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -12,6 +14,10 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.util.List;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * Test accounts and sample content for LOCAL DEVELOPMENT ONLY (profile "local", the default on developer
@@ -45,6 +51,9 @@ public class DevDataSeeder implements CommandLineRunner {
     private final DataSource dataSource;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${app.media.local-dir:uploads}")
+    private String mediaDirectory;
+
     public DevDataSeeder(JdbcTemplate jdbc, DataSource dataSource, PasswordEncoder passwordEncoder) {
         this.jdbc = jdbc;
         this.dataSource = dataSource;
@@ -72,6 +81,31 @@ public class DevDataSeeder implements CommandLineRunner {
         }
         upgradeSamplePlaces();
         dropPoliteTopic();
+        restoreGuideSeedImages();
+    }
+
+    /** V19 carries database rows; Git carries the referenced test images. Never overwrite local files. */
+    private void restoreGuideSeedImages() {
+        Path root = Path.of(mediaDirectory).toAbsolutePath().normalize();
+        try {
+            var resolver = new PathMatchingResourcePatternResolver();
+            for (String key : jdbc.queryForList("""
+                    SELECT storage_key FROM media
+                    WHERE owner_id = (SELECT id FROM users WHERE email = 'seed-content@local.invalid')
+                      AND deleted_at IS NULL AND storage_key LIKE 'guide/%'
+                    """, String.class)) {
+                Path target = root.resolve(key).normalize();
+                if (!target.startsWith(root) || Files.exists(target)) continue;
+                var resource = resolver.getResource("classpath:dev/guide-media/" + key);
+                if (!resource.exists()) continue;
+                Files.createDirectories(target.getParent());
+                try (var input = resource.getInputStream()) {
+                    Files.copy(input, target);
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not restore V19 guide test images", e);
+        }
     }
 
     /**

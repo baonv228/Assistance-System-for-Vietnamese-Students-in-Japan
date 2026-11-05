@@ -86,7 +86,11 @@ class AdminAccountSafetyFlowTest {
         MockHttpSession page = signIn(b);
         mvc.perform(get("/api/admin/users").session(api)).andExpect(status().isOk());
 
-        changeStatus(adminA, b, "LOCKED").andExpect(status().isOk());
+        // An Admin cannot lock another active Admin through the screens (the lock below is made in the database)
+        changeStatus(adminA, b, "LOCKED").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(AdminUserService.ADMIN_PROTECTED));
+        assertThat(statusOf(b)).isEqualTo("ACTIVE");
+        jdbc.update("UPDATE users SET status = 'LOCKED' WHERE id = ?", b);
 
         // Static files are not checked (no query per image): the session is still there…
         mvc.perform(get("/assets/css/tokens.css").session(api)).andExpect(status().isOk());
@@ -116,7 +120,11 @@ class AdminAccountSafetyFlowTest {
         MockHttpSession session = signIn(b);
         mvc.perform(get("/api/admin/users").session(session)).andExpect(status().isOk());
 
-        changeRole(adminA, b, "USER").andExpect(status().isOk());
+        // An Admin cannot demote another active Admin through the screens (the demotion below is made in the database)
+        changeRole(adminA, b, "USER").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(AdminUserService.ADMIN_PROTECTED));
+        assertThat(roleOf(b)).isEqualTo("ADMIN");
+        jdbc.update("UPDATE users SET role = 'USER' WHERE id = ?", b);
 
         mvc.perform(get("/api/admin/users").session(session)).andExpect(status().isForbidden());
         assertThat(session.isInvalid()).isFalse();
@@ -236,29 +244,38 @@ class AdminAccountSafetyFlowTest {
 
     @Test
     @Transactional
-    void theLastActiveAdminCannotBeDemotedOrLockedButCanWhenAnotherAdminExists() {
-        long last = user("ADMIN", "ACTIVE");
+    void anActiveAdminCannotBeDemotedOrLockedByAnotherAdminButALockedOneCanBeChanged() {
+        long target = user("ADMIN", "ACTIVE");
         long actor = user("ADMIN", "ACTIVE");
-        // The acting Admin passed the session check, then was locked by a request running at the same time
-        // (the FOR UPDATE in ActiveAdminGuard orders such requests): only `last` is still an active Admin
-        lockEveryOtherAdmin(last);
-        AppUserPrincipal stale = new AppUserPrincipal(actor, email(actor), "Safety Test", "ADMIN", "/admin");
+        AppUserPrincipal principal = new AppUserPrincipal(actor, email(actor), "Safety Test", "ADMIN", "/admin");
 
-        assertThatThrownBy(() -> adminUsers.updateUserRole(last, "MODERATOR", stale))
-                .isInstanceOf(ApiException.class).hasMessage(ActiveAdminGuard.LAST_ADMIN);
-        assertThatThrownBy(() -> adminUsers.updateUserStatus(last, "LOCKED", "thử", stale))
-                .isInstanceOf(ApiException.class).hasMessage(ActiveAdminGuard.LAST_ADMIN);
-        assertThat(roleOf(last)).isEqualTo("ADMIN");
-        assertThat(statusOf(last)).isEqualTo("ACTIVE");
+        // The acting Admin is always an active Admin, so at least one stays: another active Admin is not touched
+        assertThatThrownBy(() -> adminUsers.updateUserRole(target, "MODERATOR", null, principal))
+                .isInstanceOf(ApiException.class).hasMessage(AdminUserService.ADMIN_PROTECTED);
+        assertThatThrownBy(() -> adminUsers.updateUserStatus(target, "LOCKED", "thử", null, principal))
+                .isInstanceOf(ApiException.class).hasMessage(AdminUserService.ADMIN_PROTECTED);
+        assertThatThrownBy(() -> adminUsers.checkStatusChange(target, "LOCKED", principal))
+                .isInstanceOf(ApiException.class).hasMessage(AdminUserService.ADMIN_PROTECTED);
+        assertThat(roleOf(target)).isEqualTo("ADMIN");
+        assertThat(statusOf(target)).isEqualTo("ACTIVE");
 
-        // A second active Admin: both changes go through
-        jdbc.update("UPDATE users SET status = 'ACTIVE' WHERE id = ?", actor);
-        adminUsers.updateUserStatus(last, "LOCKED", "thử", stale);
-        assertThat(statusOf(last)).isEqualTo("LOCKED");
-        adminUsers.updateUserStatus(last, "ACTIVE", "thử", stale);
-        adminUsers.updateUserRole(last, "USER", stale);
-        assertThat(roleOf(last)).isEqualTo("USER");
-        assertThat(statusOf(last)).isEqualTo("ACTIVE");
+        // An Admin that is already locked can be unlocked and moved to another role
+        jdbc.update("UPDATE users SET status = 'LOCKED' WHERE id = ?", target);
+        assertThat(adminUsers.updateUserStatus(target, "ACTIVE", "thử", "LOCKED", principal)).isTrue();
+        jdbc.update("UPDATE users SET status = 'LOCKED' WHERE id = ?", target);
+        assertThat(adminUsers.updateUserRole(target, "USER", "ADMIN", principal)).isTrue();
+        assertThat(roleOf(target)).isEqualTo("USER");
+        assertThat(adminUsers.updateUserStatus(target, "ACTIVE", "thử", "LOCKED", principal)).isTrue();
+        assertThat(statusOf(target)).isEqualTo("ACTIVE");
+        // Same role again: nothing to save
+        assertThat(adminUsers.updateUserRole(target, "USER", "USER", principal)).isFalse();
+        // The page showed an older role: another Admin changed the account meanwhile
+        assertThatThrownBy(() -> adminUsers.updateUserRole(target, "MODERATOR", "ADMIN", principal))
+                .isInstanceOf(ApiException.class).hasMessage(AdminUserService.STALE_ACCOUNT);
+        assertThatThrownBy(() -> adminUsers.updateUserStatus(target, "LOCKED", "thử", "LOCKED", principal))
+                .isInstanceOf(ApiException.class).hasMessage(AdminUserService.STALE_ACCOUNT);
+        assertThat(roleOf(target)).isEqualTo("USER");
+        assertThat(statusOf(target)).isEqualTo("ACTIVE");
     }
 
     // ---------------------------------------------------------------- helpers

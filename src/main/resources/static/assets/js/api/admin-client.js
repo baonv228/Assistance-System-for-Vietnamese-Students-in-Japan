@@ -69,6 +69,8 @@ async function adminRequest(endpoint, options = {}, retried = false) {
         const errorMsg = payload?.message || "Đã xảy ra lỗi khi thực hiện thao tác.";
         const error = new Error(errorMsg);
         error.status = response.status;
+        // Lỗi theo từng ô nhập (tên ô → thông báo), nếu máy chủ trả về
+        error.fields = payload?.data && typeof payload.data === "object" ? payload.data : {};
         throw error;
     }
 
@@ -79,24 +81,43 @@ export const adminClient = {
     // Dashboard Stats
     getStats: () => adminRequest("/dashboard/stats"),
 
+    // Overview (khoảng ngày: today | last7days | last30days | custom kèm from, to)
+    getOverview: ({ period = "last7days", from = "", to = "" } = {}) => {
+        const params = new URLSearchParams({ period });
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
+        return adminRequest(`/dashboard/overview?${params.toString()}`);
+    },
+
     // Users & Roles
-    getUsers: ({ keyword = "", role = "", status = "", page = 1, size = 15 } = {}) => {
+    getUsers: ({ keyword = "", role = "", status = "", tagId = "", page = 1, size = 15 } = {}) => {
         const params = new URLSearchParams();
         if (keyword) params.set("keyword", keyword);
         if (role) params.set("role", role);
         if (status) params.set("status", status);
+        if (tagId) params.set("tagId", tagId);
         params.set("page", page);
         params.set("size", size);
         return adminRequest(`/users?${params.toString()}`);
     },
-    getUser: (id) => adminRequest(`/users/${id}`),
-    updateUserRole: (id, role) => adminRequest(`/users/${id}/role`, {
+    getAccountOptions: () => adminRequest("/accounts/options"),
+    getAccountDetail: (id) => adminRequest(`/accounts/${id}`),
+    checkStatusChange: (id, target) => adminRequest(`/users/${id}/status-check?target=${encodeURIComponent(target)}`),
+    // expectedRole / expectedStatus: giá trị trang đang hiển thị, để máy chủ phát hiện dữ liệu đã cũ (409)
+    updateUserRole: (id, role, expectedRole = "") => adminRequest(`/users/${id}/role`, {
         method: "PUT",
-        body: JSON.stringify({ role })
+        body: JSON.stringify({ role, expectedRole })
     }),
-    updateUserStatus: (id, status, reason = "") => adminRequest(`/users/${id}/status`, {
+    updateUserStatus: (id, status, reason = "", expectedStatus = "") => adminRequest(`/users/${id}/status`, {
         method: "PUT",
-        body: JSON.stringify({ status, reason })
+        body: JSON.stringify({ status, reason, expectedStatus })
+    }),
+
+    // Safety configuration (hai thẻ tham số, lưu một lần)
+    getSafetyConfig: () => adminRequest("/safety-config"),
+    saveSafetyConfig: (values) => adminRequest("/safety-config", {
+        method: "PUT",
+        body: JSON.stringify(values)
     }),
 
     // Settings
@@ -113,6 +134,10 @@ export const adminClient = {
     },
     addKeyword: (keyword) => adminRequest("/keywords", {
         method: "POST",
+        body: JSON.stringify({ keyword })
+    }),
+    updateKeyword: (id, keyword) => adminRequest(`/keywords/${id}`, {
+        method: "PUT",
         body: JSON.stringify({ keyword })
     }),
     deleteKeyword: (id) => adminRequest(`/keywords/${id}`, {

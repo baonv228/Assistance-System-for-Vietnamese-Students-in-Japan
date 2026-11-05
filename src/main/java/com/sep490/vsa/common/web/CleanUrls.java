@@ -79,7 +79,8 @@ public final class CleanUrls {
             "/blog", "/pages/blog-detail.html",
             "/qa", "/pages/qa-detail.html",
             "/events", "/pages/event-detail.html",
-            "/users", "/pages/user-profile.html");
+            "/users", "/pages/user-profile.html",
+            "/admin/users", "/pages/admin/user-detail.html");
 
     /** "Tin nhắn" with one conversation open (/messages/{id}): the same page as /messages. */
     static final String MESSAGES_PAGE = "/pages/messages.html";

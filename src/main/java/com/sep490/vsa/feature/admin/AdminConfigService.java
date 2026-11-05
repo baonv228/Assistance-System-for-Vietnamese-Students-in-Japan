@@ -7,6 +7,7 @@ import com.sep490.vsa.feature.admin.AdminDtos.BannedKeywordItem;
 import com.sep490.vsa.feature.admin.AdminDtos.SystemSettingItem;
 import com.sep490.vsa.feature.moderation.ContentFilter;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -86,9 +87,10 @@ public class AdminConfigService {
                 "Số ngày tạm cấm báo cáo", "Báo cáo & Kiểm duyệt",
                 "Thời gian tài khoản bị cấm gửi báo cáo sau khi vượt quá số lần báo cáo sai quy định",
                 1, 365));
-        SETTING_METADATA.put("closed_report_threshold", SettingMeta.notApplied(
+        SETTING_METADATA.put("closed_report_threshold", SettingMeta.applied(
                 "Ngưỡng xác nhận đóng cửa", "Báo cáo & Kiểm duyệt",
-                "Số lượng người dùng báo cáo một địa điểm đã đóng cửa để hệ thống chuyển trạng thái"));
+                "Số lượng người dùng báo cáo một địa điểm đã đóng cửa để địa điểm đó chuyển cho Moderator xem xét",
+                1, 100));
 
         // Nhóm: Giới hạn hoạt động người dùng
         SETTING_METADATA.put("new_account_days", SettingMeta.applied(
@@ -152,9 +154,10 @@ public class AdminConfigService {
                 "Lưu trữ nhật ký (ngày)", "Quản trị & Bảo mật",
                 "Nhật ký hoạt động cũ hơn số ngày này được tự động xóa lúc 3:30 mỗi ngày (giờ Nhật)",
                 30, 3650));
-        SETTING_METADATA.put("proof_keep_days", SettingMeta.notApplied(
+        SETTING_METADATA.put("proof_keep_days", SettingMeta.applied(
                 "Lưu minh chứng tag (ngày)", "Quản trị & Bảo mật",
-                "Thời gian lưu trữ file ảnh minh chứng cấp thẻ định danh (thẻ SV, JLPT...)"));
+                "Số ngày một yêu cầu tag chưa được duyệt thì hết hạn và ảnh minh chứng bị xóa",
+                1, 60));
         SETTING_METADATA.put("removed_keep_days", SettingMeta.applied(
                 "Lưu dữ liệu đã xóa (ngày)", "Quản trị & Bảo mật",
                 "Thời gian lưu giữ dữ liệu bị xóa mềm trước khi loại bỏ vĩnh viễn",
@@ -333,39 +336,8 @@ public class AdminConfigService {
      */
     @Transactional
     public BannedKeywordItem addBannedKeyword(String rawKeyword, AppUserPrincipal me) {
-        if (rawKeyword == null || rawKeyword.isBlank()) {
-            throw ApiException.badRequest("Từ khóa không được để trống.");
-        }
-        String cleanKeyword = rawKeyword.trim().toLowerCase(Locale.ROOT);
-        if (cleanKeyword.length() > KEYWORD_MAX_LENGTH) {
-            throw ApiException.badRequest("Từ khóa không được vượt quá " + KEYWORD_MAX_LENGTH + " ký tự.");
-        }
-        String squashed = VietnameseText.squash(cleanKeyword);
-        if (squashed.isEmpty()) {
-            throw ApiException.badRequest("Từ khóa phải có chữ hoặc số.");
-        }
-        int letters = squashed.codePointCount(0, squashed.length());
-        if (squashed.codePoints().anyMatch(cp -> CJK_SCRIPTS.contains(Character.UnicodeScript.of(cp)))) {
-            if (letters < KEYWORD_MIN_CJK) {
-                throw ApiException.badRequest(
-                        "Từ khóa tiếng Nhật hoặc tiếng Trung phải có ít nhất " + KEYWORD_MIN_CJK + " chữ.");
-            }
-        } else if (letters < KEYWORD_MIN_LETTERS) {
-            throw ApiException.badRequest("Từ khóa phải có ít nhất " + KEYWORD_MIN_LETTERS + " chữ cái hoặc chữ số.");
-        }
-        String sameWords = VietnameseText.squashKeepingMarks(cleanKeyword);
-        for (String existing : jdbc.queryForList("SELECT keyword FROM banned_keywords ORDER BY id", String.class)) {
-            if (VietnameseText.squashKeepingMarks(existing).equals(sameWords)) {
-                throw duplicateKeyword(existing);
-            }
-        }
-        // Cột keyword là UNIQUE theo collation của MySQL (không phân biệt dấu, chữ toàn chiều rộng…): báo trước,
-        // nêu đúng từ khóa đã có, thay vì để câu INSERT bị từ chối
-        List<String> sameInDatabase = jdbc.queryForList(
-                "SELECT keyword FROM banned_keywords WHERE keyword = ? LIMIT 1", String.class, cleanKeyword);
-        if (!sameInDatabase.isEmpty()) {
-            throw duplicateKeyword(sameInDatabase.get(0));
-        }
+        String cleanKeyword = checkedKeyword(rawKeyword);
+        assertKeywordNotDuplicate(cleanKeyword, null);
 
         Long creatorId = me != null ? me.id() : null;
         BannedKeyword saved;
@@ -418,6 +390,116 @@ public class AdminConfigService {
                 null,
                 "Xóa từ khóa cấm khỏi danh mục: \"" + kw.getKeyword() + "\""
         );
+    }
+
+    /**
+     * Sửa chữ của một từ khóa cấm. Dùng đúng các kiểm tra của việc thêm (độ dài, số chữ tối thiểu, không trùng từ khóa
+     * khác); từ khóa được sửa không tính là trùng với chính nó. Dòng bị khóa trước khi đọc, nên hai Admin sửa cùng
+     * một từ khóa chạy lần lượt.
+     *
+     * @return từ khóa sau khi sửa, hoặc null nếu chữ mới giống hệt chữ cũ (không ghi gì)
+     */
+    @Transactional
+    public BannedKeywordItem updateBannedKeyword(Long id, String rawKeyword, AppUserPrincipal me) {
+        if (id == null) {
+            throw ApiException.badRequest("ID từ khóa không hợp lệ.");
+        }
+        List<String> current = jdbc.query("SELECT keyword FROM banned_keywords WHERE id = ? FOR UPDATE",
+                (rs, rowNum) -> rs.getString(1), id);
+        if (current.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND,
+                    "Không tìm thấy từ khóa cấm với ID: " + id);
+        }
+        String cleanKeyword = checkedKeyword(rawKeyword);
+        String oldKeyword = current.get(0);
+        if (oldKeyword.equals(cleanKeyword)) {
+            return null;
+        }
+        assertKeywordNotDuplicate(cleanKeyword, id);
+
+        jdbc.update("UPDATE banned_keywords SET keyword = ? WHERE id = ?", cleanKeyword, id);
+        contentFilter.keywordsChanged();
+
+        Long actorId = me != null ? me.id() : null;
+        logService.recordLog(actorId, "KEYWORD_UPDATE", "BANNED_KEYWORD", id,
+                Map.of("keyword", oldKeyword), Map.of("keyword", cleanKeyword),
+                "Sửa từ khóa cấm từ \"" + oldKeyword + "\" thành \"" + cleanKeyword + "\"");
+
+        List<BannedKeywordItem> rows = jdbc.query("""
+                SELECT bk.id, bk.keyword, u.display_name AS creator_name, bk.created_at
+                FROM banned_keywords bk LEFT JOIN users u ON u.id = bk.created_by WHERE bk.id = ?""",
+                (rs, rowNum) -> new BannedKeywordItem(rs.getLong("id"), rs.getString("keyword"),
+                        rs.getString("creator_name") != null ? rs.getString("creator_name") : "Hệ thống",
+                        toInstant(rs.getTimestamp("created_at"))), id);
+        return rows.get(0);
+    }
+
+    /**
+     * Từ khóa đã kiểm tra, ở dạng lưu (cắt khoảng trắng đầu cuối, chữ thường): không rỗng, không quá
+     * {@value #KEYWORD_MAX_LENGTH} ký tự, có đủ chữ cái/chữ số để không chặn nhầm. Sai thì 400.
+     */
+    private static String checkedKeyword(String rawKeyword) {
+        if (rawKeyword == null || rawKeyword.isBlank()) {
+            throw ApiException.badRequest("Từ khóa không được để trống.");
+        }
+        String cleanKeyword = rawKeyword.trim().toLowerCase(Locale.ROOT);
+        if (cleanKeyword.length() > KEYWORD_MAX_LENGTH) {
+            throw ApiException.badRequest("Từ khóa không được vượt quá " + KEYWORD_MAX_LENGTH + " ký tự.");
+        }
+        String squashed = VietnameseText.squash(cleanKeyword);
+        if (squashed.isEmpty()) {
+            throw ApiException.badRequest("Từ khóa phải có chữ hoặc số.");
+        }
+        int letters = squashed.codePointCount(0, squashed.length());
+        if (squashed.codePoints().anyMatch(cp -> CJK_SCRIPTS.contains(Character.UnicodeScript.of(cp)))) {
+            if (letters < KEYWORD_MIN_CJK) {
+                throw ApiException.badRequest(
+                        "Từ khóa tiếng Nhật hoặc tiếng Trung phải có ít nhất " + KEYWORD_MIN_CJK + " chữ.");
+            }
+        } else if (letters < KEYWORD_MIN_LETTERS) {
+            throw ApiException.badRequest("Từ khóa phải có ít nhất " + KEYWORD_MIN_LETTERS + " chữ cái hoặc chữ số.");
+        }
+        return cleanKeyword;
+    }
+
+    /**
+     * 400 khi từ khóa trùng một từ khóa khác (trừ dòng {@code ignoreId} đang được sửa): trùng khi bỏ khoảng trắng và
+     * ký hiệu nhưng giữ dấu, hoặc trùng theo collation của cột (không phân biệt dấu, chữ toàn chiều rộng…). Báo trước,
+     * nêu đúng từ khóa đã có, thay vì để câu INSERT/UPDATE bị cơ sở dữ liệu từ chối.
+     */
+    private void assertKeywordNotDuplicate(String cleanKeyword, Long ignoreId) {
+        long skip = ignoreId == null ? -1 : ignoreId;
+        String sameWords = VietnameseText.squashKeepingMarks(cleanKeyword);
+        for (String existing : jdbc.queryForList(
+                "SELECT keyword FROM banned_keywords WHERE id <> ? ORDER BY id", String.class, skip)) {
+            if (VietnameseText.squashKeepingMarks(existing).equals(sameWords)) {
+                throw duplicateKeyword(existing);
+            }
+        }
+        List<String> sameInDatabase = jdbc.queryForList(
+                "SELECT keyword FROM banned_keywords WHERE keyword = ? AND id <> ? LIMIT 1", String.class,
+                cleanKeyword, skip);
+        if (!sameInDatabase.isEmpty()) {
+            throw duplicateKeyword(sameInDatabase.get(0));
+        }
+    }
+
+    /** Khoảng giá trị {min, max} của một tham số đã áp dụng; null nếu tham số chưa áp dụng hoặc không có. */
+    static int[] rangeOf(String settingKey) {
+        SettingMeta meta = SETTING_METADATA.get(settingKey);
+        return meta == null || !meta.wired() ? null : new int[]{meta.min(), meta.max()};
+    }
+
+    /** Nhãn tiếng Việt của một tham số (khóa nếu không có mô tả). */
+    static String labelOf(String settingKey) {
+        SettingMeta meta = SETTING_METADATA.get(settingKey);
+        return meta == null ? settingKey : meta.label();
+    }
+
+    /** Mô tả của một tham số (rỗng nếu không có). */
+    static String descriptionOf(String settingKey) {
+        SettingMeta meta = SETTING_METADATA.get(settingKey);
+        return meta == null ? "" : meta.description();
     }
 
     private static ApiException duplicateKeyword(String existing) {
