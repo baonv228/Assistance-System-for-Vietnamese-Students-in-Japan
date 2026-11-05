@@ -7,7 +7,7 @@ const form = $("#guide-form"), filters = $("#filters");
 const query = new URLSearchParams(location.search);
 const state = { q: query.get("q") || "", category: query.get("category") || "", topicCode: query.get("topicCode") || "", status: query.get("status") || "ALL", page: /^\d{1,9}$/.test(query.get("page") || "") ? Number(query.get("page")) : 0, size: 10 };
 let sequence = 0, editingId = null, coverFile = null, coverUrl = null, savedCover = null, removeCover = false, busy = false;
-let sectionReaders = [];
+let previewSectionUrls = [], sectionSequence = 0;
 const sectionImages = new Map();
 const sectionEditor = document.createElement("div"); sectionEditor.id = "guide-existing-sections"; sectionEditor.hidden = true;
 $(".guide-rich-editor").after(sectionEditor);
@@ -65,32 +65,53 @@ function selectCover(file) {
  if (!["image/jpeg", "image/png"].includes(file.type) || file.size > 5 * 1024 * 1024) return message("Ảnh bìa phải là JPG/PNG, tối đa 5 MB.");
  revokeCover(); coverFile = file; coverUrl = URL.createObjectURL(file); removeCover = false; displayCover(); message("");
 }
-function setupSections(guide) {
- sectionReaders = []; sectionImages.clear(); sectionEditor.replaceChildren();
- const sections = guide?.sections || [];
- const structured = sections.length > 1 || sections.some(section => section.heading !== "Nội dung" || section.mediaId || section.imageUrl || section.referenceUrl);
- sectionEditor.hidden = !structured; $(".guide-rich-editor").hidden = structured;
- if (!structured) return;
- for (const section of sections) {
-  const box = el("fieldset"); box.append(el("legend", null, "Mục hướng dẫn"));
-  const fields = {};
-  for (const [key, label, max, area] of [["heading", "Tiêu đề mục", 200], ["content", "Nội dung", 20000, true], ["referenceUrl", "Tài liệu tham khảo (tùy chọn)", 2000]]) {
-   const labelNode = el("label", null, label), input = el(area ? "textarea" : "input");
-   input.value = section[key] || ""; input.maxLength = max; if (key === "referenceUrl") input.type = "url";
-   fields[key] = input; labelNode.append(input); box.append(labelNode);
-  }
-  let mediaId = section.mediaId || null, imageUrl = section.imageUrl || null;
-  if (mediaId && imageUrl) sectionImages.set(mediaId, imageUrl);
-  if (imageUrl && safeUrl(imageUrl)) {
-   const image = el("img", "guide-thumbnail"); image.src = safeUrl(imageUrl); image.alt = section.heading || "Ảnh minh họa";
-   const remove = button("Bỏ ảnh trong mục", () => { mediaId = null; imageUrl = null; image.remove(); remove.remove(); });
-   box.append(image, remove);
-  }
-  sectionReaders.push(() => ({ heading: fields.heading.value, content: fields.content.value,
-   referenceUrl: fields.referenceUrl.value || null, imageUrl: mediaId ? null : imageUrl, mediaId }));
-  sectionEditor.append(box);
- }
+function disposeSections() {
+ for (const box of sectionEditor.children) box.dispose?.();
+ previewSectionUrls = [];
 }
+function addSection(section = { heading: "", content: "" }) {
+ if (sectionEditor.children.length >= 50) return message("Tối đa 50 mục nội dung.");
+ const box = el("fieldset", "guide-section-editor"); box.append(el("legend", null, "Mục nội dung"));
+ const fields = {};
+ for (const [key, label, max, area] of [["heading", "Tiêu đề mục *", 200], ["content", "Nội dung *", 20000, true], ["referenceUrl", "Tài liệu tham khảo (tùy chọn)", 2000]]) {
+  const labelNode = el("label", null, label), input = el(area ? "textarea" : "input");
+  input.id = "guide-section-" + (++sectionSequence) + "-" + key; labelNode.htmlFor = input.id;
+  input.value = section[key] || ""; input.maxLength = max; if (key === "referenceUrl") input.type = "url";
+  fields[key] = input;
+  if (area) { input.dataset.sectionContent = ""; const toolbar = $(".guide-rich-editor .guide-toolbar").cloneNode(true); box.append(labelNode, toolbar, input); }
+  else { labelNode.append(input); box.append(labelNode); }
+ }
+ let mediaId = section.mediaId || null, imageUrl = section.imageUrl || null, imageFile = null, objectUrl = null;
+ if (mediaId && imageUrl) sectionImages.set(mediaId, imageUrl);
+ const label = el("label", null, "Ảnh minh họa cho mục này (tùy chọn)"), input = el("input"), preview = el("img", "guide-thumbnail");
+ input.type = "file"; input.accept = "image/jpeg,image/png"; input.setAttribute("aria-label", "Chọn ảnh minh họa cho mục nội dung");
+ label.append(input); const remove = button("Bỏ ảnh", () => { cleanup(); imageFile = null; mediaId = null; imageUrl = null; input.value = ""; updateImage(); });
+ function cleanup() { if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null; }
+ function updateImage() { const url = objectUrl || safeUrl(imageUrl); preview.hidden = !url; remove.hidden = !url; if (url) preview.src = url; else preview.removeAttribute("src"); preview.alt = fields.heading.value || "Ảnh minh họa"; }
+ input.addEventListener("change", () => {
+  const selected = input.files[0]; if (!selected) return;
+  if (!["image/jpeg", "image/png"].includes(selected.type) || !selected.size || selected.size > 20 * 1024 * 1024) { input.value = ""; return message("Ảnh minh họa phải là JPG/PNG, tối đa 20 MB mỗi ảnh."); }
+  cleanup(); imageFile = selected; mediaId = null; imageUrl = null; objectUrl = URL.createObjectURL(selected); updateImage(); message("");
+ });
+ box.append(label, el("p", "note", "Mỗi mục có một ảnh tùy chọn. JPG/PNG, tối đa 20 MB. Mỗi lần lưu tối đa 5 ảnh mới, gồm cả ảnh bìa."), preview, remove);
+ const tools = el("div", "guide-actions");
+ tools.append(button("↑ Lên", () => { if (box.previousElementSibling) box.before(box.previousElementSibling); }), button("↓ Xuống", () => { if (box.nextElementSibling) box.after(box.nextElementSibling); }), button("Xóa mục", () => {
+  if (sectionEditor.children.length <= 1) return message("Cần giữ ít nhất một mục nội dung.");
+  if ((fields.content.value || imageUrl || imageFile) && !window.confirm("Xóa mục nội dung này và ảnh của mục khi lưu cẩm nang?")) return;
+  cleanup(); box.remove();
+ })); box.append(tools);
+ box.read = files => {
+  let imageIndex = null; if (imageFile) { imageIndex = files.length; files.push(imageFile); }
+  return { heading: fields.heading.value, content: fields.content.value, referenceUrl: fields.referenceUrl.value || null, imageUrl: mediaId ? null : imageUrl, mediaId, imageIndex };
+ };
+ box.previewImage = () => objectUrl || safeUrl(imageUrl); box.dispose = cleanup;
+ updateImage(); sectionEditor.append(box);
+}
+function setupSections(guide) {
+ disposeSections(); sectionImages.clear(); sectionEditor.replaceChildren(); sectionEditor.hidden = false; $(".guide-rich-editor").hidden = true;
+ for (const section of guide?.sections?.length ? guide.sections : [{ heading: "Nội dung", content: "" }]) addSection(section);
+}
+const addSectionButton = button("Thêm mục nội dung", () => addSection()); addSectionButton.id = "add-guide-section"; sectionEditor.after(addSectionButton);
 function resetEditor(guide = null) {
  revokeCover(); form.reset(); coverFile = null; savedCover = guide?.coverImageUrl || null; removeCover = false; editingId = guide?.id || null;
  form.elements.title.value = guide?.title || ""; form.elements.summary.value = guide?.summary || "";
@@ -129,9 +150,9 @@ async function loadList(page = state.page) {
 function renderGuide(guide, preview = false) {
  const target = $("#detail"); target.replaceChildren(el("p", "badge", preview ? "Xem trước – chưa lưu" : guide.published ? "Công khai" : "Nháp"), el("h2", null, guide.title), el("p", "note", [guide.stageName, guide.topicName].filter(Boolean).join(" · ")), el("p", "guide-content", guide.summary));
  const cover = safeUrl(guide.coverImageUrl); if (cover || (preview && coverUrl)) { const image = el("img"); image.src = preview && coverUrl ? coverUrl : cover; image.alt = guide.title; target.append(image); }
- for (const section of guide.sections) {
+ for (const [sectionIndex, section] of guide.sections.entries()) {
   if (section.heading !== "Nội dung") target.append(el("h3", null, section.heading)); target.append(guideContent(section.content));
-  const imageUrl = safeUrl(section.imageUrl || sectionImages.get(section.mediaId)); if (imageUrl) { const image = el("img"); image.src = imageUrl; image.alt = section.heading; target.append(image); }
+  const imageUrl = preview ? previewSectionUrls[sectionIndex] : safeUrl(section.imageUrl || sectionImages.get(section.mediaId)); if (imageUrl) { const image = el("img"); image.src = imageUrl; image.alt = section.heading; target.append(image); }
   if (section.referenceUrl && safeUrl(section.referenceUrl)) { const a = el("a", "link", "Tài liệu tham khảo"); a.href = safeUrl(section.referenceUrl); a.target = "_blank"; a.rel = "noopener noreferrer"; target.append(a); }
  }
  if (guide.sourceUrl && safeUrl(guide.sourceUrl)) { const a = el("a", "link", "Đường dẫn gốc ↗"); a.href = safeUrl(guide.sourceUrl); a.target = "_blank"; a.rel = "noopener noreferrer"; target.append(a); }
@@ -156,23 +177,26 @@ async function deleteGuide(guide, node) {
 function collect(status) {
  const data = Object.fromEntries(new FormData(form));
  if (!data.title.trim()) throw new Error("Vui lòng nhập tiêu đề cẩm nang.");
- const sections = sectionReaders.length ? sectionReaders.map(read => read()) : [{ heading: "Nội dung", content: data.content }];
+ const uploadFiles = coverFile ? [coverFile] : [];
+ const sections = [...sectionEditor.children].map(box => box.read(uploadFiles));
+ previewSectionUrls = [...sectionEditor.children].map(box => box.previewImage());
+ if (uploadFiles.length > 5) throw new Error("Mỗi lần lưu chỉ được tải tối đa 5 ảnh mới, gồm cả ảnh bìa. Hãy bỏ bớt ảnh hoặc lưu từng đợt.");
  if (status === "PUBLISHED" && (!data.category || !data.topicCode || sections.some(section => !section.heading.trim() || !section.content.trim()))) throw new Error("Đăng công khai cần chọn giai đoạn, chủ đề và nhập nội dung.");
  if (data.sourceUrl && !safeUrl(data.sourceUrl)) throw new Error("Đường dẫn gốc phải dùng HTTP hoặc HTTPS.");
  const preparationEnabled = $("#preparation-enabled").checked;
  const preparationTasks = preparationEnabled ? [...$("#preparation-rows").children].map(row => ({ id: row.dataset.taskId ? Number(row.dataset.taskId) : null, title: row.querySelector("[data-task-title]").value.trim(), notes: row.querySelector("[data-task-notes]").value.trim() })) : [];
  if (preparationEnabled && status === "PUBLISHED" && !preparationTasks.length) throw new Error("Danh sách chuẩn bị cần ít nhất một công việc.");
  if (preparationTasks.some(task => !task.title)) throw new Error("Vui lòng nhập tên cho từng công việc.");
- return { preparationEnabled, preparationTasks, title: data.title.trim(), summary: data.summary, category: data.category, topicCode: data.topicCode, sourceUrl: data.sourceUrl, status,
+ return { uploadFiles, preparationEnabled, preparationTasks, title: data.title.trim(), summary: data.summary, category: data.category, topicCode: data.topicCode, sourceUrl: data.sourceUrl, status,
   sections, coverImageIndex: coverFile ? 0 : null, removeCover };
 }
 async function save(status) {
  if (busy) return;
  try {
-  const wasEditing = Boolean(editingId); const data = collect(status); busy = true; document.querySelectorAll("#editor button, #detail button").forEach(node => node.disabled = true);
-  const body = new FormData(); body.append("guide", new Blob([JSON.stringify(data)], { type: "application/json" })); if (coverFile) body.append("images", coverFile);
+  const wasEditing = Boolean(editingId); const { uploadFiles, ...data } = collect(status); busy = true; document.querySelectorAll("#editor button, #detail button").forEach(node => node.disabled = true);
+  const body = new FormData(); body.append("guide", new Blob([JSON.stringify(data)], { type: "application/json" })); for (const file of uploadFiles) body.append("images", file);
   const guide = editingId ? await apiClient.updateGuide(editingId, body) : await apiClient.createGuide(body);
-  editingId = guide.id; setupPreparation(guide); savedCover = guide.coverImageUrl; revokeCover(); coverFile = null; removeCover = false; $("#cover-input").value = ""; displayCover(); form.elements.status.value = guide.status;
+  editingId = guide.id; setupSections(guide); setupPreparation(guide); savedCover = guide.coverImageUrl; revokeCover(); coverFile = null; removeCover = false; $("#cover-input").value = ""; displayCover(); form.elements.status.value = guide.status;
   if (status === "DRAFT") { show("editor"); $("#editor-title").textContent = "Chỉnh sửa cẩm nang"; setUrl(guide.id, true); }
   else { renderGuide(guide); setUrl(guide.id); }
   await loadList(wasEditing ? state.page : 0); message(status === "DRAFT" ? "Đã lưu nháp. Bạn có thể mở lại để tiếp tục chỉnh sửa." : wasEditing ? "Đã cập nhật cẩm nang công khai." : "Đã đăng cẩm nang công khai.");
@@ -187,10 +211,14 @@ $("#preview").addEventListener("click", () => { try { const data = collect("DRAF
 $("#cover-input").addEventListener("change", event => selectCover(event.target.files[0]));
 $("#remove-cover").addEventListener("click", () => { revokeCover(); coverFile = null; savedCover = null; removeCover = true; $("#cover-input").value = ""; displayCover(); });
 $("#cover-drop").addEventListener("dragover", event => event.preventDefault()); $("#cover-drop").addEventListener("drop", event => { event.preventDefault(); selectCover(event.dataTransfer.files[0]); });
-for (const control of document.querySelectorAll("[data-format]")) control.addEventListener("click", () => {
- const input = form.elements.content, start = input.selectionStart, end = input.selectionEnd, selected = input.value.slice(start, end) || "Nội dung";
+contentPanel.addEventListener("click", event => {
+ const control = event.target.closest("[data-format]"); if (!control || !contentPanel.contains(control)) return;
+ const input = control.closest(".guide-section-editor")?.querySelector("[data-section-content]") || form.elements.content;
+ const start = input.selectionStart, end = input.selectionEnd, selected = input.value.slice(start, end) || "Nội dung";
  const formats = { bold: "**" + selected + "**", italic: "*" + selected + "*", underline: "__" + selected + "__", heading: "\n## " + selected, bullet: "\n- " + selected, number: "\n1. " + selected, link: "[" + selected + "](https://example.com)" };
- const inserted = formats[control.dataset.format]; if (input.value.length - (end - start) + inserted.length > 20000) return message("Nội dung tối đa 20.000 ký tự."); input.setRangeText(inserted, start, end, "select"); input.focus();
+ const inserted = formats[control.dataset.format]; if (!inserted) return;
+ if (input.value.length - (end - start) + inserted.length > 20000) return message("Nội dung tối đa 20.000 ký tự.");
+ input.setRangeText(inserted, start, end, "select"); input.focus();
 });
 function search() { Object.assign(state, Object.fromEntries(new FormData(filters)), { page: 0 }); message(""); loadList(0); }
 filters.addEventListener("submit", event => { event.preventDefault(); search(); }); filters.querySelectorAll("select").forEach(select => select.addEventListener("change", search));
@@ -202,4 +230,4 @@ try {
  if (/^\d+$/.test(query.get("edit") || "")) await editGuide(query.get("edit"));
  else if (/^\d+$/.test(query.get("id") || "")) renderGuide(await apiClient.moderatorGuide(query.get("id")));
 } catch (error) { message(error.message); }
-window.addEventListener("pagehide", revokeCover);
+window.addEventListener("pagehide", () => { revokeCover(); disposeSections(); });

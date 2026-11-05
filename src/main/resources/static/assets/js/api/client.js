@@ -74,6 +74,15 @@ async function request(path, options = {}, retried = false) {
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const apiClient = {
+    faqs: (params = {}) => request(`/faqs?${toQuery(params)}`),
+    faqTopics: (q = "") => request(`/faqs/topics?${toQuery({ q })}`),
+    faq: (id) => request(`/faqs/${id}`),
+    moderatorFaqs: (params = {}) => request(`/moderator/faqs?${toQuery(params)}`),
+    moderatorFaqTopics: () => request("/moderator/faqs/topics"),
+    faqSuggestions: (params = {}) => request(`/moderator/faqs/suggestions?${toQuery(params)}`),
+    moderatorFaq: (id) => request(`/moderator/faqs/${id}`),
+    saveFaq: (id, body) => id ? request(`/moderator/faqs/${id}`, { method: "PUT", body: JSON.stringify(body) }) : post("/moderator/faqs", body),
+    faqVisibility: (id, published) => request(`/moderator/faqs/${id}/visibility`, { method: "PUT", body: JSON.stringify({ published }) }),
     getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
     guideTopics: () => request("/guides/topics"),
     guideSubjects: () => request("/guides/subjects"),
@@ -112,6 +121,9 @@ export const apiClient = {
     // Homepage and "Tôi"
     guestHome: () => request("/home"),
     memberHome: () => request("/me/home"),
+    // "Review mới": { scope, areaName, prefectureName, scopes: [{ code, count }], page, hasMore, items }; scope AREA,
+    // PREFECTURE or ALL (left out: the first one holding reviews)
+    homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),

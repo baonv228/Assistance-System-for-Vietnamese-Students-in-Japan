@@ -1,0 +1,36 @@
+/* "Review mới" (pages/reviews.html). The scope buttons use .seg from blog.css. */
+.reviewspage #scopes { justify-self: start; }
+.rv-list { display: grid; gap: 12px; }
+.rv-list[aria-busy="true"] { opacity: .6; }
+.rv { gap: 10px; }
+.rv-place { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none; }
+.rv-place:hover b { color: var(--brand-text); text-decoration: underline; }
+.rv-place:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 10px; }
+.rv-ic { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px;
+    background: var(--brand-soft); color: var(--brand-text); }
+.rv-place-txt { display: grid; gap: 2px; min-width: 0; }
+.rv-place-txt b, .rv-place-txt .note { overflow-wrap: anywhere; }
+.rv-text { overflow-wrap: anywhere; white-space: pre-line; }
+.rv-photo { position: relative; justify-self: start; display: block; border-radius: 12px; overflow: hidden; }
+.rv-photo img { display: block; width: 160px; height: 120px; object-fit: cover; background: var(--surface-2); }
+.rv-photo span {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(47, 62, 110, .8);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+.rv-foot .note { overflow-wrap: anywhere; }
+.rv-foot .note .ic, .rv .note > .ic { font-size: 15px; vertical-align: -3px; margin: 0 2px 0 4px; }
+.rv-foot .link { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.rv-foot .link .ic { font-size: 18px; }
+.rv-empty { padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
+/* phones: the three scopes wrap instead of hiding "Tất cả" behind a sideways scroll */
+@media (max-width: 560px) {
+    .reviewspage #scopes { display: flex; flex-wrap: wrap; justify-self: stretch; }
+    .reviewspage #scopes button { flex: 1 1 auto; }
+}

@@ -31,7 +31,7 @@ textarea.input { min-height: 220px; resize: vertical; line-height: 1.6; }
 .input[aria-invalid="true"], .searchbox:has(input[aria-invalid="true"]) { border-color: var(--crit); }
 .input::placeholder, .searchbox input::placeholder { color: #9A9FB5; }
 
-/* search box with an icon (topics, places) */
+/* search box with an icon (places) */
 .searchbox {
     display: flex;
     align-items: center;

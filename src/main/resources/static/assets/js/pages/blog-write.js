@@ -89,7 +89,7 @@ const SEARCH_DELAY = 250;
 
 /** Which control to focus for each field the server may complain about. */
 const FIELD_INPUT = {
-    title: "#title", topicIds: "#topic-q", placeIds: "#place-q", content: "#content", images: "#add-image",
+    title: "#title", topicIds: "#topic-list .topic-pick", placeIds: "#place-q", content: "#content", images: "#add-image",
     video: "#add-video"
 };
 
@@ -97,7 +97,7 @@ const $ = (selector) => document.querySelector(selector);
 const els = {
     gate: $("#gate"), form: $("#form"), formError: $("#form-error"), quota: $("#quota"),
     title: $("#title"), titleCount: $("#title-count"),
-    topicQ: $("#topic-q"), topicList: $("#topic-list"), topicsCount: $("#topics-count"),
+    topicList: $("#topic-list"), topicsCount: $("#topics-count"),
     placeQ: $("#place-q"), placeList: $("#place-list"), placeChips: $("#place-chips"), placesCount: $("#places-count"),
     scamHint: $("#scam-hint"),
     content: $("#content"), contentCount: $("#content-count"), linkNote: $("#link-note"),
@@ -288,26 +288,20 @@ els.form.addEventListener("keydown", (event) => {
 
 // ---------------------------------------------------------------- topics (1 to 3)
 
-const fold = (text) => String(text ?? "").normalize("NFD").replace(/\p{M}+/gu, "")
-    .replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().trim();
-
 function renderTopics() {
     const max = options.limits.topicsMax;
-    const q = fold(els.topicQ.value);
-    const shown = options.topics.filter((t) => !q || fold(t.name).includes(q) || state.topicIds.includes(t.id));
     const full = state.topicIds.length >= max;
-    els.topicList.innerHTML = shown.length ? shown.map((t) => {
+    els.topicList.innerHTML = options.topics.map((t) => {
         const on = state.topicIds.includes(t.id);
         const blocked = full && !on;
         return `<button class="topic-pick${t.other ? " other" : ""}" type="button" data-topic="${t.id}"
             aria-pressed="${on}" ${blocked ? `aria-disabled="true" title="Đã chọn đủ ${max} chủ đề"` : ""}>
             ${on ? ic("check") : ""}${esc(t.name)}</button>`;
-    }).join("") : `<p class="note">Không có chủ đề “${esc(els.topicQ.value.trim())}”. Bạn có thể chọn “Khác”.</p>`;
+    }).join("");
     els.topicsCount.textContent = `(${state.topicIds.length}/${max})`;
     els.scamHint.hidden = !options.topics.some((t) => t.scamWarning && state.topicIds.includes(t.id));
 }
 
-els.topicQ.addEventListener("input", renderTopics);
 els.topicList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-topic]");
     if (!button || button.getAttribute("aria-disabled") === "true") {

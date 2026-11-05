@@ -22,7 +22,7 @@
 | 6. Review | `reviews`, `review_media`, `review_likes` |
 | 7. Sự kiện | `events` |
 | 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots` |
-| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks` (`practice_sentences` bỏ ở V17) |
+| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks` (`practice_sentences` bỏ ở V18) |
 | 10. Kiểm duyệt và báo cáo | `reason_options`, `banned_keywords`, `moderation_scans`, `report_cases`, `reports`, `appeals` |
 | 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress` |
 | 12. Thông báo và hệ thống | `notifications`, `system_settings`, `activity_logs`, `api_usage` |
@@ -509,7 +509,7 @@ Bài "Cảnh báo lừa đảo" gắn địa điểm thì ghim đó hiện dấu
 | user_id | BIGINT | PK, FK → users | |
 | phrase_id | BIGINT | PK, FK → phrases | |
 | is_learned | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Đã thuộc" |
-| is_learning | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Chưa thuộc" (V16); không bao giờ cùng true với is_learned (`ck_mark_card`) |
+| is_learning | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Chưa thuộc" (V17); không bao giờ cùng true với is_learned (`ck_mark_card`) |
 | updated_at | DATETIME | NN | |
 
 ---

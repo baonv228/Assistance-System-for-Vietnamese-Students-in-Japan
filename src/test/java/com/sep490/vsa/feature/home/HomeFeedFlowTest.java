@@ -5,6 +5,7 @@ import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
+import com.sep490.vsa.feature.home.HomeDtos.FeedReason;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
 import com.sep490.vsa.feature.home.HomeDtos.Quote;
 import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
@@ -118,7 +119,8 @@ class HomeFeedFlowTest {
         long fitsOnly = blog(author, "POST", "PUBLISHED", now.minusSeconds(3 * 3600), HUGE, 0, false, "Nhà ở");
         long neither = blog(author, "POST", "PUBLISHED", now.minusSeconds(2 * 3600), 2 * HUGE, 0, false, "Học tiếng Nhật");
 
-        List<Map<String, Object>> feed = forYou(viewer);
+        String body = home(viewer);
+        List<Map<String, Object>> feed = JsonPath.read(body, "$.data.forYou");
         assertThat(ids(feed)).startsWith(nearFits, nearOnly, fitsOnly);
         assertThat(feed.get(0).get("reason")).isEqualTo(NEAR);       // the area badge wins over the stage badge
         assertThat(feed.get(1).get("reason")).isEqualTo(NEAR);
@@ -126,6 +128,15 @@ class HomeFeedFlowTest {
         int neitherAt = ids(feed).indexOf(neither);
         assertThat(neitherAt == -1 || neitherAt > 2).isTrue();
         assertThat(feed.get(0)).containsEntry("topicName", "Nhà ở").containsEntry("title", "Feed " + word);
+        // Every reason, with what matched: the place in the area, the topic that suits the stage
+        assertThat(feed.get(0).get("reasons")).isEqualTo(List.of(
+                Map.of("code", "AREA", "label", NEAR, "detail", "Feed place " + word),
+                Map.of("code", "STAGE", "label", FITS, "detail", "Nhà ở")));
+        assertThat(feed.get(1).get("reasons")).isEqualTo(List.of(
+                Map.of("code", "AREA", "label", NEAR, "detail", "Feed place " + word)));
+        assertThat(feed.get(2).get("reasons")).isEqualTo(List.of(Map.of("code", "STAGE", "label", FITS, "detail", "Nhà ở")));
+        // A new member has done nothing yet: no interests
+        assertThat((List<?>) JsonPath.read(body, "$.data.interests")).isEmpty();
     }
 
     @Test
@@ -143,12 +154,19 @@ class HomeFeedFlowTest {
             long inPrefecture = blog(author, "POST", "PUBLISHED", now.minusSeconds(2 * 3600), 0, 0, false, null);
             jdbc.update("INSERT INTO blog_place_links (blog_id, place_id) VALUES (?, ?)", inPrefecture, other);
             long elsewhere = blog(author, "POST", "PUBLISHED", now.minusSeconds(3600), HUGE, 0, false, null);
+            // Linked to both: one reason, naming the place in the area
+            long both = blog(author, "POST", "PUBLISHED", now.minusSeconds(4 * 3600), 0, 0, true, null);
+            jdbc.update("INSERT INTO blog_place_links (blog_id, place_id) VALUES (?, ?)", both, other);
 
             List<Map<String, Object>> feed = forYou(viewer);
-            assertThat(ids(feed)).startsWith(inArea, inPrefecture);
+            assertThat(ids(feed)).startsWith(inArea, both, inPrefecture);
             assertThat(feed.get(0).get("reason")).isEqualTo(NEAR);
-            assertThat(feed.get(1).get("reason")).isEqualTo(HomeService.REASON_PREFECTURE);
-            assertThat(ids(feed).indexOf(elsewhere)).isNotIn(0, 1);
+            assertThat(feed.get(1).get("reasons")).isEqualTo(List.of(
+                    Map.of("code", "AREA", "label", NEAR, "detail", "Feed place " + word)));
+            assertThat(feed.get(2).get("reason")).isEqualTo(HomeService.REASON_PREFECTURE);
+            assertThat(feed.get(2).get("reasons")).isEqualTo(List.of(
+                    Map.of("code", "PREFECTURE", "label", HomeService.REASON_PREFECTURE, "detail", "Feed place 2 " + word)));
+            assertThat(ids(feed).indexOf(elsewhere)).isNotIn(0, 1, 2);
         } finally {
             jdbc.update("DELETE FROM blogs WHERE author_id = ?", author);
             jdbc.update("DELETE FROM places WHERE id = ?", other);
@@ -215,6 +233,97 @@ class HomeFeedFlowTest {
         assertThat(feed).extracting(FeedPost::id).startsWith(fresh, oldNear);
         assertThat(feed.get(0).reason()).isNull();
         assertThat(feed.get(1).reason()).isEqualTo(NEAR);
+    }
+
+    @Test
+    void interestsAreLearntFromLikesSavesCommentsAndOwnPostsOfTheLast90Days() {
+        // Seen from ten years ahead, so only what this test dates in that future is recent
+        Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
+        Instant day = future.instant().minus(Duration.ofDays(1));
+        Instant tooOld = future.instant().minus(Duration.ofDays(HomeService.INTEREST_DAYS + 5));
+        // "Ăn uống": an own post (3) and a save (2) = 5
+        blog(viewer, "POST", "PUBLISHED", day, 0, 0, false, "Ăn uống");
+        save(viewer, blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Ăn uống"), day);
+        // "Y tế": five comments on one post count once (2), and a like of it (1) = 3
+        long health = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Y tế");
+        for (int i = 0; i < 5; i++) {
+            comment(viewer, health, "PUBLISHED", day);
+        }
+        like(viewer, health, day);
+        // "Đi lại": two likes, one of them on a question = 2
+        like(viewer, blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Đi lại"), day);
+        like(viewer, blog(author, "QA", "PUBLISHED", day, 0, 0, false, "Đi lại"), day);
+        // Not interests: "Khác", and what was done more than 90 days ago
+        for (int i = 0; i < 3; i++) {
+            blog(viewer, "POST", "PUBLISHED", day, 0, 0, false, "Khác");
+        }
+        long old = blog(author, "POST", "PUBLISHED", tooOld, 0, 0, false, "Nhà ở");
+        save(viewer, old, tooOld);
+        like(viewer, old, tooOld);
+        blog(viewer, "POST", "PUBLISHED", tooOld, 0, 0, false, "Nhà ở");
+
+        assertThat(new HomeService(jdbc, future, featuredPosts).member(viewer).interests())
+                .containsExactly("Ăn uống", "Y tế", "Đi lại");
+    }
+
+    @Test
+    void oneLikeUnpublishedCommentsOrPostsAndSwitchedOffTopicsMakeNoInterest() {
+        Instant now = Instant.now();
+        like(viewer, blog(author, "POST", "PUBLISHED", now, 0, 0, false, "Mua sắm"), now);    // 1 point
+        long health = blog(author, "POST", "PUBLISHED", now, 0, 0, false, "Y tế");
+        comment(viewer, health, "REMOVED", now);
+        comment(viewer, health, "PROCESSING", now);
+        blog(viewer, "POST", "REJECTED", now, 0, 0, false, "Đi lại");
+        blog(viewer, "POST", "PROCESSING", now, 0, 0, false, "Đi lại");
+        assertThat(home.member(viewer).interests()).isEmpty();
+
+        save(viewer, blog(author, "POST", "PUBLISHED", now, 0, 0, false, "Nhà ở"), now);
+        assertThat(home.member(viewer).interests()).containsExactly("Nhà ở");
+        jdbc.update("UPDATE blog_topics SET is_active = FALSE WHERE name = 'Nhà ở'");
+        try {
+            assertThat(home.member(viewer).interests()).isEmpty();
+        } finally {
+            jdbc.update("UPDATE blog_topics SET is_active = TRUE WHERE name = 'Nhà ở'");
+        }
+    }
+
+    @Test
+    void interestsRankAfterAreaAndStageAndPostsAlreadyReadComeLast() {
+        Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
+        HomeService home = new HomeService(jdbc, future, featuredPosts);
+        Instant day = future.instant().minus(Duration.ofDays(1));
+        setProfile(viewer, area, "PRE");
+        // Saving a "Việc làm thêm" post makes it an interest (2), and that post one the viewer already read
+        long saved = blog(author, "POST", "PUBLISHED", day, 3 * HUGE, 0, true, "Việc làm thêm");
+        save(viewer, saved, day);
+        long liked = blog(author, "POST", "PUBLISHED", day, 3 * HUGE, 0, true, null);
+        like(viewer, liked, day);
+        long commented = blog(author, "POST", "PUBLISHED", day, 3 * HUGE, 0, true, null);
+        comment(viewer, commented, "PUBLISHED", day);
+
+        long near = blog(author, "POST", "PUBLISHED", day, 0, 0, true, null);
+        long both = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Nhà ở");          // suits PRE
+        topic(both, "Việc làm thêm");                                                    // and the interest
+        long stageOnly = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Visa và cư trú");
+        long interestOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Việc làm thêm");
+        long plain = blog(author, "POST", "PUBLISHED", day, 2 * HUGE, 0, false, null);
+
+        var member = home.member(viewer);
+        assertThat(member.interests()).containsExactly("Việc làm thêm");
+        List<FeedPost> feed = member.forYou();
+        assertThat(feed).extracting(FeedPost::id).containsExactly(near, both, stageOnly, interestOnly, plain);
+        assertThat(feed.get(0).reasons()).containsExactly(new FeedReason("AREA", NEAR, "Feed place " + word));
+        assertThat(feed.get(1).reasons()).containsExactly(new FeedReason("STAGE", FITS, "Nhà ở"),
+                new FeedReason("INTEREST", HomeService.REASON_INTEREST, "Việc làm thêm"));
+        assertThat(feed.get(1).reason()).isEqualTo(FITS);
+        assertThat(feed.get(2).reasons()).containsExactly(new FeedReason("STAGE", FITS, "Visa và cư trú"));
+        assertThat(feed.get(3).reasons()).containsExactly(
+                new FeedReason("INTEREST", HomeService.REASON_INTEREST, "Việc làm thêm"));
+        assertThat(feed.get(3).reason()).isEqualTo(HomeService.REASON_INTEREST);
+        assertThat(feed.get(4).reasons()).isEmpty();
+        assertThat(feed.get(4).reason()).isNull();
+        // Saved, liked or commented on: only fillers, after every post not read yet (old ones included)
+        assertThat(feed).extracting(FeedPost::id).doesNotContain(saved, liked, commented);
     }
 
     @Test
@@ -344,10 +453,29 @@ class HomeFeedFlowTest {
             jdbc.update("INSERT INTO blog_place_links (blog_id, place_id) VALUES (?, ?)", id, place);
         }
         if (topicName != null) {
-            jdbc.update("INSERT INTO blog_topic_links (blog_id, topic_id) SELECT ?, id FROM blog_topics WHERE name = ?",
-                    id, topicName);
+            topic(id, topicName);
         }
         return id;
+    }
+
+    private void topic(long blogId, String topicName) {
+        jdbc.update("INSERT INTO blog_topic_links (blog_id, topic_id) SELECT ?, id FROM blog_topics WHERE name = ?",
+                blogId, topicName);
+    }
+
+    private void like(long userId, long blogId, Instant at) {
+        jdbc.update("INSERT INTO blog_likes (blog_id, user_id, created_at) VALUES (?, ?, ?)", blogId, userId,
+                Timestamp.from(at));
+    }
+
+    private void save(long userId, long blogId, Instant at) {
+        jdbc.update("INSERT INTO saved_blogs (blog_id, user_id, created_at) VALUES (?, ?, ?)", blogId, userId,
+                Timestamp.from(at));
+    }
+
+    private void comment(long userId, long blogId, String status, Instant at) {
+        jdbc.update("INSERT INTO comments (blog_id, author_id, content, status, created_at) VALUES (?, ?, ?, ?, ?)",
+                blogId, userId, "Bình luận " + word, status, Timestamp.from(at));
     }
 
     private static MockHttpSession session(long userId) {
@@ -358,10 +486,13 @@ class HomeFeedFlowTest {
         return session;
     }
 
-    private List<Map<String, Object>> forYou(long userId) throws Exception {
-        String body = mvc.perform(get("/api/me/home").session(session(userId)))
+    private String home(long userId) throws Exception {
+        return mvc.perform(get("/api/me/home").session(session(userId)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        return JsonPath.read(body, "$.data.forYou");
+    }
+
+    private List<Map<String, Object>> forYou(long userId) throws Exception {
+        return JsonPath.read(home(userId), "$.data.forYou");
     }
 
     private void putProfile(long userId, String json) throws Exception {
