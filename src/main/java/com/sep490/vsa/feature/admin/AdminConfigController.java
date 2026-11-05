@@ -74,6 +74,20 @@ public class AdminConfigController {
     }
 
     /**
+     * Sửa chữ của một từ khóa cấm. Chữ mới giống hệt chữ cũ thì không ghi gì và trả lời "không có thay đổi".
+     */
+    @PutMapping("/keywords/{id}")
+    public ApiResponse<BannedKeywordItem> updateBannedKeyword(
+            @PathVariable("id") Long id,
+            @RequestBody CreateBannedKeywordRequest request,
+            @AuthenticationPrincipal AppUserPrincipal me) {
+        BannedKeywordItem item = configService.updateBannedKeyword(id, request.keyword(), me);
+        return item == null
+                ? ApiResponse.ok(AdminUserController.NO_CHANGE, null)
+                : ApiResponse.ok("Sửa từ khóa cấm thành công", item);
+    }
+
+    /**
      * Xóa một từ khóa cấm khỏi danh mục kiểm duyệt.
      */
     @DeleteMapping("/keywords/{id}")
