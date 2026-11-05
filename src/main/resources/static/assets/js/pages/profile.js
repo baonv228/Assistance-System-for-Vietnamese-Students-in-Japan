@@ -70,7 +70,7 @@ function render(p) {
             ? `<div class="info">Yêu cầu tag ${esc(p.pendingTag)} đang chờ duyệt. Ảnh minh chứng tự xóa sau 14 ngày nếu chưa được duyệt.</div>`
             : `<a class="btn" href="/tag-request">${ic("verified")}Xin tag định danh</a>`}
 
-        <div class="card">
+        <div class="card" id="area">
             <h3>${ic("person_pin_circle")} Khu vực và giai đoạn</h3>
             <p class="note">Không bắt buộc. Dùng để gợi ý việc cần làm, review và sự kiện gần bạn. Chỉ lưu khu vực, không lưu địa chỉ; chỉ mình bạn thấy.</p>
             <div class="field"><label for="me-stage">Giai đoạn</label>
@@ -116,6 +116,8 @@ function render(p) {
     bindPassword(p);
     bindHistory();
     bindArea(p);
+    // From "Điều chỉnh" on the page "Dành cho bạn" (/profile#area): the card is drawn after loading, so scroll now
+    if (location.hash === "#area") document.querySelector("#area").scrollIntoView({ block: "start" });
 }
 
 /** The area picker (prefecture → area, quick search, map); its label follows the stage chosen above it. */

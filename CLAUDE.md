@@ -94,7 +94,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
   "/", no "://", backslash, space or control character, same origin, not /login, /register or /complete-signup); staff
   and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. The Member pages Spring Security
-  guards (`/profile`, `/saved`, `/notifications`, `/messages`, `/messages/**`) send a guest to `/login?next=<that page
+  guards (`/profile`, `/saved`, `/for-you`, `/notifications`, `/messages`, `/messages/**`) send a guest to `/login?next=<that page
   and query>` too (`SecurityConfig.loginThenBack`, GET only; staff pages stay plain `/login`), so a chat notification
   tapped after the session ended lands on the conversation. Sessions last 14 days without activity and the cookie
   survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env `SESSION_TIMEOUT`, "cần chốt").
@@ -141,7 +141,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
   `/messages`, `/messages/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
@@ -206,11 +206,20 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `interests`: up to 3 topics learnt from the last 90 days (like 1, save 2, published comment 2 once per post, own
   published post or question 3; at least 2 points; "Khác" and inactive topics left out; "cần chốt" constants in
   `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
-  linked place or the matching topic) and `reason` = the first label. Feed preferences = the user's area + stage
-  (`PUT /api/me/profile`); no table of their own.
+  linked place or the matching topic), `reason` = the first label and `engaged` (already liked, saved or commented
+  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
   Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
-  first post across the width), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
+  first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
+  phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+- "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
+  `GET /api/me/for-you?scope=&page=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
+  the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
+  (area or prefecture), STAGE, INTEREST keeps only the posts with that reason, each scope offered only when the member
+  has an area / a stage / an interest (else ALL), each with its count; answer also has `areaName`, `stage`, `interests`.
+  The page: "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons in
+  the address (`?scope=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
+  drawn twice (likes may move the ranking between two pages).
 - "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
   newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"
   through `GuideNext.placeId`), `placeArea` and `near` (AREA / PREFECTURE / null). The title says "quanh <khu vực>" only
