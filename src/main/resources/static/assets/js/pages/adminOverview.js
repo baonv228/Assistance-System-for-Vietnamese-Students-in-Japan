@@ -13,7 +13,7 @@ const PRESETS = [
     { key: "custom", label: "Tùy chọn" }
 ];
 
-const DATE_ERROR = "Khoảng ngày không hợp lệ. Ngày bắt đầu phải trước ngày kết thúc và không được ở tương lai.";
+const DATE_ERROR = "Khoảng ngày không hợp lệ. Ngày bắt đầu phải trước ngày kết thúc và cả 2 đều không được ở tương lai.";
 const NO_DATA = "Không có dữ liệu trong khoảng thời gian đã chọn.";
 
 // Khoảng đang chọn; "custom" giữ hai ngày người dùng nhập
@@ -127,14 +127,39 @@ function bindPeriod() {
         load();
     }));
     document.getElementById("applyRange")?.addEventListener("click", () => {
-        state.from = document.getElementById("rangeFrom").value;
-        state.to = document.getElementById("rangeTo").value;
-        if (!state.from || !state.to || state.from > state.to) {
-            showDateError(DATE_ERROR);
-            return;
-        }
-        load();
+    state.from = document.getElementById("rangeFrom").value;
+    state.to = document.getElementById("rangeTo").value;
+
+    // 1. Kiểm tra rỗng
+    if (!state.from || !state.to) {
+        showDateError(DATE_ERROR);
+        return;
+    }
+
+    // 2. Chuyển đổi sang đối tượng Date để tính toán logic
+    const fromDate = parseDateString(state.from);
+    const toDate = parseDateString(state.to);
+
+    // 3. Lấy mốc ngày hiện tại (đặt giờ về 00:00:00 để so sánh công bằng theo ngày)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 4. Cập nhật điều kiện: Từ ngày > Đến ngày HOẶC một trong hai ngày lớn hơn hôm nay
+    if (fromDate > toDate || fromDate > today) {
+        showDateError(DATE_ERROR);
+        return;
+    }
+
+    load();
     });
+}
+
+function parseDateString(dateString) {
+    // Tách chuỗi "10/11/2026" thành mảng ["10", "11", "2026"]
+    const [day, month, year] = dateString.split("/");
+    
+    // Ghép lại thành chuẩn ISO "2026-11-10" và trả về đối tượng Date
+    return new Date(`${year}-${month}-${day}`);
 }
 
 /** Báo lỗi khoảng ngày dưới bộ chọn, đánh dấu hai ô ngày; dữ liệu cũ vẫn nằm trên màn hình. */
