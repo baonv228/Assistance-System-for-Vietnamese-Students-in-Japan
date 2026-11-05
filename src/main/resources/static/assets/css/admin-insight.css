@@ -50,9 +50,9 @@
 /* Biểu đồ cột: mỗi ngày một cột, cuộn ngang khi quá nhiều ngày */
 .admin-chart { overflow-x: auto; padding-bottom: 4px; }
 .admin-chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 180px; min-width: 100%; width: max-content; }
-.admin-bar { display: grid; grid-template-rows: 16px 1fr 18px; justify-items: center; width: 34px; height: 100%; }
+.admin-bar { display: grid; flex: 1; grid-template-rows: 16px 1fr 18px; justify-items: center; width: 34px; height: 100%; }
 .admin-bar-value { font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-.admin-bar-track { display: flex; align-items: flex-end; width: 100%; height: 100%; }
+.admin-bar-track { display: flex; justify-content: space-around; align-items: flex-end; width: 50%; min-width: max-content; height: 100%; }
 .admin-bar-fill { width: 100%; min-height: 2px; background: var(--brand); border-radius: 6px 6px 0 0; }
 .admin-bar-fill.zero { background: var(--line); }
 .admin-bar-day { font-size: 11.5px; color: var(--muted); }
