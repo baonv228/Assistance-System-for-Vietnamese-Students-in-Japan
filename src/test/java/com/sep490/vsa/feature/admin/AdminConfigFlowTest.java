@@ -90,10 +90,13 @@ class AdminConfigFlowTest {
         APPLIED.put("email_code_resend_seconds", new int[]{0, 600});
         APPLIED.put("register_ticket_minutes", new int[]{5, 1440});
         APPLIED.put("log_keep_days", new int[]{30, 3650});
+        APPLIED.put("false_report_max", new int[]{1, 100});
+        APPLIED.put("mute_days", new int[]{1, 365});
+        APPLIED.put("removed_keep_days", new int[]{1, 365});
     }
 
-    private static final Set<String> NOT_APPLIED = Set.of("false_report_max", "mute_days", "proof_keep_days",
-            "closed_report_threshold", "removed_keep_days", "verify_token_hours", "reset_token_minutes",
+    private static final Set<String> NOT_APPLIED = Set.of("proof_keep_days",
+            "closed_report_threshold", "verify_token_hours", "reset_token_minutes",
             "duplicate_warn_radius_m", "merge_suggest_radius_m");
 
     @Autowired

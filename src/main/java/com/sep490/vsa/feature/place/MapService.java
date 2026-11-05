@@ -4,6 +4,7 @@ import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.common.text.VietnameseText;
+import com.sep490.vsa.feature.area.AreaService;
 import com.sep490.vsa.feature.place.MapDtos.Author;
 import com.sep490.vsa.feature.place.MapDtos.DevLocation;
 import com.sep490.vsa.feature.place.MapDtos.LikeState;
@@ -149,16 +150,17 @@ public class MapService {
                 .filter(c -> (" " + VietnameseText.fold(c.name())).contains(" " + typed))
                 .toList();
         if (me == null) {
-            List<PlaceOption> own = places.search(q, ASVSJ_SEARCH_LIMIT).stream()
-                    .filter(o -> o.lat() != null && o.lng() != null)
-                    .toList();
+            List<PlaceOption> own = places.search(q, ASVSJ_SEARCH_LIMIT).stream().filter(MapService::onTheMap).toList();
             return new MapSearch(categories, own, "LOGIN", null);
         }
-        PlaceSearch found = placeService.search(me.id(), q);
-        List<PlaceOption> mappable = found.items().stream()
-                .filter(o -> o.lat() != null && o.lng() != null)
-                .toList();
+        PlaceSearch found = placeService.searchJapan(me.id(), q);
+        List<PlaceOption> mappable = found.items().stream().filter(MapService::onTheMap).toList();
         return new MapSearch(categories, mappable, found.external(), found.externalReason());
+    }
+
+    /** The Map shows and reviews places in Japan only; a place linked by a post may be in Vietnam. */
+    private static boolean onTheMap(PlaceOption o) {
+        return o.lat() != null && o.lng() != null && AreaService.inJapan(o.lat(), o.lng());
     }
 
     /**
@@ -172,10 +174,11 @@ public class MapService {
         if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
             throw ApiException.badRequest("Vị trí không hợp lệ.");
         }
+        if (!AreaService.inJapan(lat, lng)) {
+            return new MapSearch(List.of(), List.of(), "ON", null);      // no request to the free map service
+        }
         PlaceSearch found = placeService.nearby(me.id(), lat, lng);
-        List<PlaceOption> mappable = found.items().stream()
-                .filter(o -> o.lat() != null && o.lng() != null)
-                .toList();
+        List<PlaceOption> mappable = found.items().stream().filter(MapService::onTheMap).toList();
         return new MapSearch(List.of(), mappable, found.external(), found.externalReason());
     }
 

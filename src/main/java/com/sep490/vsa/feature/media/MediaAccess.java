@@ -34,11 +34,10 @@ import java.util.Optional;
  *       status is read here because {@link com.sep490.vsa.common.security.SessionUserRefreshFilter} skips
  *       {@code /media/}.</li>
  *   <li><b>A Moderator</b> (signed in, account ACTIVE) gets a file that passed its scan and is attached to the first
- *       review of a pin waiting for approval ("Ghim mới", UC-M06), {@code private, no-store} like the owner.</li>
+ *       review of a pin waiting for approval ("Ghim mới", UC-M06) or to a post or review with an open report case ("Báo cáo nội dung", UC-M04), {@code private, no-store} like the owner.</li>
  *   <li><b>Everyone else</b> gets 404: files being scanned or rejected, deleted files, files of hidden, removed or
  *       rejected posts and reviews or of locked or deleted authors, tag proofs, and files attached to nothing.</li>
  * </ol>
- * When Moderators get their report queue (deferred), its rule is added here.
  */
 @Service
 public class MediaAccess {
@@ -52,7 +51,7 @@ public class MediaAccess {
     public record Allowed(String mimeType, Audience audience) {
     }
 
-    private record Row(long ownerId, String mimeType, boolean shown, boolean ownerActive, boolean pendingPin) {
+    private record Row(long ownerId, String mimeType, boolean shown, boolean ownerActive, boolean staffOnly) {
     }
 
     private final JdbcTemplate jdbc;
@@ -89,14 +88,22 @@ public class MediaAccess {
                            SELECT 1 FROM guide_items g WHERE g.cover_media_id = m.id AND g.published = TRUE AND g.deleted_at IS NULL)) AS shown,
 
                        EXISTS (SELECT 1 FROM users o WHERE o.id = m.owner_id AND o.status = 'ACTIVE') AS owner_active,
-                       m.scan_status = 'PASSED' AND EXISTS (
+                       m.scan_status = 'PASSED' AND (EXISTS (
                            SELECT 1 FROM review_media pm JOIN reviews pr ON pr.id = pm.review_id
                            JOIN places pp ON pp.id = pr.place_id
-                           WHERE pm.media_id = m.id AND pp.status = 'PENDING') AS pending_pin
+                           WHERE pm.media_id = m.id AND pp.status = 'PENDING')
+                         OR EXISTS (
+                           SELECT 1 FROM review_media cm JOIN report_cases ck
+                             ON ck.target_type = 'REVIEW' AND ck.target_id = cm.review_id
+                           WHERE cm.media_id = m.id AND (ck.status = 'OPEN' OR ck.decision = 'REMOVE') AND ck.handler_role = 'MODERATOR')
+                         OR EXISTS (
+                           SELECT 1 FROM blog_media cb JOIN report_cases ck
+                             ON ck.target_type = 'BLOG' AND ck.target_id = cb.blog_id
+                           WHERE cb.media_id = m.id AND (ck.status = 'OPEN' OR ck.decision = 'REMOVE') AND ck.handler_role = 'MODERATOR')) AS staff_only
                 FROM media m WHERE m.storage_key = ? AND m.deleted_at IS NULL"""
                         .formatted(ActiveAuthors.of("b"), ActiveAuthors.of("r")),
                 (rs, i) -> new Row(rs.getLong("owner_id"), rs.getString("mime_type"), rs.getBoolean("shown"),
-                        rs.getBoolean("owner_active"), rs.getBoolean("pending_pin")), storageKey)
+                        rs.getBoolean("owner_active"), rs.getBoolean("staff_only")), storageKey)
                 .stream().findFirst().orElse(null);
         if (row == null) {
             return Optional.empty();
@@ -107,7 +114,7 @@ public class MediaAccess {
         if (viewerId != null && viewerId == row.ownerId() && row.ownerActive()) {
             return Optional.of(new Allowed(row.mimeType(), Audience.OWNER));
         }
-        if (viewerId != null && row.pendingPin() && activeModerator(viewerId)) {
+        if (viewerId != null && row.staffOnly() && activeModerator(viewerId)) {
             return Optional.of(new Allowed(row.mimeType(), Audience.STAFF));
         }
         return Optional.empty();

@@ -129,6 +129,11 @@ export const apiClient = {
     deleteAccount: () => request("/me", { method: "DELETE" }),
     // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
     saved: () => request("/me/saved"),
+    // Public profile (UC-U07). The lists answer { items, page, hasMore }
+    publicProfile: (id) => request(`/users/${id}`),
+    userReviews: (id, page = 0) => request(`/users/${id}/reviews?${toQuery({ page })}`),
+    userPosts: (id, page = 0) => request(`/users/${id}/posts?${toQuery({ page })}`),
+    userQuestions: (id, page = 0) => request(`/users/${id}/questions?${toQuery({ page })}`),
     // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
     pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),
     // UC-U09 "Xin tag định danh": { tags: [{ id, name, description, color, selfieOnly, proofTypes, owned }], pending,
@@ -352,7 +357,13 @@ export const apiClient = {
     modTagRequests: (params = {}) => request(`/moderator/tag-requests?${toQuery(params)}`),
     modTagRequest: (id) => request(`/moderator/tag-requests/${id}`),
     modApproveTag: (id) => post(`/moderator/tag-requests/${id}/approve`),
-    modRejectTag: (id, reason) => post(`/moderator/tag-requests/${id}/reject`, { reason })
+    modRejectTag: (id, reason) => post(`/moderator/tag-requests/${id}/reject`, { reason }),
+    // "Báo cáo nội dung" (UC-M03, UC-M04). params: { tab: URGENT|NORMAL|REMOVED, kind, reason, page }
+    modReports: (params = {}) => request(`/moderator/reports?${toQuery(params)}`),
+    modReport: (id) => request(`/moderator/reports/${id}`),
+    modRemoveReported: (id, body) => post(`/moderator/reports/${id}/remove`, body),
+    modDismissReport: (id) => post(`/moderator/reports/${id}/dismiss`),
+    modRestoreReported: (id) => post(`/moderator/reports/${id}/restore`)
 };
 
 /** { q: "rác", topicIds: [1, 2] } → "q=r%C3%A1c&topicIds=1%2C2" (empty values are left out). */

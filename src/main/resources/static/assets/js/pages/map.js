@@ -37,10 +37,13 @@ const ROUTES = {
     login: () => `/login?${new URLSearchParams({ next: location.pathname + location.search })}`,
     blog: (id) => `/blog/${id}`,
     event: (id) => `/events/${id}`,
-    profile: (id) => `/coming-soon?${new URLSearchParams({ f: "public-profile", id })}`
+    profile: (id) => `/users/${id}`
 };
 
 const $ = (s) => document.querySelector(s);
+/** Places can be reviewed and pinned only in Japan (the same box as AreaService.inJapan on the server). */
+const outsideJapan = ({ lat, lng }) => lat != null && lng != null && !(lat >= 20 && lat <= 46 && lng >= 122 && lng <= 154);
+const ONLY_JAPAN_ATTR = 'title="Senpai ơi chỉ nhận review địa điểm ở Nhật Bản."';
 const els = {
     app: $("#mapapp"), panel: $("#panel"), body: $("#panel-body"), handle: $("#sheet-handle"),
     form: $("#search-form"), q: $("#q"), clear: $("#q-clear"), suggest: $("#suggest"), evChips: $("#ev-chips"),
@@ -357,6 +360,7 @@ els.clear.addEventListener("click", () => {
 els.form.addEventListener("submit", (event) => {
     event.preventDefault();
     clearTimeout(suggestTimer);
+    els.q.blur();              // on a phone the keyboard goes away, so it does not cover the results
     runSearch(els.q.value);
 });
 document.addEventListener("click", (event) => {
@@ -605,7 +609,7 @@ function renderDetail() {
     const staff = state.user && !d.canAct;
     const reviewBtn = d.myReviewId
         ? `<button class="btn pri sm" type="button" data-act="edit-review" data-id="${d.myReviewId}">${ic("edit")}Sửa review của bạn</button>`
-        : `<button class="btn pri sm" type="button" data-act="write" ${staff || d.status !== "ACTIVE" ? "disabled" : ""}>${ic("rate_review")}Viết review</button>`;
+        : `<button class="btn pri sm" type="button" data-act="write" ${outsideJapan(d) ? `disabled ${ONLY_JAPAN_ATTR}` : staff || d.status !== "ACTIVE" ? "disabled" : ""}>${ic("rate_review")}Viết review</button>`;
     const saveBtn = `<button class="btn sm ${d.saved ? "on" : ""}" type="button" data-act="save" aria-pressed="${d.saved}"
             ${state.user && !d.canAct ? "disabled" : ""}>${ic(d.saved ? "bookmark_added" : "bookmark")}${d.saved ? "Đã lưu" : "Lưu"}</button>`;
     const shown = `${Math.min(d.closedReports, d.closedThreshold)}/${d.closedThreshold}`;
@@ -641,9 +645,10 @@ function renderOsm() {
             <p class="place-sub">${[o.nameJa && o.nameJa !== o.name ? `<span class="ja">${esc(o.nameJa)}</span>` : "", esc(o.address || "")].filter(Boolean).join(" · ")}</p>
             <div class="rating-row"><span class="badge">Chưa có review</span></div>
             <div class="actions-row">
-                <button class="btn pri sm" type="button" data-act="write-osm" ${state.user && state.user.role !== "USER" ? "disabled" : ""}>${ic("rate_review")}Viết review đầu tiên</button>
+                <button class="btn pri sm" type="button" data-act="write-osm" ${outsideJapan(o) ? `disabled ${ONLY_JAPAN_ATTR}` : state.user && state.user.role !== "USER" ? "disabled" : ""}>${ic("rate_review")}Viết review đầu tiên</button>
                 <a class="btn sm" href="${esc(googleDirectionsUrl(o))}" target="_blank" rel="noopener">${ic("directions")}Chỉ đường</a></div>
-            <p class="note osm-note">${ic("info")}Địa điểm này có trên OpenStreetMap nhưng chưa có trên Senpai ơi. Địa điểm sẽ được thêm khi có người viết review, lưu, hoặc gắn vào bài viết.</p>
+            <p class="note osm-note">${ic("info")}${outsideJapan(o) ? "Senpai ơi chỉ nhận review địa điểm ở Nhật Bản."
+                : "Địa điểm này có trên OpenStreetMap nhưng chưa có trên Senpai ơi. Địa điểm sẽ được thêm khi có người viết review, lưu, hoặc gắn vào bài viết."}</p>
         </div>`;
 }
 
@@ -1255,6 +1260,10 @@ els.pickCancel.addEventListener("click", stopPicking);
 
 async function startPin(latlng) {
     stopPicking();
+    if (outsideJapan(latlng)) {
+        toast("Vị trí này không ở Nhật Bản. Hãy chọn một điểm ở Nhật.", "error");
+        return;
+    }
     let compose;
     try {
         compose = await apiClient.pinCompose();
@@ -1340,7 +1349,7 @@ function renderPin() {
     return `<div class="pad">
         <div class="panel-head"><div class="grow"><p class="note">Cắm ghim</p><h2 class="place-title">Địa điểm mới</h2></div>
             <button class="btn sm" type="button" data-act="cancel-pin">${ic("close")}Hủy</button></div>
-        <p class="note">${ic("open_with")}Kéo ghim trên bản đồ để chỉnh đúng vị trí. Ghim mới cần Moderator duyệt; được duyệt bạn nhận +15 điểm.</p>
+        <p class="note">${ic("open_with")}Kéo ghim trên bản đồ để chỉnh đúng vị trí. ${p.compose?.noApprovalNeeded ? "Bạn là Senpai tin cậy nên ghim lên bản đồ ngay, +15 điểm." : "Ghim mới cần Moderator duyệt; được duyệt bạn nhận +15 điểm."}</p>
         ${c.newAccount ? `<p class="info">${ic("schedule")}Tài khoản mới: hôm nay còn ${Math.max(0, c.pinsLimit - c.pinsUsed)}/${c.pinsLimit} lượt cắm ghim.</p>` : ""}
         ${suggestionsHtml(p)}
         <form class="rv-form pin-form" id="pin-form" novalidate>
@@ -1521,7 +1530,7 @@ async function submitPin(force) {
     try {
         const saved = await apiClient.createPin(form);
         leavePin();
-        toast("Đã gửi ghim kèm review. Chờ Moderator duyệt.");
+        toast(saved.approved ? "Ghim đã lên bản đồ. +15 điểm." : "Đã gửi ghim kèm review. Chờ Moderator duyệt.");
         if (saved.reviewStatus === "PROCESSING") checkNotificationsSoon();
         await refreshPlaces();
         openPlace(saved.placeId, { fly: true });

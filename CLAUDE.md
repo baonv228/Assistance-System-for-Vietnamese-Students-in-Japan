@@ -47,7 +47,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   its files are scanned and again right before it is published (`BlogPublishService`): a hit → REJECTED without
   scanning, author notified with the keyword. Content published before a keyword was added is not re-checked.
   Reports: 1–5 → "Cần xử lý"; more than 5 → auto-hidden and "Khẩn". More than 5 false reports → reporting
-  locked 7 days. Removed content is kept 30 days for appeals, then purged.
+  locked 7 days. Removed content is kept 30 days (`removed_keep_days`), then purged. No appeals (user decision: the
+  `appeals` table stays unused and the "Khiếu nại" menu entry is gone).
 - Posts, questions, comments and answers of LOCKED or DELETED accounts are hidden everywhere Members and Guests read
   content (feed, search, statistics, featured, detail → 404 MSG19, Hỏi-Đáp, "Đã lưu", Home, scam warnings); nothing is
   deleted, and an unlocked account's content shows again. One SQL rule for every read: `feature/blog/ActiveAuthors`.
@@ -61,7 +62,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
 - Places: OpenStreetMap places store their `osm_id`, names, address and coordinates (ODbL allows it; credit
   "© OpenStreetMap contributors"); places saved from Google Maps before keep their `google_place_id` (no address or
-  coordinates); user pins need Moderator approval; same name within 200 m
+  coordinates); user pins need Moderator approval, except those of the top rank ("Senpai tin cậy", 300 points); same name within 200 m
   → warning. Moderator removes places softly (with reason, restorable) and merges duplicates (final, no undo).
   5 "đã đóng cửa" reports → Moderator queue; only the Moderator sets the closed label.
 - One review per user per place, and per year of an event. Review text ≤ 2,000 chars, ≤ 5 photos
@@ -142,9 +143,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`,
-  `/messages`, `/messages/{id}`,
+  `/messages`, `/messages/{id}`, `/users/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
-  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
+  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/moderator/reports`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -244,6 +245,24 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   points on the member Home link to `/profile#points`. `PointService.add` keeps `users.points` ≥ 0 (`GREATEST`), the
   history keeps every point taken. Sample data sets `users.points` without history lines ("Chưa có lần cộng hoặc trừ
   điểm nào được ghi lại."). Rank badges next to names elsewhere (reviews, posts, comments) are not done yet.
+- "Báo cáo nội dung" (UC-M03, UC-M04; `feature/report`: `ReportCaseService`, `ReportCaseRepository`, `ReportCaseController`,
+  `ReportCaseDtos`; page `/moderator/reports`, `mod-reports.js`). `GET /api/moderator/reports?tab=URGENT|NORMAL|REMOVED&kind=POST|QA|
+  ANSWER|COMMENT|REVIEW|MESSAGE&reason=&page=` (open MODERATOR cases, most reports first, 10 a page, both tab counts), `GET
+  …/{id}` (full content, files that passed the scan, reasons counted, reporters with notes and false-report counts; a
+  handled case → 409), `POST …/{id}/remove` `{reasonId, note}` and `POST …/{id}/dismiss`. Locks: reported row (post then
+  comment; review; conversation) → case → users, as a Member's report; a case handled meanwhile → 409 "Hồ sơ này đã được xử
+  lý.". Remove: status REMOVED + `purge_at` (`removed_keep_days`), −20 (`PointService.CONTENT_REMOVED`), author notified with
+  the reason (`CONTENT_REMOVED`), reporters thanked (`REPORT_RESOLVED`); a removed post also closes its comments' cases
+  without taking points; a message is recalled for both members (`ChatService.removeReported`). Dismiss: HIDDEN → PUBLISHED,
+  `reports.is_false`, +1 `false_report_count` per reporter; past `false_report_max` reporting locks `mute_days` days, the
+  member is told (`REPORT_MUTED`) and the count restarts. An encrypted message shows only the text the reporter revealed
+  (`chat_report_evidence`, checked by its franking tag), with the number of files. `purgeRemoved` (03:45 Japan time, 200 of
+  each a run) deletes expired reviews and posts with their files; a comment with replies stays as an empty placeholder.
+  Tab "Đã gỡ" (`tab=REMOVED`, newest removal first, what is still kept; not messages) → `POST …/{id}/restore` "Khôi phục"
+  for a removal made by mistake: PUBLISHED again, +20 back (reason CONTENT_RESTORED), author told (`CONTENT_RESTORED`),
+  case decision KEEP, reporters not counted as wrong; a recalled message cannot come back (400). `MediaAccess` also shows
+  a Moderator the files of removed content until the purge.
+  A member whose review was removed cannot write another for that place until the purge (`uq_review_place`).
 - Identity tags (UC-U09, UC-M01, UC-M02; `feature/tag`: `TagService`, `TagRepository`, `TagController`, `TagDtos`).
   "Xin tag định danh" on Tôi → page `/tag-request` (`tag-request.js`): `GET /api/me/tag-requests/compose` (active tags
   with description, colour, proof types, `selfieOnly`, `owned`; the waiting request; keep days) and `POST
@@ -259,6 +278,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   "Yêu cầu tag X bị từ chối: lý do. Bạn có thể gửi lại."). Either way the photo is discarded at once and the action logged
   (target USER). `expireOld` (hourly at :15) closes requests older than `proof_keep_days` (14) as EXPIRED, deletes the
   photo and tells the user. A request handled meanwhile → 409 "Yêu cầu này đã được xử lý.".
+- Public profile (UC-U07; `feature/user/PublicProfileService`, `PublicProfileController`, `PublicProfileDtos`): page
+  `/users/{id}` (`pages/user-profile.html`, `user-profile.js`, `user-profile.css`; `?tab=posts|questions`), opened from a
+  name on Blog, Hỏi-Đáp, post detail and Map reviews and from "Xem hồ sơ công khai của tôi" on Tôi. Public GETs:
+  `/api/users/{id}` (name, avatar, tags, rank or a staff account's role, join date, numbers of reviews, posts, questions,
+  best answers and likes received; `self`, `canMessage`), `/api/users/{id}/reviews|posts|questions?page=` (10 a page,
+  newest first, pages kept within 0–199). Never the email, area, stage or exact points. Only what everyone can see counts,
+  for the owner too: PUBLISHED content, place reviews of ACTIVE places, event reviews of events not deleted. LOCKED,
+  DELETED or missing → 404 "Không tìm thấy người dùng này.". "Nhắn tin" opens `/messages?to={id}` (a guest signs in first
+  with that `next`; only towards Members; not for staff viewers); one's own page shows "Chỉnh sửa hồ sơ". "Review mới"
+  and `/reviews` (Home) and the event pages show names without a link yet.
 - "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
   shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
   `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
@@ -368,8 +397,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   - Tests: `ChatFlowTest`, `ChatEncryptionFlowTest`, `ChatUtilitiesFlowTest`, `ChatFilesFlowTest`, `ChatLiveFlowTest`
     (who is told what on the live stream), `common/live/LiveEventsTest`, `notify/*Test`; the
     browser libraries with `node --test src/test/js/` (Node ≥ 20, no npm packages).
-  - Not built yet: group chat, Moderator reading of reported messages, "Nhắn tin" on Map and event reviews (Tiến's / the
-    events team's pages), a privacy-policy line saying reported messages are read by Moderators, `pushsubscriptionchange`.
+  - Not built yet: group chat, a link from event reviews to the public profile
+    with its "Nhắn tin" (the Map's reviews have it), a privacy-policy line saying reported messages are read by Moderators, `pushsubscriptionchange`.
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
@@ -382,7 +411,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `utf8mb4_0900_ai_ci`. A signed-in author also sees their own `PROCESSING` posts.
 - `FeaturedSnapshotService` fills `featured_snapshots` (WEEK = last 7 days, MONTH = last 30) at startup, every hour
   and after an account is locked, unlocked or deleted. Page: `pages/blog.html` + `assets/js/pages/blog.js`; links to Write Post, Map and Public Profile
-  go through `ROUTES` at the top of blog.js (Map and Public Profile are coming-soon pages for now). Old
+  go through `ROUTES` at the top of blog.js. Old
   `blog.html?type=QA` links redirect to `qa.html`.
 - Post Detail (UC-10): `GET /api/blogs/{id}` (public) returns the post, media, comment tree and `viewer` flags.
   Actions (signed-in role USER only, never on one's own content for like/report): `POST|DELETE
@@ -481,7 +510,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   nothing, keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
   Security's firewall). Content type from `media.mime_type`, `nosniff`, Range requests and 304 work. Only registered
   while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
-  event is not deleted, and the cover of an event that is not deleted. A Moderator sees PASSED files of a pending pin's review ("Ghim mới"). A Moderator queue adds its rule in
+  event is not deleted, and the cover of an event that is not deleted. A Moderator sees PASSED files of a pending pin's review ("Ghim mới"). A file of a post or review with an open report case is shown to an ACTIVE Moderator too (audience STAFF). A new Moderator queue adds its rule in
   `MediaAccess`.
 - `feature/moderation`: `MediaScanService` + `ImageModerator` + `MediaReader`. Photos first go to OpenAI Moderation
   `omni-moderation-latest` (free; `app.moderation.openai.api-key` or env `OPENAI_API_KEY`; without a key
@@ -709,7 +738,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - APIs (GET public): `GET /api/map` (categories with counts, every ACTIVE place with a position plus the viewer's own
   PENDING pins, review count and average, scam "!" flag, map centre = the representative point of the user's area,
   else Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
-  get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.search`),
+  get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.searchJapan`; **Japan only**,
+  user decision: pins, category counts, search and "Địa điểm quanh đây" leave out places outside `AreaService.inJapan`, a
+  point outside it asks no map service, a review of such a place answers 400 `ReviewService.ONLY_JAPAN` and a pin
+  `AreaService.NOT_IN_JAPAN`; Write Post and Đặt câu hỏi still search Japan and Vietnam, so a post can link a place in Vietnam),
   `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
   PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
   PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases`. Signed-in Users only: POST/DELETE
@@ -755,7 +787,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   in a pin name), `POST /api/map/pins` (part "pin" `{lat,lng,nameJa,nameEn,nameVi,categoryId,address,rating,content,
   confirmDuplicate}` + ≤ 5 "images"). ≥ 1 of nameJa/nameEn; the first review follows the review rules (+10 when
   published); duplicates without `confirmDuplicate` → 409; new accounts `pins_per_day` (2) in `user_daily_usage.pins`.
-  Saved as places source USER, status PENDING (+ place_history CREATED via PIN); only its author sees it; its first
+  A member at the top rank (`points` ≥ the highest `ranks.min_points`: "Senpai tin cậy", 300; user decision, the queue
+  stays small) needs no Moderator: the pin is ACTIVE at once, `reviewed_by` empty, APPROVED history via TOP_RANK, +15; only a
+  pin sent past the "Có thể trùng" warning still waits (`PinSaved.approved`, `PinCompose.noApprovalNeeded`).
+  Others: saved as places source USER, status PENDING (+ place_history CREATED via PIN); only its author sees it; its first
   review can be edited but not deleted while PENDING. UI: "Cắm ghim" → pick mode → panel "pin" with a draggable pin (a
   map click moves it), "Có phải là một trong các nơi này?" (OSM/Senpai ơi places within 60 m → write a review there
   instead, text carried over) and the "Có thể trùng" box ("Viết review cho nơi này" / "Vẫn gửi ghim mới").

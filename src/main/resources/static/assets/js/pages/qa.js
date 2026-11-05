@@ -5,11 +5,10 @@ import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
-const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     detail: (id) => `/qa/${id}`,
     ask: "/qa/ask",
-    profile: (id) => soon("public-profile", { id }),
+    profile: (id) => `/users/${id}`,
     login: loginUrl
 };
 

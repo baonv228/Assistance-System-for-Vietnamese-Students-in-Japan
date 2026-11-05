@@ -147,8 +147,8 @@ class AdminAccountSafetyFlowTest {
         assertThat(signedIn(session).role()).isEqualTo("MODERATOR");
         assertThat(signedIn(session).homePath()).isEqualTo("/moderator");
         assertThat(authorities(session)).containsExactly("ROLE_MODERATOR");
-        // No Moderator API exists yet: the call passes authorization and finds nothing (404, not 403)
-        mvc.perform(get("/api/moderator/reports").session(session)).andExpect(status().isNotFound());
+        // The new role counts at once: the Moderator API answers (not 403)
+        mvc.perform(get("/api/moderator/reports").session(session)).andExpect(status().isOk());
     }
 
     @Test

@@ -207,6 +207,31 @@ public class ReviewRepository {
         return n != null && n > 0;
     }
 
+    /** True for a place with a position outside Japan; an old Google place without a position does not count. */
+    public boolean outsideJapan(long placeId) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM places p WHERE p.id = ? AND p.lat IS NOT NULL AND p.lng IS NOT NULL
+                  AND NOT (%s)""".formatted(com.sep490.vsa.feature.area.AreaService.PLACE_IN_JAPAN),
+                Integer.class, placeId);
+        return n != null && n > 0;
+    }
+
+    /** The member holds the top rank ("Senpai tin cậy", 300 points), whose new pins need no Moderator. */
+    public boolean topRank(long userId) {
+        Boolean top = jdbc.queryForObject(
+                "SELECT points >= (SELECT MAX(min_points) FROM ranks) FROM users WHERE id = ?", Boolean.class, userId);
+        return Boolean.TRUE.equals(top);
+    }
+
+    /** A pin of a top-rank member goes on the map at once; no Moderator took part, so reviewed_by stays empty. */
+    public void approveOwnPin(long placeId, long userId, Instant now) {
+        Timestamp at = Timestamp.from(now);
+        jdbc.update("UPDATE places SET status = 'ACTIVE', reviewed_at = ?, updated_at = ? WHERE id = ?", at, at, placeId);
+        jdbc.update("""
+                INSERT INTO place_history (place_id, action, actor_id, detail, created_at)
+                VALUES (?, 'APPROVED', ?, JSON_OBJECT('via', 'TOP_RANK'), ?)""", placeId, userId, at);
+    }
+
     /** The community pin, PENDING until a Moderator approves it (only its author sees it meanwhile). */
     public long insertPin(long userId, String nameVi, String nameJa, String nameEn, String categoryId, String address,
                           double lat, double lng, Instant now) {
