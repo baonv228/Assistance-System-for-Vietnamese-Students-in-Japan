@@ -331,8 +331,8 @@ class AdminUsersFlowTest {
                 .andExpect(header().string("Location", "/admin"));
 
         // The admin scripts link to the clean addresses only
-        for (String script : new String[] {"/assets/js/components/admin-layout.js", "/assets/js/pages/adminDashboard.js",
-                "/assets/js/pages/adminUsers.js", "/assets/js/pages/adminConfig.js", "/assets/js/pages/adminLogs.js"}) {
+        for (String script : new String[] {"/assets/js/components/admin-layout.js", "/assets/js/pages/adminOverview.js",
+                "/assets/js/pages/adminAccounts.js", "/assets/js/pages/adminSettings.js", "/assets/js/pages/adminLogs.js"}) {
             String source = mvc.perform(get(script)).andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
             assertThat(source).as(script).doesNotContain("/pages/");
