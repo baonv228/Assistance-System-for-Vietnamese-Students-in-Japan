@@ -184,6 +184,20 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
+  - Navigation (`TABS` in site-header.js: key, label, icon, href, on the phone tab bar, desktop priority): desktop
+    shows the 8 links (Hỏi-Đáp after Blog, FAQ last); the ones that do not fit beside the account buttons move into a
+    "Thêm" menu, lowest priority first (Nhật ngữ, FAQ, Cẩm nang, Sự kiện…; `fitNav`, again on resize and once fonts load), and
+    "Thêm" is marked when the page shown is in it. Phones (≤ 860 px) get 5 equal tabs: Trang chủ, Bản đồ, Blog,
+    Hỏi-Đáp, "Thêm"; "Thêm" opens a bottom sheet (`<dialog id="more-sheet">`) with "Tôi" (or sign in / sign up), the
+    other features, then "Đã lưu", "Tin nhắn", "Thông báo" (staff: their own page). A new feature gets its `TABS` row.
+  - Layout rules learnt from the review: a grid that holds content (`.page`, `.desk-main`, `.desk`, the Map tools) uses
+    `minmax(0, 1fr)` columns, so a wide table scrolls inside its own wrapper instead of widening the whole page; check a
+    new or changed page at 320, 375, 768, 1024 and 1440 px: no sideways scroll of the page itself. `addSkipLink` (site-header.js, also
+    called by the staff shells) puts "Bỏ qua, đến nội dung chính" first in the Tab order. Every page head has the
+    favicon (`/assets/img/icon.svg`) and theme colour; the public pages have a description.
+  - Staff shells (`staff-desk.js`, `admin-layout.js`): header class `staff-top`, below 480 px only the flower of the
+    logo; on phones the side menu is one row that scrolls sideways and starts with the current module in view
+    (`showCurrentModule`). Rank badges next to names are `badge rank`; the rank cards on Tôi are `.ranks .rank`.
 - Personalized feed = the member Home, which leads with it: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
   5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
   30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
@@ -291,7 +305,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
     asks at once on events and otherwise every 4 s for the open conversation and ~16 s for the list, 15 s / 60 s while
     the stream is open, and sets it); "(n) " in front of the tab title; on every other page an in-app notice "Tin nhắn mới từ <tên>" / "<tên> muốn
     nhắn tin với bạn" with "Xem" from `GET /counts` `latest` (sessionStorage `asvsj.chat.seen.<userId>`). On phones the
-    header's "Tôi" button is hidden (the tab bar has it) to make room. "Nhắn tin" next to the author of a post or question
+    header's "Tôi" button is hidden (the "Thêm" sheet of the tab bar has it) to make room. "Nhắn tin" next to the author of a post or question
     (guests: to sign in with `next`) and on others' comments and answers (Members only, `blog-detail.js`); "Tin nhắn" on
     "Tôi". "Đăng xuất" first drops this browser's push subscription and forgets the chat key kept in it (shared
     computers): the next sign-in asks once for the "mật khẩu khôi phục".
@@ -517,7 +531,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.
-- Navbar has 8 tabs (Hỏi-Đáp after Blog); on phones the tab bar sizes each tab by its label so all fit at 320 px.
+- Navbar: see "Navigation" under Roles, homepage, profile (8 links on desktop with a "Thêm" menu for what does not
+  fit; 5 tabs on phones, the last opening the "Thêm" sheet).
 
 ## Nhật ngữ (feature/phrase)
 - The prototype's "Học" tab, named "Nhật ngữ" in the navbar (key `learn`, icon `translate`; was "Mẫu câu & Từ vựng").
@@ -820,6 +835,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   pages catch up. Pages keep polling as a slower safety net. Measured on the dev PC: a message reaches the other page in
   under 0.1 s locally; through the free Pinggy tunnel every request still costs 0.3–1.5 s (the relay), so a deployed
   server with its own https address is much faster than the tunnel.
+- Transfer (application.properties): `server.compression` gzips HTML, CSS, JS, JSON, SVG and the manifest above 1 KB
+  (map.js 89 → 24 KB, messages.js 117 → 32 KB, site.css 26 → 6 KB; photos, videos and the SSE stream are left alone).
+  `spring.web.resources.cache.cachecontrol.no-cache=true`: files in static/ are kept by the browser and checked again
+  with Last-Modified (304) on every use, instead of Spring Security's "no-store" that made every page download every
+  file again; API answers keep "no-store" and /media its own header (`StaticCacheFlowTest`).
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.

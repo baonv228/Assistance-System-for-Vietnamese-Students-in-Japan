@@ -2,7 +2,7 @@
 // role's modules. A module with an `href` is built and links to its page; the others are marked "Đang phát triển".
 // Usage: const user = await mountStaffDesk("MODERATOR", "events");  → fills <body>, returns the user and the main box.
 import { currentUser } from "../api/client.js";
-import { logout } from "./site-header.js";
+import { addSkipLink, logout } from "./site-header.js";
 import { esc, ic, LOGO_SVG } from "../lib/ui.js";
 
 /** Modules from the use case specification: [key, icon, name, use cases, href of the built page]. */
@@ -71,8 +71,8 @@ export async function mountStaffDesk(role, active = "overview") {
         ? `<a href="${href}" ${key === active ? 'aria-current="page"' : ""}>${ic(icon)}${esc(name)}</a>`
         : `<a href="#" data-soon title="Đang phát triển">${ic(icon)}${esc(name)}</a>`;
     document.body.innerHTML = `
-        <header class="site-top">
-            <a class="logo" href="/">${LOGO_SVG}Senpai ơi</a>
+        <header class="site-top staff-top">
+            <a class="logo" href="/" aria-label="Senpai ơi">${LOGO_SVG}<span class="logo-txt">Senpai ơi</span></a>
             <span class="badge br">${esc(user.roleLabel)}</span>
             <span class="grow"></span>
             <div class="site-account">
@@ -92,5 +92,17 @@ export async function mountStaffDesk(role, active = "overview") {
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>`;
     document.querySelector("[data-logout]").addEventListener("click", logout);
     document.querySelectorAll("[data-soon]").forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
+    showCurrentModule(document.querySelector(".desk-side"));
+    addSkipLink();
     return { user, main: document.querySelector("#desk-main") };
+}
+
+/**
+ * On a phone the side menu is one row that scrolls sideways: it starts with this page's module in view. Only the row
+ * scrolls, never the page.
+ */
+export function showCurrentModule(side) {
+    const current = side?.querySelector('[aria-current="page"]');
+    if (!current || side.scrollWidth <= side.clientWidth) return;
+    side.scrollLeft = current.offsetLeft - side.offsetLeft - (side.clientWidth - current.offsetWidth) / 2;
 }

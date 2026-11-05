@@ -25,7 +25,7 @@ async function main() {
         </div>
 
         <div class="admin-filter-bar">
-            <select id="logActionFilter" class="admin-filter-select" style="min-width: 260px;">
+            <select id="logActionFilter" class="admin-filter-select" style="min-width: min(260px, 100%);" aria-label="Lọc theo loại hành động">
                 <option value="">Tất cả loại hành động</option>
                 <option value="USER_ROLE_CHANGE">Đổi vai trò người dùng (USER_ROLE_CHANGE)</option>
                 <option value="USER_STATUS_CHANGE">Đổi trạng thái tài khoản (USER_STATUS_CHANGE)</option>
