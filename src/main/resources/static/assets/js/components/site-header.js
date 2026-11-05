@@ -6,9 +6,6 @@ import { apiClient, currentUser } from "../api/client.js";
 import { liveOpen, onLive, startLive } from "../lib/live.js";
 import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
 
-/** Features other members are building link to a placeholder page for now. */
-const soon = (feature) => `/coming-soon?f=${feature}`;
-
 /**
  * [key, label, icon, href, on the phone tab bar, desktop priority: the lowest moves into "Thêm" first].
  * "Tôi" is the account button on desktop and sits in the "Thêm" sheet on phones.
@@ -16,7 +13,7 @@ const soon = (feature) => `/coming-soon?f=${feature}`;
 const TABS = [
     ["home", "Trang chủ", "home", "/", true, 9],
     ["map", "Bản đồ", "map", "/map", true, 8],
-    ["learn", "Học", "school", soon("learn"), false, 1],
+    ["learn", "Nhật ngữ", "translate", "/phrases", false, 1],
     ["fest", "Sự kiện", "celebration", "/events", false, 5],
     ["blog", "Blog", "forum", "/blog", true, 7],
     ["qa", "Hỏi-Đáp", "contact_support", "/qa", true, 6],
@@ -26,7 +23,7 @@ const TABS = [
 
 const current = (key, active) => (key === active ? 'aria-current="page"' : "");
 const link = ([key, label, icon, href, , priority], active) =>
-    `<a href="${href}" data-key="${key}" data-priority="${priority}" ${current(key, active)}>${ic(icon)}<span>${label}</span></a>`;
+    `<a href="${href}" data-key="${key}" data-priority="${priority}" ${current(key, active)}>${ic(icon)}<span>${esc(label)}</span></a>`;
 
 /** The signed-in user's id, for what "Đăng xuất" clears in this browser. */
 let signedInId = null;
@@ -38,7 +35,7 @@ export async function mountSiteHeader(active) {
     const header = document.createElement("header");
     header.className = "site-top";
     header.innerHTML = `
-        <a class="logo" href="/">${LOGO_SVG}Senpai ơi</a>
+        <a class="logo" href="/" aria-label="Senpai ơi">${LOGO_SVG}<span class="logo-name">Senpai ơi</span></a>
         <nav class="site-nav" aria-label="Chính">${TABS.map((t) => link(t, active)).join("")}
             <div class="nav-more" hidden>
                 <button class="nav-more-btn" type="button" aria-expanded="false" aria-controls="nav-more-menu">${ic("more_horiz")}<span>Thêm</span>${ic("expand_more", "caret")}</button>
@@ -85,7 +82,7 @@ function accountHtml(user, active) {
         return `<a class="btn pri sm" href="${esc(loginUrl())}" data-login>${ic("login")}Đăng nhập</a>`;
     }
     const staff = user.role !== "USER"
-        ? `<a class="btn sm" href="${esc(user.homePath)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`
+        ? `<a class="btn sm desk-link" href="${esc(user.homePath)}" title="Trang ${esc(user.roleLabel)}">${ic("space_dashboard")}<span class="who">Trang ${esc(user.roleLabel)}</span></a>`
         : "";
     // "Tin nhắn" is for Members only (staff accounts do not chat)
     const chat = user.role === "USER"

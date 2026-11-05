@@ -76,7 +76,7 @@ function renderDashboard(container, stats, user) {
                 <div class="admin-stat-icon" style="background:#E0F2FE; color:#0284C7;">${ic("school")}</div>
                 <div class="admin-stat-info">
                     <span class="num">${stats.academicManagerCount}</span>
-                    <span class="lbl">QL Học thuật</span>
+                    <span class="lbl">BTV tiếng Nhật</span>
                 </div>
             </div>
 

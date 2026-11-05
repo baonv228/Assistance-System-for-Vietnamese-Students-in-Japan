@@ -67,7 +67,7 @@ public class MapService {
     static final MapCenter TOKYO = new MapCenter(35.681236, 139.767125, 12, null);
     private static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
     private static final Map<String, String> STAFF_LABELS = Map.of(
-            "MODERATOR", "Moderator", "ACADEMIC_MANAGER", "Người quản lý học thuật", "ADMIN", "Quản trị viên");
+            "MODERATOR", "Moderator", "ACADEMIC_MANAGER", "Biên tập viên nội dung tiếng Nhật", "ADMIN", "Quản trị viên");
 
     private final MapRepository repository;
     private final PlaceRepository places;

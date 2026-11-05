@@ -511,14 +511,21 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .module .ic.big { font-size: 28px; color: var(--brand); }
 
 /* ---------------- responsive ---------------- */
-@media (max-width: 1180px) and (min-width: 861px) {
+/* staff accounts: the link to their own pages keeps only its icon (and title) until the header has room */
+@media (max-width: 1500px) {
+    .site-account .desk-link .who { display: none; }
+}
+@media (max-width: 1320px) and (min-width: 861px) {
     .site-top { gap: 12px; padding: 10px 16px; }
     .site-nav { gap: 0; }
     .site-nav > a, .nav-more-btn { padding: 8px 7px; gap: 4px; font-size: 14px; }
     .site-account .who { display: none; }
 }
-@media (max-width: 1000px) and (min-width: 861px) {
+@media (max-width: 1100px) and (min-width: 861px) {
     .site-nav > a .ic, .nav-more-btn .ic:not(.caret) { display: none; }
+}
+@media (max-width: 960px) and (min-width: 861px) {
+    .logo .logo-name { display: none; }
 }
 @media (max-width: 860px) {
     .site-top { gap: 10px; padding: 10px 16px; }
@@ -588,6 +595,9 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     /* staff top bar on a phone: the flower alone, so the role badge and the three buttons fit */
     .staff-top .logo-txt { display: none; }
     .staff-top .site-account .btn.sm { padding: 0 9px; }
+/* the logo's name leaves room for "Tin nhắn", the bell and "Đăng xuất" on the smallest phones */
+@media (max-width: 360px) {
+    .logo .logo-name { display: none; }
 }
 /* "Xin tag định danh" (UC-U09) */
 .tag-form { display: grid; gap: 14px; }
