@@ -2,7 +2,8 @@
 // Layout dùng chung cho các trang Quản trị viên (Admin)
 // =========================================================
 import { currentUser } from "../api/client.js";
-import { logout } from "./site-header.js";
+import { addSkipLink, logout } from "./site-header.js";
+import { showCurrentModule } from "./staff-desk.js";
 import { esc, ic, LOGO_SVG } from "../lib/ui.js";
 
 // Địa chỉ gọn, không ".html" (common/web/CleanUrls)
@@ -33,8 +34,8 @@ export async function initAdminPage(activeKey) {
     currentUserData = user;
 
     document.body.innerHTML = `
-        <header class="site-top">
-            <a class="logo" href="/admin">${LOGO_SVG}Senpai ơi</a>
+        <header class="site-top staff-top">
+            <a class="logo" href="/admin" aria-label="Senpai ơi">${LOGO_SVG}<span class="logo-txt">Senpai ơi</span></a>
             <span class="badge br">${esc(user.roleLabel || "Quản trị viên")}</span>
             <span class="grow"></span>
             <div class="site-account">
@@ -60,6 +61,8 @@ export async function initAdminPage(activeKey) {
     `;
 
     document.getElementById("adminLogoutBtn")?.addEventListener("click", logout);
+    showCurrentModule(document.querySelector(".desk-side"));
+    addSkipLink();
     return user;
 }
 

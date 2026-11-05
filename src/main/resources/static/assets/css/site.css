@@ -22,6 +22,24 @@ p { margin: 0; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .stack { display: grid; gap: 12px; }
 
+/* "Bỏ qua, đến nội dung chính": shown only while it has the keyboard focus (site-header.js addSkipLink) */
+a.skip-link {
+    position: fixed;
+    z-index: 100;
+    top: 8px;
+    left: 8px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: var(--ink);
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    transform: translateY(-160%);
+}
+body.app a.skip-link { color: #fff; }
+a.skip-link:focus { transform: none; outline: none; box-shadow: var(--focus); }
+main:focus { outline: none; }
+
 /* ---------------- top bar ---------------- */
 .site-top {
     position: sticky;
@@ -47,21 +65,46 @@ p { margin: 0; }
     white-space: nowrap;
 }
 .logo svg { width: 30px; height: 30px; }
-.site-nav { display: flex; gap: 4px; }
-.site-nav a, .tabbar a {
+.site-nav { display: flex; gap: 4px; align-items: center; }
+.site-nav a, .tabbar a, .tabbar button, .nav-more-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 8px 10px;
+    border: 0;
     border-radius: 10px;
+    background: none;
     color: var(--muted);
+    font: inherit;
     font-weight: 600;
     text-decoration: none;
     white-space: nowrap;
+    cursor: pointer;
 }
-.site-nav a:hover { color: var(--ink); background: var(--surface-2); }
-.site-nav a[aria-current="page"] { color: var(--brand-text); background: var(--brand-soft); }
-.site-account { display: flex; gap: 8px; align-items: center; }
+.site-nav a:hover, .nav-more-btn:hover { color: var(--ink); background: var(--surface-2); }
+.site-nav a[aria-current="page"], .nav-more-btn.on { color: var(--brand-text); background: var(--brand-soft); }
+.site-account { display: flex; gap: 8px; align-items: center; flex: none; }
+/* "Thêm": the links that do not fit in the bar (site-header.js fitNav) */
+.nav-more { position: relative; }
+.nav-more-btn .caret { font-size: 18px; margin-left: -4px; }
+.nav-more-btn[aria-expanded="true"] .caret { transform: rotate(180deg); }
+.nav-more-btn:focus-visible, .nav-more-menu a:focus-visible { outline: none; box-shadow: var(--focus); }
+.nav-more-menu {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    display: grid;
+    gap: 2px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(47, 62, 110, .18);
+}
+.nav-more-menu a { display: flex; gap: 10px; padding: 10px 12px; color: var(--ink); }
+.nav-more-menu a .ic { color: var(--brand); }
 
 /* bell with the unread count */
 .bell { position: relative; }
@@ -119,6 +162,62 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .site-notice { animation: none; } }
 
 .tabbar { display: none; }
+
+/* "Thêm" sheet of the phone tab bar (site-header.js moreSheet) */
+.more-sheet {
+    width: 100%;
+    max-width: 560px;
+    max-height: min(86vh, 640px);
+    margin: auto auto 0;
+    padding: 0;
+    border: 0;
+    border-radius: 20px 20px 0 0;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 -12px 36px rgba(47, 62, 110, .2);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.more-sheet::backdrop { background: rgba(31, 38, 66, .45); }
+.more-sheet[open] { animation: sheet-in .2s ease-out; }
+@keyframes sheet-in { from { transform: translateY(24px); opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .more-sheet[open] { animation: none; } }
+.more-in { display: grid; gap: 14px; padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); }
+.more-head { display: flex; align-items: center; justify-content: space-between; }
+.more-head h2 { font-size: 20px; }
+.more-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.more-item, .more-me {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: none;
+}
+.more-item .ic { color: var(--brand); font-size: 22px; }
+.more-item span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.more-item:hover, .more-me:hover { background: var(--surface-2); }
+.more-item[aria-current="page"], .more-me[aria-current="page"] { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-text); }
+.more-item:focus-visible, .more-me:focus-visible { outline: none; box-shadow: var(--focus); }
+.more-account { padding-top: 14px; border-top: 1px solid var(--line); }
+.more-avatar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: var(--on-brand);
+    font-weight: 700;
+}
+.more-who { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
+.more-guest { display: grid; gap: 10px; }
+.more-guest .btn { flex: 1; }
 
 /* ---------------- buttons, badges, cards ---------------- */
 .btn {
@@ -220,7 +319,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .point-list .what { overflow-wrap: anywhere; }
 #history .pager { justify-content: center; margin-top: 8px; }
 
-.page { max-width: 1080px; margin: 0 auto; padding: 24px 24px 48px; display: grid; gap: 18px; }
+.page { max-width: 1080px; margin: 0 auto; padding: 24px 24px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .narrow { max-width: 780px; }
 
 /* ---------------- guest homepage ---------------- */
@@ -390,37 +489,41 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 
 /* ---------------- "Tôi" ---------------- */
 .ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.rank { border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 14px; }
-.rank.got { border-color: var(--brand); background: var(--brand-soft); }
-.rank ul { margin: 8px 0 0; padding-left: 18px; }
+/* scoped to the cards on Tôi: "badge rank" is the rank next to a name on posts and reviews */
+.ranks .rank { border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 14px; }
+.ranks .rank.got { border-color: var(--brand); background: var(--brand-soft); }
+.ranks .rank ul { margin: 8px 0 0; padding-left: 18px; }
 .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .warncard { border-color: var(--crit); background: var(--crit-soft); }
 
 /* ---------------- staff dashboards ---------------- */
 .desk { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: calc(100vh - 61px); }
+/* a long role name ("Người quản lý học thuật") is cut with "…" rather than pushing the buttons off the screen */
+.staff-top .badge { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 1.6; }
 .desk-side { border-right: 1px solid var(--line); background: var(--surface); padding: 18px 12px; display: grid; gap: 4px; align-content: start; }
 .desk-side .side-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 6px 10px; }
 .desk-side a { display: flex; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; text-decoration: none; color: var(--ink); font-weight: 500; }
 .desk-side a:hover { background: var(--surface-2); }
 .desk-side a[aria-current="page"] { background: var(--brand-soft); color: var(--brand-text); font-weight: 600; }
-.desk-main { padding: 24px; display: grid; gap: 18px; align-content: start; }
+/* minmax(0, 1fr) here and on .page: a wide table scrolls inside its own wrapper instead of widening the page */
+.desk-main { padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-content: start; }
 .module .ic.big { font-size: 28px; color: var(--brand); }
 
 /* ---------------- responsive ---------------- */
 @media (max-width: 1180px) and (min-width: 861px) {
     .site-top { gap: 12px; padding: 10px 16px; }
     .site-nav { gap: 0; }
-    .site-nav a { padding: 8px 7px; gap: 4px; font-size: 14px; }
+    .site-nav > a, .nav-more-btn { padding: 8px 7px; gap: 4px; font-size: 14px; }
     .site-account .who { display: none; }
 }
 @media (max-width: 1000px) and (min-width: 861px) {
-    .site-nav a .ic { display: none; }
+    .site-nav > a .ic, .nav-more-btn .ic:not(.caret) { display: none; }
 }
 @media (max-width: 860px) {
-    .site-top { padding: 10px 16px; }
+    .site-top { gap: 10px; padding: 10px 16px; }
     .site-nav, .site-account .who { display: none; }
-    /* "Tôi" is in the tab bar: room for "Tin nhắn", the bell and "Đăng xuất" */
+    /* "Tôi" is in the "Thêm" sheet: room for "Tin nhắn", the bell and "Đăng xuất" */
     .site-account .me-link { display: none; }
     .site-notices { top: 62px; left: 16px; right: 16px; width: auto; }
     .tabbar {
@@ -432,13 +535,25 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
         bottom: 0;
         background: var(--surface);
         border-top: 1px solid var(--line);
-        padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
+        padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
     }
-    /* 8 tabs: small labels, and each tab is its label's width plus an equal share of the rest, so long labels
-       ("Trang chủ", "Cẩm nang") borrow room from short ones ("Học", "Tôi") and still keep a gap on a 360 px screen */
-    .tabbar a { flex: 1 1 auto; flex-direction: column; gap: 2px; padding: 6px 0; font-size: 10px; letter-spacing: -.01em; justify-content: center; min-width: 0; white-space: nowrap; }
-    .tabbar a[aria-current="page"] { color: var(--brand-text); }
-    body.app.has-tabbar { padding-bottom: 72px; }
+    /* 5 tabs of equal width (4 features + "Thêm"), labels big enough to read and tap at 320 px */
+    .tabbar a, .tabbar button {
+        flex: 1 1 0;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        min-width: 0;
+        min-height: 52px;
+        padding: 4px 2px;
+        font-size: 12px;
+        line-height: 1.2;
+    }
+    .tabbar .ic { font-size: 24px; }
+    .tabbar a[aria-current="page"], .tabbar button.on { color: var(--brand-text); }
+    .tabbar a[aria-current="page"] .ic, .tabbar button.on .ic { font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24; }
+    .tabbar a:focus-visible, .tabbar button:focus-visible { outline: none; box-shadow: inset var(--focus); }
+    body.app.has-tabbar { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
     .page { padding: 18px 16px 32px; }
     .hero-in { grid-template-columns: 1fr; padding: 28px 16px 0; gap: 18px; }
     .hero-txt { padding-bottom: 0; }
@@ -451,10 +566,28 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     .spot-sub { font-size: 14px; }
     .spot-lead { padding: 16px; }
     .spot-lead .feedtitle { font-size: 20px; }
-    .desk { grid-template-columns: 1fr; }
-    .desk-side { border-right: 0; border-bottom: 1px solid var(--line); grid-auto-flow: column; overflow-x: auto; }
+    /* minmax(0, 1fr): a wide form or table scrolls inside its own box instead of widening the whole page */
+    .desk { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+    /* the side menu becomes one row of chips that scrolls sideways (staff-desk.js shows the current one) */
+    .desk-side {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 8px 12px;
+        grid-auto-flow: column;
+        grid-auto-columns: max-content;
+        overflow-x: auto;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+    }
+    .desk-side::-webkit-scrollbar { display: none; }
+    .desk-side a { white-space: nowrap; padding: 8px 12px; }
     .desk-side .side-title { display: none; }
     .desk-main { padding: 18px 16px; }
+}
+@media (max-width: 480px) {
+    /* staff top bar on a phone: the flower alone, so the role badge and the three buttons fit */
+    .staff-top .logo-txt { display: none; }
+    .staff-top .site-account .btn.sm { padding: 0 9px; }
 }
 /* "Xin tag định danh" (UC-U09) */
 .tag-form { display: grid; gap: 14px; }

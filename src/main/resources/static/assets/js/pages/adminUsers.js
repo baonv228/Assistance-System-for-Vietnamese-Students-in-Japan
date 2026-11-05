@@ -31,11 +31,11 @@ async function main() {
         <div class="admin-filter-bar">
             <div class="admin-search-box">
                 ${ic("search")}
-                <input type="text" id="userSearchInput" class="admin-search-input" 
+                <input type="text" id="userSearchInput" class="admin-search-input" aria-label="Tìm kiếm theo tên hoặc email"
                        placeholder="Tìm kiếm theo tên hoặc email…" value="${esc(state.keyword)}">
             </div>
 
-            <select id="userRoleFilter" class="admin-filter-select">
+            <select id="userRoleFilter" class="admin-filter-select" aria-label="Lọc theo vai trò">
                 <option value="">Tất cả vai trò</option>
                 <option value="USER">Người dùng (USER)</option>
                 <option value="MODERATOR">Moderator (Tối đa 3)</option>
@@ -43,7 +43,7 @@ async function main() {
                 <option value="ADMIN">Quản trị viên (ADMIN)</option>
             </select>
 
-            <select id="userStatusFilter" class="admin-filter-select">
+            <select id="userStatusFilter" class="admin-filter-select" aria-label="Lọc theo trạng thái">
                 <option value="">Tất cả trạng thái</option>
                 <option value="ACTIVE">Hoạt động (ACTIVE)</option>
                 <option value="LOCKED">Đã khóa (LOCKED)</option>

@@ -1,5 +1,7 @@
 // Top navigation (desktop) and bottom tab bar (phone), as in the prototype.
 // Usage: const user = await mountSiteHeader("home");  → returns the signed-in user or null.
+// Desktop: the links that do not fit next to the account buttons (narrow windows, long names) move into a "Thêm" menu,
+// lowest priority first. Phone: 5 tabs; "Thêm" opens a sheet with the other features and the account links.
 import { apiClient, currentUser } from "../api/client.js";
 import { liveOpen, onLive, startLive } from "../lib/live.js";
 import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
@@ -7,20 +9,24 @@ import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
 /** Features other members are building link to a placeholder page for now. */
 const soon = (feature) => `/coming-soon?f=${feature}`;
 
+/**
+ * [key, label, icon, href, on the phone tab bar, desktop priority: the lowest moves into "Thêm" first].
+ * "Tôi" is the account button on desktop and sits in the "Thêm" sheet on phones.
+ */
 const TABS = [
-    ["home", "Trang chủ", "home", "/"],
-    ["map", "Bản đồ", "map", "/map"],
-    ["learn", "Học", "school", soon("learn")],
-    ["fest", "Sự kiện", "celebration", "/events"],
-    ["blog", "Blog", "forum", "/blog"],
-    ["qa", "Hỏi-Đáp", "contact_support", "/qa"],
-    ["guide", "Cẩm nang", "menu_book", "/guides"],
-    ["faq", "FAQ", "quiz", "/faq"],
-    ["me", "Tôi", "person", "/profile"]
+    ["home", "Trang chủ", "home", "/", true, 9],
+    ["map", "Bản đồ", "map", "/map", true, 8],
+    ["learn", "Học", "school", soon("learn"), false, 1],
+    ["fest", "Sự kiện", "celebration", "/events", false, 5],
+    ["blog", "Blog", "forum", "/blog", true, 7],
+    ["qa", "Hỏi-Đáp", "contact_support", "/qa", true, 6],
+    ["guide", "Cẩm nang", "menu_book", "/guides", false, 4],
+    ["faq", "FAQ", "quiz", "/faq", false, 2]
 ];
 
-const link = ([key, label, icon, href], active) =>
-    `<a href="${href}" ${key === active ? 'aria-current="page"' : ""}>${ic(icon)}<span>${label}</span></a>`;
+const current = (key, active) => (key === active ? 'aria-current="page"' : "");
+const link = ([key, label, icon, href, , priority], active) =>
+    `<a href="${href}" data-key="${key}" data-priority="${priority}" ${current(key, active)}>${ic(icon)}<span>${label}</span></a>`;
 
 /** The signed-in user's id, for what "Đăng xuất" clears in this browser. */
 let signedInId = null;
@@ -33,17 +39,27 @@ export async function mountSiteHeader(active) {
     header.className = "site-top";
     header.innerHTML = `
         <a class="logo" href="/">${LOGO_SVG}Senpai ơi</a>
-        <nav class="site-nav" aria-label="Chính">${TABS.filter((t) => t[0] !== "me").map((t) => link(t, active)).join("")}</nav>
+        <nav class="site-nav" aria-label="Chính">${TABS.map((t) => link(t, active)).join("")}
+            <div class="nav-more" hidden>
+                <button class="nav-more-btn" type="button" aria-expanded="false" aria-controls="nav-more-menu">${ic("more_horiz")}<span>Thêm</span>${ic("expand_more", "caret")}</button>
+                <div class="nav-more-menu" id="nav-more-menu" hidden>${TABS.map((t) => link(t, active)).join("")}</div>
+            </div>
+        </nav>
         <span class="grow"></span>
         <div class="site-account">${accountHtml(user, active)}</div>`;
     document.body.prepend(header);
+    addSkipLink();
+    fitNav(header);
 
+    const inSheet = (key) => key === "me" || key === "messages" || TABS.some((t) => t[0] === key && !t[4]);
     const tabbar = document.createElement("nav");
     tabbar.className = "tabbar";
     tabbar.setAttribute("aria-label", "Điều hướng");
-    tabbar.innerHTML = TABS.map((t) => link(t, active)).join("");
-    document.body.append(tabbar);
+    tabbar.innerHTML = `${TABS.filter((t) => t[4]).map((t) => link(t, active)).join("")}
+        <button type="button" class="tab-more ${inSheet(active) ? "on" : ""}" aria-haspopup="dialog" aria-controls="more-sheet">${ic("menu")}<span>Thêm</span></button>`;
+    document.body.append(tabbar, moreSheet(user, active));
     document.body.classList.add("has-tabbar");
+    tabbar.querySelector(".tab-more").addEventListener("click", openSheet);
 
     header.querySelector("[data-logout]")?.addEventListener("click", logout);
     // Back to this page after signing in. Read again when pressed: list pages keep their filters in the address and
@@ -79,6 +95,142 @@ function accountHtml(user, active) {
         <a class="btn sm bell" href="/notifications" data-bell title="Thông báo">${ic("notifications")}<span class="bell-count" data-bell-count hidden></span><span class="sr-only" data-bell-label>Thông báo</span></a>
         <a class="btn sm me-link ${active === "me" ? "on" : ""}" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
         <button class="btn sm" type="button" data-logout title="Đăng xuất">${ic("logout")}<span class="sr-only">Đăng xuất</span></button>`;
+}
+
+/**
+ * The first thing the Tab key reaches: "Bỏ qua, đến nội dung chính" (hidden until focused), so a keyboard or screen
+ * reader user does not go through every link of the top bar on each page. Also used by the staff pages.
+ */
+export function addSkipLink() {
+    const main = document.querySelector("main");
+    if (!main || document.querySelector(".skip-link")) return;
+    if (!main.id) main.id = "main-content";
+    if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+    const skip = document.createElement("a");
+    skip.className = "skip-link";
+    skip.href = `#${main.id}`;
+    skip.textContent = "Bỏ qua, đến nội dung chính";
+    skip.addEventListener("click", (event) => {
+        event.preventDefault();                 // focus without changing the address (pages keep filters there)
+        main.focus({ preventScroll: true });
+        main.scrollIntoView({ block: "start" });
+    });
+    document.body.prepend(skip);
+}
+
+// ---------------------------------------------------------------- desktop "Thêm" menu
+/**
+ * Puts every link back in the top bar, then moves the lowest-priority ones into "Thêm" until the bar fits (account
+ * buttons included). Runs again when the window changes size and once the fonts have loaded (an icon is a wide word
+ * until its font arrives). Nothing to do while the bar is hidden (phones).
+ */
+function fitNav(header) {
+    const nav = header.querySelector(".site-nav");
+    const more = nav.querySelector(".nav-more");
+    const button = more.querySelector(".nav-more-btn");
+    const menu = more.querySelector(".nav-more-menu");
+    const links = [...nav.querySelectorAll(":scope > a")];
+    const copies = new Map([...menu.querySelectorAll("a")].map((a) => [a.dataset.key, a]));
+    const byPriority = [...links].sort((a, b) => a.dataset.priority - b.dataset.priority);
+
+    const fit = () => {
+        links.forEach((a) => { a.hidden = false; });
+        copies.forEach((a) => { a.hidden = true; });
+        more.hidden = true;
+        if (getComputedStyle(nav).display === "none") return;
+        for (const a of byPriority) {
+            if (header.scrollWidth <= header.clientWidth) break;
+            more.hidden = false;
+            a.hidden = true;
+            copies.get(a.dataset.key).hidden = false;
+        }
+        // the page shown is one of the links in the menu: "Thêm" is marked like a current link
+        button.classList.toggle("on", [...copies.values()].some((a) => !a.hidden && a.hasAttribute("aria-current")));
+    };
+    const close = (focusButton = false) => {
+        if (menu.hidden) return;
+        menu.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+        if (focusButton) button.focus();
+    };
+    let lastWidth = -1;
+    new ResizeObserver(() => {
+        if (header.clientWidth === lastWidth) return;
+        lastWidth = header.clientWidth;
+        close();
+        fit();
+    }).observe(header);
+    document.fonts?.ready.then(fit);
+    fit();
+
+    button.addEventListener("click", () => {
+        const open = menu.hidden;
+        menu.hidden = !open;
+        button.setAttribute("aria-expanded", String(open));
+        if (open) menu.querySelector("a:not([hidden])")?.focus();
+    });
+    document.addEventListener("click", (event) => {
+        if (!more.contains(event.target)) close();
+    });
+    more.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") close(true);
+    });
+    more.addEventListener("focusout", (event) => {
+        if (event.relatedTarget && !more.contains(event.relatedTarget)) close();
+    });
+}
+
+// ---------------------------------------------------------------- phone "Thêm" sheet
+/** "Tôi" (or sign in), the features that are not on the tab bar, then "Đã lưu", "Tin nhắn", "Thông báo". */
+function moreSheet(user, active) {
+    const sheet = document.createElement("dialog");
+    sheet.className = "more-sheet";
+    sheet.id = "more-sheet";
+    sheet.setAttribute("aria-labelledby", "more-sheet-title");
+    const item = (key, label, icon, href) =>
+        `<a class="more-item" href="${esc(href)}" ${current(key, active)}>${ic(icon)}<span>${esc(label)}</span></a>`;
+    const features = TABS.filter((t) => !t[4]).map(([key, label, icon, href]) => item(key, label, icon, href)).join("");
+    let me;
+    let account = "";
+    if (!user) {
+        me = `<div class="more-guest">
+            <p class="note">Đăng nhập để viết review, đặt câu hỏi và lưu địa điểm.</p>
+            <div class="row"><a class="btn pri" href="${esc(loginUrl())}" data-login>${ic("login")}Đăng nhập</a>
+                <a class="btn" href="/register">${ic("person_add")}Đăng ký</a></div></div>`;
+    } else {
+        const initial = (user.displayName || "?").trim().charAt(0).toUpperCase();
+        me = `<a class="more-me" href="/profile" ${current("me", active)}>
+                <span class="more-avatar" aria-hidden="true">${esc(initial)}</span>
+                <span class="more-who"><b>${esc(user.displayName)}</b><span class="note">Trang cá nhân, điểm và tag</span></span>
+                ${ic("chevron_right")}</a>`;
+        const staff = user.role !== "USER" ? item("staff", `Trang ${user.roleLabel}`, "space_dashboard", user.homePath) : "";
+        const member = user.role === "USER"
+            ? item("saved", "Đã lưu", "bookmark", "/saved") + item("messages", "Tin nhắn", "chat", "/messages")
+            : "";
+        account = `<div class="more-grid more-account">${staff}${member}${item("notifications", "Thông báo", "notifications", "/notifications")}</div>`;
+    }
+    sheet.innerHTML = `<div class="more-in">
+        <div class="more-head"><h2 id="more-sheet-title">Thêm</h2>
+            <button class="btn sm" type="button" data-close>${ic("close")}<span class="sr-only">Đóng</span></button></div>
+        ${me}
+        <div class="more-grid">${features}</div>
+        ${account}
+    </div>`;
+    sheet.querySelector("[data-close]").addEventListener("click", () => sheet.close());
+    // a tap on the dimmed page around the sheet closes it
+    sheet.addEventListener("click", (event) => {
+        if (event.target === sheet) sheet.close();
+    });
+    const login = sheet.querySelector("[data-login]");
+    login?.addEventListener("click", () => { login.href = loginUrl(); });
+    return sheet;
+}
+
+function openSheet() {
+    const sheet = document.querySelector("#more-sheet");
+    if (!sheet || sheet.open) return;
+    if (typeof sheet.showModal === "function") sheet.showModal();
+    else sheet.setAttribute("open", "");
 }
 
 export async function logout() {
