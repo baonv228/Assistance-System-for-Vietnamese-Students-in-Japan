@@ -7,6 +7,7 @@ import com.sep490.vsa.feature.admin.AdminDtos.BannedKeywordItem;
 import com.sep490.vsa.feature.admin.AdminDtos.SystemSettingItem;
 import com.sep490.vsa.feature.moderation.ContentFilter;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -403,7 +404,7 @@ public class AdminConfigService {
         List<String> current = jdbc.query("SELECT keyword FROM banned_keywords WHERE id = ? FOR UPDATE",
                 (rs, rowNum) -> rs.getString(1), id);
         if (current.isEmpty()) {
-            throw new ApiException(org.springframework.http.HttpStatus.NOT_FOUND,
+            throw new ApiException(HttpStatus.NOT_FOUND,
                     "Không tìm thấy từ khóa cấm với ID: " + id);
         }
         String cleanKeyword = checkedKeyword(rawKeyword);

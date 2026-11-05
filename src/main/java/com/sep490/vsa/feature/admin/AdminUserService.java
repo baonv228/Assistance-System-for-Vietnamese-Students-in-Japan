@@ -23,6 +23,8 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -181,8 +183,8 @@ public class AdminUserService {
         if (items.isEmpty()) {
             return items;
         }
-        String marks = String.join(",", java.util.Collections.nCopies(items.size(), "?"));
-        Map<Long, List<TagChip>> byUser = new java.util.HashMap<>();
+        String marks = String.join(",", Collections.nCopies(items.size(), "?"));
+        Map<Long, List<TagChip>> byUser = new HashMap<>();
         jdbc.query("""
                 SELECT ut.user_id, t.id, t.name, t.color
                 FROM user_tags ut JOIN tag_types t ON t.id = ut.tag_type_id
