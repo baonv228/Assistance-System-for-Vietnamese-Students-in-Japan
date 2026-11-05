@@ -488,6 +488,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .spot-empty { padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
 
 /* ---------------- "Tôi" ---------------- */
+#points, #area { scroll-margin-top: 76px; }      /* /profile#points, /profile#area: below the sticky top bar */
 .ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 /* scoped to the cards on Tôi: "badge rank" is the rank next to a name on posts and reviews */
 .ranks .rank { border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 14px; }

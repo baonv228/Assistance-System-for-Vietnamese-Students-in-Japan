@@ -2,11 +2,14 @@
 import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
+import { postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
 import {
     areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
 } from "../lib/ui.js";
 
 const main = document.querySelector("#home");
+/** Every post of "Dành cho bạn", ranked the same way ("Xem tất cả"). */
+const FOR_YOU_PAGE = "/for-you";
 
 // ---------------------------------------------------------------- guest
 
@@ -113,8 +116,9 @@ async function renderMember(notice = "") {
 
 /**
  * "Dành cho bạn": what the suggestions are based on (area, stage, topics learnt from the user's likes, saves, comments
- * and posts) with "Điều chỉnh" to change area and stage in place, then the posts chosen and ranked by the server, each
- * with the reasons it was chosen. Open at once while area or stage is missing, until "Để sau".
+ * and posts) with "Điều chỉnh" to change area and stage in place, then the first 5 posts chosen and ranked by the
+ * server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed (/for-you). Open at once while area or
+ * stage is missing, until "Để sau".
  */
 function forYouSection(home, notice) {
     const posts = home.forYou || [];
@@ -123,7 +127,7 @@ function forYouSection(home, notice) {
     return `<section class="spot" id="foryou" aria-labelledby="foryou-title">
         <div class="spot-head">
             <h2 class="grow" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2>
-            <a class="btn sm" href="/blog" aria-label="Xem thêm bài viết trên Blog">Xem thêm${ic("arrow_forward")}</a>
+            ${lead ? `<a class="btn sm" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("arrow_forward")}</a>` : ""}
         </div>
         <p class="spot-sub">Bài viết Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
         <div class="spot-basis">
@@ -140,16 +144,16 @@ function forYouSection(home, notice) {
         ${profileForm(home, open)}
         ${lead ? `<div class="spot-posts">
             <article class="spot-lead">${reasonChips(lead)}
-                <a class="feedtitle" href="/blog/${encodeURIComponent(lead.id)}">${esc(lead.title)}</a>
+                <a class="feedtitle" href="${postUrl(lead)}">${esc(lead.title)}</a>
                 ${lead.excerpt ? `<p class="spot-excerpt">${esc(lead.excerpt)}</p>` : ""}
                 ${postMeta(lead)}
             </article>
             ${rest.map((p) => `<article class="spot-item">${reasonChips(p)}
-                <a class="feedtitle" href="/blog/${encodeURIComponent(p.id)}">${esc(p.title)}</a>
+                <a class="feedtitle" href="${postUrl(p)}">${esc(p.title)}</a>
                 ${postMeta(p)}
             </article>`).join("")}
         </div>
-        <a class="btn sm spot-more" href="/blog">Xem thêm bài viết${ic("arrow_forward")}</a>`
+        <a class="btn sm spot-more" href="${FOR_YOU_PAGE}">Xem tất cả bài viết dành cho bạn${ic("arrow_forward")}</a>`
         : '<p class="spot-empty">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
     </section>`;
 }
@@ -157,20 +161,6 @@ function forYouSection(home, notice) {
 /** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
 const chip = (icon, text, what, extra = "") =>
     `<span class="spot-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
-
-/** Why the server chose the post, in its ranking order: the place near the user, the stage topic, the interest. */
-const REASON_STYLE = {
-    AREA: ["location_on", ""], PREFECTURE: ["map", ""], STAGE: ["flag", "stage"], INTEREST: ["interests", "interest"]
-};
-const reasonChips = (post) => (post.reasons?.length ? `<div class="whys">${post.reasons.map((r) => {
-    const [icon, style] = REASON_STYLE[r.code] || ["auto_awesome", ""];
-    return `<span class="why ${style}">${ic(icon)}<span>${esc(r.label)}${r.detail ? ` · <b>${esc(r.detail)}</b>` : ""}</span></span>`;
-}).join("")}</div>` : "");
-
-const postMeta = (p) => `<span class="row spot-meta">${p.topicName ? `<span class="badge">${esc(p.topicName)}</span>` : ""}
-    <span class="note">${esc(p.authorName)} · ${esc(timeAgo(p.createdAt))} ·
-        <span aria-label="${p.likeCount} lượt thích">${ic("favorite")}${p.likeCount}</span>
-        <span aria-label="${p.commentCount} bình luận">${ic("chat_bubble")}${p.commentCount}</span></span></span>`;
 
 /** The place's panel on the Map. */
 const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;
