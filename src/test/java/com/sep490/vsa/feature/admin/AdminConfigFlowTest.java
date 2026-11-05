@@ -75,6 +75,8 @@ class AdminConfigFlowTest {
 
     static {
         APPLIED.put("report_hide_threshold", new int[]{1, 100});
+        APPLIED.put("closed_report_threshold", new int[]{1, 100});
+        APPLIED.put("proof_keep_days", new int[]{1, 60});
         APPLIED.put("new_account_days", new int[]{0, 365});
         APPLIED.put("posts_per_day", new int[]{1, 50});
         APPLIED.put("pins_per_day", new int[]{1, 50});
@@ -92,8 +94,8 @@ class AdminConfigFlowTest {
         APPLIED.put("log_keep_days", new int[]{30, 3650});
     }
 
-    private static final Set<String> NOT_APPLIED = Set.of("false_report_max", "mute_days", "proof_keep_days",
-            "closed_report_threshold", "removed_keep_days", "verify_token_hours", "reset_token_minutes",
+    private static final Set<String> NOT_APPLIED = Set.of("false_report_max", "mute_days",
+            "removed_keep_days", "verify_token_hours", "reset_token_minutes",
             "duplicate_warn_radius_m", "merge_suggest_radius_m");
 
     @Autowired

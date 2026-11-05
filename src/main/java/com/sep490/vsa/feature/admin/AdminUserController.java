@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/users")
 public class AdminUserController {
 
+    /** Lời đáp khi tài khoản đã ở đúng vai trò/trạng thái được chọn. */
+    static final String NO_CHANGE = "Không có thay đổi nào để lưu.";
+
     private final AdminUserService userService;
 
     public AdminUserController(AdminUserService userService) {
@@ -36,9 +39,10 @@ public class AdminUserController {
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "role", required = false) String role,
             @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "tagId", required = false) Long tagId,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "size", defaultValue = "15") int size) {
-        PageResult<UserItem> result = userService.getUsers(keyword, role, status, page, size);
+        PageResult<UserItem> result = userService.getUsers(keyword, role, status, tagId, page, size);
         return ApiResponse.ok("Lấy danh sách người dùng thành công", result);
     }
 
@@ -59,8 +63,8 @@ public class AdminUserController {
             @PathVariable("id") Long id,
             @RequestBody UpdateUserRoleRequest request,
             @AuthenticationPrincipal AppUserPrincipal me) {
-        userService.updateUserRole(id, request.role(), me);
-        return ApiResponse.ok("Cập nhật vai trò người dùng thành công", null);
+        boolean changed = userService.updateUserRole(id, request.role(), request.expectedRole(), me);
+        return ApiResponse.ok(changed ? "Cập nhật vai trò người dùng thành công" : NO_CHANGE, null);
     }
 
     /**
@@ -71,7 +75,20 @@ public class AdminUserController {
             @PathVariable("id") Long id,
             @RequestBody UpdateUserStatusRequest request,
             @AuthenticationPrincipal AppUserPrincipal me) {
-        userService.updateUserStatus(id, request.status(), request.reason(), me);
-        return ApiResponse.ok("Cập nhật trạng thái người dùng thành công", null);
+        boolean changed = userService.updateUserStatus(id, request.status(), request.reason(),
+                request.expectedStatus(), me);
+        return ApiResponse.ok(changed ? "Cập nhật trạng thái người dùng thành công" : NO_CHANGE, null);
+    }
+
+    /**
+     * Kiểm tra trước khi mở hộp thoại khóa/mở khóa: tài khoản này có được phép đổi sang trạng thái đó không. Chỉ đọc.
+     * Trả về trạng thái hiện tại của tài khoản.
+     */
+    @GetMapping("/{id}/status-check")
+    public ApiResponse<String> checkStatusChange(
+            @PathVariable("id") Long id,
+            @RequestParam("target") String target,
+            @AuthenticationPrincipal AppUserPrincipal me) {
+        return ApiResponse.ok("Tài khoản có thể thực hiện thao tác này", userService.checkStatusChange(id, target, me));
     }
 }

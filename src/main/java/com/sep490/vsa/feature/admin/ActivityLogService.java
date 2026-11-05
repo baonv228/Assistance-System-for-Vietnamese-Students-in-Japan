@@ -14,6 +14,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
@@ -92,7 +94,30 @@ public class ActivityLogService {
             ORDER BY l.created_at DESC, l.id DESC
             LIMIT ?
         """;
-        return jdbc.query(sql, (rs, rowNum) -> new ActivityLogItem(
+        return jdbc.query(sql, ActivityLogService::mapRow, limit);
+    }
+
+    /**
+     * Nhật ký liên quan tới một người dùng: người đó là người thực hiện hoặc là đối tượng (target_type USER), mới nhất
+     * trước. Dùng cho phần "hoạt động gần đây" ở chi tiết tài khoản.
+     */
+    @Transactional(readOnly = true)
+    public List<ActivityLogItem> getRecentLogsForUser(long userId, int limit) {
+        String sql = """
+            SELECT l.id, l.actor_id, u.display_name, u.email, l.action, l.target_type,
+                   l.target_id, l.old_value, l.new_value, l.description, l.created_at
+            FROM activity_logs l
+            LEFT JOIN users u ON u.id = l.actor_id
+            WHERE l.actor_id = ? OR (l.target_type = 'USER' AND l.target_id = ?)
+            ORDER BY l.created_at DESC, l.id DESC
+            LIMIT ?
+        """;
+        return jdbc.query(sql, ActivityLogService::mapRow, userId, userId, limit);
+    }
+
+    /** Một dòng của truy vấn nhật ký (đã nối với người thực hiện) thành bản ghi trả về. */
+    private static ActivityLogItem mapRow(ResultSet rs, int rowNum) throws SQLException {
+        return new ActivityLogItem(
                 rs.getLong("id"),
                 rs.getObject("actor_id") != null ? rs.getLong("actor_id") : null,
                 rs.getString("display_name") != null ? rs.getString("display_name") : "Hệ thống",
@@ -103,8 +128,7 @@ public class ActivityLogService {
                 rs.getString("old_value"),
                 rs.getString("new_value"),
                 rs.getString("description"),
-                toInstant(rs.getTimestamp("created_at"))
-        ), limit);
+                toInstant(rs.getTimestamp("created_at")));
     }
 
     /**
@@ -139,19 +163,7 @@ public class ActivityLogService {
         params.add(pageSize);
         params.add(offset);
 
-        List<ActivityLogItem> items = jdbc.query(selectSql, (rs, rowNum) -> new ActivityLogItem(
-                rs.getLong("id"),
-                rs.getObject("actor_id") != null ? rs.getLong("actor_id") : null,
-                rs.getString("display_name") != null ? rs.getString("display_name") : "Hệ thống",
-                rs.getString("email") != null ? rs.getString("email") : "-",
-                rs.getString("action"),
-                rs.getString("target_type"),
-                rs.getObject("target_id") != null ? rs.getLong("target_id") : null,
-                rs.getString("old_value"),
-                rs.getString("new_value"),
-                rs.getString("description"),
-                toInstant(rs.getTimestamp("created_at"))
-        ), params.toArray());
+        List<ActivityLogItem> items = jdbc.query(selectSql, ActivityLogService::mapRow, params.toArray());
 
         int totalPages = (int) Math.ceil((double) total / pageSize);
         return new PageResult<>(items, pageNumber, pageSize, total, totalPages);
