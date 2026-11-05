@@ -13,7 +13,7 @@ SET @nippori = (SELECT id FROM areas WHERE code = '131181');  -- Arakawa-ku, Tok
 -- ---------------------------------------------------------------- places
 INSERT INTO places (osm_id, name_vi, name_ja, name_en, category_id, area_id, address, lat, lng, source, status, created_by, reviewed_by, reviewed_at) VALUES
  ('N772389775', 'Ga Nippori', '日暮里駅', 'Nippori Station', 'station', @nippori, 'Higashi-Nippori 6, Arakawa, Tokyo', 35.728920, 139.771364, 'OSM', 'ACTIVE', @admin, @mod, NOW()),
- (NULL, 'Trường Nhật ngữ FPT', 'FPT日本語学校', 'FPT Japanese Language School', 'school', @nippori, 'Higashi-Nippori, Arakawa, Tokyo', 35.729600, 139.772800, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
+ (NULL, 'FPT Japan Academy', 'FPT日本語学校', 'FPT Japan Academy', 'school', @nippori, '4-3-5 Higashi-Nippori, Arakawa-ku, Tokyo 116-0014', 35.726824, 139.782398, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
  (NULL, 'Konbini Midori', 'コンビニみどり', 'Midori Mart', 'konbini', @nippori, 'Higashi-Nippori 5', 35.727500, 139.772000, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
  (NULL, 'Quán cơm Hana', 'はな食堂', 'Hana Shokudo', 'food', @nippori, 'Ghim do cộng đồng thêm', 35.726700, 139.773500, 'USER', 'ACTIVE', @lananh, @mod, NOW()),
  (NULL, 'Siêu thị Sakura', 'さくらスーパー', 'Sakura Super', 'super', @nippori, 'Higashi-Nippori 6', 35.730900, 139.773700, 'TEAM', 'ACTIVE', @admin, @mod, NOW()),
@@ -26,7 +26,7 @@ INSERT INTO places (osm_id, name_vi, name_ja, name_en, category_id, area_id, add
  (NULL, 'Phở Hà Nội Nippori', 'フォーハノイ', 'Pho Hanoi', 'food', @nippori, 'Ghim do cộng đồng thêm', 35.724000, 139.773000, 'USER', 'PENDING', @hoang, NULL, NULL);
 
 SET @p_station = (SELECT id FROM places WHERE name_vi = 'Ga Nippori');
-SET @p_school  = (SELECT id FROM places WHERE name_vi = 'Trường Nhật ngữ FPT');
+SET @p_school  = (SELECT id FROM places WHERE name_vi = 'FPT Japan Academy');
 SET @p_konbini = (SELECT id FROM places WHERE name_vi = 'Konbini Midori');
 SET @p_hana    = (SELECT id FROM places WHERE name_vi = 'Quán cơm Hana');
 SET @p_ward    = (SELECT id FROM places WHERE name_vi = 'Văn phòng quận Arakawa');
