@@ -17,13 +17,21 @@
 </head>
 <body class="app">
 <!-- "Dành cho bạn" ("Xem tất cả" on the member Home): every post of the personal feed, ranked like the Home's five,
-     10 at a time; the scope buttons keep only the posts that matched one reason (area, stage, interests). -->
+     10 at a time; the search box keeps the posts holding a text, the scope buttons only the posts that matched one
+     reason (area, stage, interests). -->
 <main class="page narrow foryoupage" id="for-you">
     <div>
         <a class="link" href="/"><span class="ic" aria-hidden="true">chevron_left</span>Trang chủ</a>
         <h2>Dành cho bạn</h2>
-        <p class="note" id="summary" aria-live="polite">Đang tải…</p>
     </div>
+    <form class="site-search" id="search" role="search">
+        <span class="ic" aria-hidden="true">search</span>
+        <label class="sr-only" for="q">Tìm trong bài dành cho bạn</label>
+        <input id="q" name="q" type="search" maxlength="100" autocomplete="off" enterkeyhint="search"
+               placeholder="Tìm trong bài dành cho bạn">
+        <span class="note count" id="q-count" aria-live="polite"></span>
+    </form>
+    <p class="note" id="summary" aria-live="polite">Đang tải…</p>
     <div class="fy-basis" id="basis" hidden></div>
     <div class="seg" id="scopes" role="group" aria-label="Lọc theo lý do gợi ý" hidden></div>
     <div class="fy-list" id="list"></div>

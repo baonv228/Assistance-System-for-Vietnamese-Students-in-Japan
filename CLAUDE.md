@@ -142,7 +142,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
-  `/messages`, `/messages/{id}`,
+  `/search`, `/messages`, `/messages/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
@@ -185,8 +185,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
   - Navigation (`TABS` in site-header.js: key, label, icon, href, on the phone tab bar, desktop priority): desktop
-    shows the 8 links (Hỏi-Đáp after Blog, FAQ last); the ones that do not fit beside the account buttons move into a
-    "Thêm" menu, lowest priority first (Nhật ngữ, FAQ, Cẩm nang, Sự kiện…; `fitNav`, again on resize and once fonts load), and
+    shows the 7 links (Hỏi-Đáp after Blog, Cẩm nang last; FAQ is a tab of Hỏi-Đáp, no link of its own); the ones that
+    do not fit beside the account buttons move into a
+    "Thêm" menu, lowest priority first (Nhật ngữ, Cẩm nang, Sự kiện…; `fitNav`, again on resize and once fonts load), and
     "Thêm" is marked when the page shown is in it. Phones (≤ 860 px) get 5 equal tabs: Trang chủ, Bản đồ, Blog,
     Hỏi-Đáp, "Thêm"; "Thêm" opens a bottom sheet (`<dialog id="more-sheet">`) with "Tôi" (or sign in / sign up), the
     other features, then "Đã lưu", "Tin nhắn", "Thông báo" (staff: their own page). A new feature gets its `TABS` row.
@@ -208,18 +209,42 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
   linked place or the matching topic), `reason` = the first label and `engaged` (already liked, saved or commented
   on). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
-  Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
+  Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
+  bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
   first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
   phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
-  `GET /api/me/for-you?scope=&page=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
+  `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
   (area or prefecture), STAGE, INTEREST keeps only the posts with that reason, each scope offered only when the member
-  has an area / a stage / an interest (else ALL), each with its count; answer also has `areaName`, `stage`, `interests`.
-  The page: "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons in
-  the address (`?scope=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
+  has an area / a stage / an interest (else ALL), each with its count; answer also has `q`, `areaName`, `stage`,
+  `interests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
+  approved linked place name holds it (the Blog's rule: folded text, `utf8mb4_0900_ai_ci`, LIKE signs escaped), order,
+  reasons and scope counts unchanged, counted over the posts found; blank = no search; the Home card never searches.
+  The page: search box first (typing asks after 350 ms, Enter at once; the text marked in titles and excerpts with
+  `lib/search-text.js`; nothing found → "Tìm … trên toàn Senpai ơi" `/search?q=` or "xóa từ khóa"; `#search` focuses
+  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons and text in
+  the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
   drawn twice (likes may move the ranking between two pages).
+- "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,
+  `SearchRepository`, `SearchDtos`; page `/search?q=`, `pages/search.html`, `search.js`, `search.css`; public). The Home
+  (guest hero and member, under the greeting) has a plain GET form to it (an empty box is not sent). `GET /api/search?q=`
+  searches every part at once, each by its own feature so it shows exactly what that part's page shows for the same text
+  and hides what it hides: posts `BlogFeedService` (an author also finds their own PROCESSING post), questions
+  `QaService`, guides `GuideService.browse` (published), events `EventService.list` (now and coming first, soonest
+  first, then past, latest first), phrases `PhraseService.list`, FAQ `FaqService.list` (published), places
+  `SearchRepository` (ACTIVE Senpai ơi places by name vi/ja/en or address, or category at a word start as the Map;
+  names starting with the text first; review count and average of active accounts; no OpenStreetMap call). Each part
+  `{total, items}` with its first 5 (`SECTION_SIZE`); `tooShort` when the text has under 2 letters/digits
+  (`VietnameseText.squash`) and no Han/kana (nothing searched); ≤ 100 characters else 400. The page: live search
+  (300 ms, Enter at once, `?q=` in the address and the title), chips jumping to each part, the text marked, "Xem tất cả"
+  → `/blog?q=`, `/qa?q=`, `/guides?q=`, `/events?q=`, `/phrases?q=`, `/qa?tab=faq&q=`, places "Tìm … trên Bản đồ"
+  `/map?q=` (with OSM); items open `/map?place=`, `/blog/{id}`, `/qa/{id}`, `/guides/{id}`, `/events/{id}`,
+  `/phrases?q=<japanese>` (with "Nghe"), `/qa?tab=faq&id=`; Members also get "Chỉ tìm trong bài dành cho bạn"
+  (`/for-you?q=`); empty box → ideas ("Thẻ cư trú", "Ngân hàng"…); nothing found → tips, `/map?q=`, "Đặt câu hỏi"
+  (guests via sign-in). Tests: `SearchFlowTest`, `HomeFeedFlowTest` (search), `src/test/js/search-text.test.mjs`.
+  Not done: a search button in the header of every page (the prototype has one).
 - "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
   newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"
   through `GuideNext.placeId`), `placeArea` and `near` (AREA / PREFECTURE / null). The title says "quanh <khu vực>" only
@@ -540,7 +565,23 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.
-- Navbar: see "Navigation" under Roles, homepage, profile (8 links on desktop with a "Thêm" menu for what does not
+- "Câu hỏi thường gặp" (FAQ, `feature/faq`, V16) is the second tab of `/qa` (user decision; it was the page `/faq`):
+  `/qa?tab=faq&q=&topic=&page=`, one entry `/qa?tab=faq&id=` (address read and written by `lib/qa-state.js`, Node test
+  `qa-state.test.mjs`; pages counted from 1). Old `/faq`, `/faq/` and `/pages/faq.html` answer 301 there, the old
+  0-based `page` turned 1-based (`CleanUrls.cleanAddress`). Entries are written by Moderators (`/moderator/faqs`, from
+  scratch or from a best answer, `faq_sources`), are not member content (no like, comment, report) and keep their own
+  tables and topics (`faq_topics`); they open in place (`faq-ui.js faqItem`). The tab: search box shared with the
+  community tab (the text is kept when switching), topic buttons with counts, 10 a page; a search holding no entry
+  word for word lists the related ones. The community tab shows up to 3 related entries above the questions of a
+  search (page 1 only), and "Đặt câu hỏi" (new questions only) offers up to 3 under the title while it is typed
+  (≥ 8 characters, 500 ms; they open in place, "Mở trong tab mới"). API (public): `GET /api/faqs` (`q` matches
+  question + answer as typed, accents and case ignored, `%`/`_` literal, like the Hỏi-Đáp search), `/api/faqs/topics`,
+  `/api/faqs/{id}`, `GET /api/faqs/related?q=&limit=` (1–5, default 3; `FaqService.related` + `FaqMatcher`: words of
+  the text that are not question words (`FaqMatcher.COMMON`, "cần chốt") score 2 in the question / 1 in the answer,
+  neighbouring word pairs 3 / 1; related from half of what the text can reach, at least 1, at most 4; Japanese runs
+  match inside longer ones; published entries only, newest 1000 read). Tests `FaqMatcherTest` (the V19 entries),
+  `FaqFlowTest` (own database `asvsj_faq_test_20261103`).
+- Navbar: see "Navigation" under Roles, homepage, profile (7 links on desktop with a "Thêm" menu for what does not
   fit; 5 tabs on phones, the last opening the "Thêm" sheet).
 
 ## Nhật ngữ (feature/phrase)

@@ -17,8 +17,8 @@ const TABS = [
     ["fest", "Sự kiện", "celebration", "/events", false, 5],
     ["blog", "Blog", "forum", "/blog", true, 7],
     ["qa", "Hỏi-Đáp", "contact_support", "/qa", true, 6],
-    ["guide", "Cẩm nang", "menu_book", "/guides", false, 4],
-    ["faq", "FAQ", "quiz", "/faq", false, 2]
+    ["guide", "Cẩm nang", "menu_book", "/guides", false, 4]
+    // "Câu hỏi thường gặp" (FAQ) is a tab of Hỏi-Đáp (/qa?tab=faq)
 ];
 
 const current = (key, active) => (key === active ? 'aria-current="page"' : "");

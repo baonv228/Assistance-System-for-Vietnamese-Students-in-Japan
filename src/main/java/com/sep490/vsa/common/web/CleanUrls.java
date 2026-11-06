@@ -38,11 +38,11 @@ public final class CleanUrls {
         PAGES.put("/notifications", "/pages/notifications.html");
         PAGES.put("/reviews", "/pages/reviews.html");
         PAGES.put("/for-you", "/pages/for-you.html");
+        PAGES.put("/search", "/pages/search.html");
         PAGES.put("/messages", "/pages/messages.html");
         PAGES.put("/map", "/pages/map.html");
         PAGES.put("/phrases", "/pages/phrases.html");
         PAGES.put("/coming-soon", "/pages/coming-soon.html");
-        PAGES.put("/faq", "/pages/faq.html");
         PAGES.put("/moderator/faqs", "/pages/moderator/faqs.html");
         PAGES.put("/moderator/faq-suggestions", "/pages/moderator/faqs.html");
         PAGES.put("/guides", "/pages/guides.html");
@@ -93,6 +93,12 @@ public final class CleanUrls {
     static final String EVENT_REVIEW_PAGE = "/pages/event-review.html";
 
     private static final Pattern ID_PARAM = Pattern.compile("(?:^|&)id=(\\d+)(?:&|$)");
+
+    /** The FAQ page became the tab "Câu hỏi thường gặp" of Hỏi-Đáp; its old addresses answer 301 there. */
+    private static final Pattern OLD_FAQ_PAGE = Pattern.compile("/faq/?|/pages/faq\\.html");
+    static final String FAQ_TAB = "/qa?tab=faq";
+    /** The old FAQ page counted pages from 0 (?page=1 = second page); Hỏi-Đáp counts from 1. */
+    private static final Pattern ZERO_BASED_PAGE = Pattern.compile("(^|&)page=(\\d{1,9})(?=&|$)");
 
     private CleanUrls() {
     }
@@ -147,6 +153,11 @@ public final class CleanUrls {
     /** The clean address of an old .html link, with its query string, or null when the path is not an old page. */
     static String cleanAddress(String path, String query) {
         String q = query == null ? "" : query;
+        if (OLD_FAQ_PAGE.matcher(path).matches()) {
+            String rest = ZERO_BASED_PAGE.matcher(q)
+                    .replaceAll(m -> m.group(1) + "page=" + (Long.parseLong(m.group(2)) + 1));
+            return rest.isEmpty() ? FAQ_TAB : FAQ_TAB + "&" + rest;
+        }
         // Keep event links with a trailing slash on the canonical route, including the moderator desk.
         if (path.matches("/(?:events(?:/\\d+(?:/review)?)?|moderator/events)/")) {
             return withQuery(path.substring(0, path.length() - 1), q);

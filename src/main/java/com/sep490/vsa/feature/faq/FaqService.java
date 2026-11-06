@@ -17,23 +17,40 @@ public class FaqService {
  private final JdbcTemplate jdbc;
  public FaqService(JdbcTemplate jdbc){this.jdbc=jdbc;}
  private static final String SELECT="SELECT f.*,t.title AS topic_name FROM faq_entries f JOIN faq_topics t ON t.code=f.topic_code ";
- private static final String SEARCH=" AND (?='' OR LOCATE(LOWER(?),LOWER(CONCAT(f.question,' ',f.answer)))>0) ";
+ /** Question or answer holds the words as typed, accents and case ignored (as the Hỏi-Đáp search). */
+ private static final String SEARCH=" AND (?='' OR CONCAT(f.question,' ',f.answer) COLLATE utf8mb4_0900_ai_ci LIKE ?) ";
+ /** "Câu hỏi thường gặp liên quan": at most this many entries, the answer read up to this length. */
+ static final int RELATED_MAX=5,RELATED_ANSWER_CHARS=3000,RELATED_SCAN=1000;
  private String query(String q){String value=q==null?"":q.trim();if(value.length()>200)throw bad("Từ khóa tối đa 200 ký tự.");return value;}
+ private static String like(String search){return "%"+search.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%";}
  private void paging(int page,int size){if(page<0||size<1||size>50)throw bad("Phân trang không hợp lệ.");}
  public List<Topic> topics(String q,boolean moderator){String search=query(q);return jdbc.query("""
  SELECT t.code,t.title,COUNT(f.id) FROM faq_topics t LEFT JOIN faq_entries f ON f.topic_code=t.code
  AND (?=TRUE OR f.published=TRUE)
- """+SEARCH+" GROUP BY t.code,t.title,t.sort_order ORDER BY t.sort_order",(r,n)->new Topic(r.getString(1),r.getString(2),r.getLong(3)),moderator,search,search);}
+ """+SEARCH+" GROUP BY t.code,t.title,t.sort_order ORDER BY t.sort_order",(r,n)->new Topic(r.getString(1),r.getString(2),r.getLong(3)),moderator,search,like(search));}
  public Page<Entry> list(String q,String topic,String status,int page,int size,boolean moderator){
   paging(page,size);String search=query(q),category=topic==null?"":topic.trim();
   if(!List.of("ALL","PUBLISHED","HIDDEN").contains(status))throw bad("Trạng thái không hợp lệ.");
   String where=" WHERE (?=TRUE OR f.published=TRUE) AND (?='ALL' OR f.published=?) AND (?='' OR f.topic_code=?) "+SEARCH;
-  Object[] args={moderator,status,"PUBLISHED".equals(status),category,category,search,search};
+  Object[] args={moderator,status,"PUBLISHED".equals(status),category,category,search,like(search)};
   long total=Objects.requireNonNull(jdbc.queryForObject("SELECT COUNT(*) FROM faq_entries f "+where,Long.class,args));
   int pages=(int)Math.ceil((double)total/size),current=Math.min(page,Math.max(0,pages-1));
   var params=new ArrayList<>(Arrays.asList(args));params.add(size);params.add((long)current*size);
   var items=jdbc.query(SELECT+where+" ORDER BY f.updated_at DESC,f.id DESC LIMIT ? OFFSET ?",(r,n)->map(r,moderator),params.toArray());
   return new Page<>(items,total,current,size,pages);
+ }
+ /**
+  * Published entries that look like the text (a question being typed, or a search of Hỏi-Đáp), best first, see
+  * {@link FaqMatcher}. Words of the text need not form one phrase of the entry, unlike {@link #list}.
+  */
+ public List<Entry> related(String q,int limit){
+  var matcher=new FaqMatcher(query(q));
+  if(matcher.isEmpty())return List.of();
+  var candidates=jdbc.query("SELECT id,question,LEFT(answer,?) FROM faq_entries WHERE published=TRUE ORDER BY updated_at DESC,id DESC LIMIT ?",
+    (r,n)->new FaqMatcher.Candidate(r.getLong(1),r.getString(2),r.getString(3)),RELATED_ANSWER_CHARS,RELATED_SCAN);
+  var ids=matcher.rank(candidates,Math.max(1,Math.min(RELATED_MAX,limit)));
+  // An entry hidden meanwhile is left out instead of failing the whole answer
+  return ids.stream().flatMap(id->jdbc.query(SELECT+" WHERE f.id=? AND f.published=TRUE",(r,n)->map(r,false),id).stream()).toList();
  }
  public Entry detail(long id,boolean moderator){return jdbc.query(SELECT+" WHERE f.id=? AND (?=TRUE OR f.published=TRUE)",(r,n)->map(r,moderator),id,moderator).stream().findFirst().orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"FAQ không tồn tại hoặc đã bị ẩn."));}
  private Entry map(ResultSet r,boolean moderator)throws SQLException{

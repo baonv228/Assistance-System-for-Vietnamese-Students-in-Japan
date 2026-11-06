@@ -23,6 +23,7 @@ function renderGuest(data) {
                     <h1>Ở Nhật, bạn không đi một mình.</h1>
                     <p>Các senpai đã đánh dấu sẵn chỗ ăn rẻ, ga tàu, văn phòng quận. Mở bản đồ là thấy nơi nào đã có
                         người Việt review, kèm câu tiếng Nhật để dùng ngay tại đó.</p>
+                    ${searchForm()}
                     <div class="row">
                         <a class="btn pri" href="/map">${ic("map")}Xem bản đồ Nippori</a>
                         <a class="btn" href="/register">${ic("person_add")}Đăng ký miễn phí</a>
@@ -59,6 +60,7 @@ function renderGuest(data) {
             </p>
         </div>`;
     bindSpeak();
+    bindSearch();
 }
 
 const feature = (icon, title, text, href) =>
@@ -79,6 +81,7 @@ async function renderMember(notice = "") {
                 <h2>${greeting(home)}</h2>
                 <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}<a class="link" href="/profile#points">${home.points} điểm · ${esc(home.rankName)}</a></p>
             </div></div>
+            ${searchForm()}
             ${forYouSection(home, notice)}
             <div class="homegrid">
                 <div class="card">
@@ -111,6 +114,7 @@ async function renderMember(notice = "") {
             </div>
         </div>`;
     bindSpeak();
+    bindSearch();
     bindForYou(home);
 }
 
@@ -127,7 +131,8 @@ function forYouSection(home, notice) {
     return `<section class="spot" id="foryou" aria-labelledby="foryou-title">
         <div class="spot-head">
             <h2 class="grow" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2>
-            ${lead ? `<a class="btn sm" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("arrow_forward")}</a>` : ""}
+            ${lead ? `<a class="btn sm spot-find" href="${FOR_YOU_PAGE}#search" title="Tìm trong bài dành cho bạn">${ic("search")}<span class="sr-only">Tìm trong bài dành cho bạn</span></a>
+            <a class="btn sm" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("arrow_forward")}</a>` : ""}
         </div>
         <p class="spot-sub">Bài viết Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
         <div class="spot-basis">
@@ -306,6 +311,30 @@ function bindForYou(home) {
 }
 
 // ---------------------------------------------------------------- shared
+
+/**
+ * "Tìm trên Senpai ơi" (the prototype's "Tìm kiếm chung"): a plain GET form to the page /search, which searches places,
+ * posts, questions, guides, events, phrases and FAQ entries at once. "Dành cho bạn" has its own search (/for-you).
+ */
+const searchForm = () => `<form class="site-search home-search" role="search" action="/search" method="get" data-search>
+        ${ic("search")}
+        <label class="sr-only" for="home-q">Tìm trên Senpai ơi</label>
+        <input id="home-q" name="q" type="search" maxlength="100" autocomplete="off" enterkeyhint="search"
+               placeholder="Tìm địa điểm, bài viết, sự kiện…">
+        <button class="btn pri sm" type="submit">Tìm</button>
+    </form>`;
+
+/** An empty box is not sent: the focus stays in it. */
+function bindSearch() {
+    const form = main.querySelector("[data-search]");
+    form?.addEventListener("submit", (event) => {
+        const input = form.querySelector("input");
+        if (!input.value.trim()) {
+            event.preventDefault();
+            input.focus();
+        }
+    });
+}
 
 function phraseCard(phrase) {
     if (!phrase) {

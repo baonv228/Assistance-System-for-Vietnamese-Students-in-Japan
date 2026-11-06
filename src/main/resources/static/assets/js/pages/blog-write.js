@@ -9,6 +9,7 @@
 // the form is filled from GET …/{id}/edit and sent with PUT; attached photos/video can be removed (keepMediaIds).
 import { apiClient, ApiError } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
+import { faqItem } from "../lib/faq-ui.js";
 import { isImageFile, isVideoFile, MB, shrinkToJpeg, unreadableImage, videoLength } from "../lib/media-files.js";
 import { esc, ic, loginUrl } from "../lib/ui.js";
 
@@ -273,7 +274,66 @@ function updateCounters() {
 els.title.addEventListener("input", () => {
     updateCounters();
     clearFieldError("title");
+    suggestFaqSoon();
 });
+
+// ---------------------------------------------------------------- "Câu hỏi thường gặp" like the question typed
+
+// Only on "Đặt câu hỏi" (not when editing, not on "Viết bài"): FAQ entries whose words match the question, so the
+// answer may already be here; they open in place and the form keeps what was typed.
+const FAQ_SUGGEST = { box: $("#faq-suggest"), status: $("#faq-suggest-status"), delay: 500, minLength: 8, max: 3 };
+let faqTimer = 0;
+let faqAsked = "";
+let faqRequest = 0;
+let faqShown = 0;
+
+function suggestFaqSoon() {
+    if (!FAQ_SUGGEST.box || EDITING) return;
+    clearTimeout(faqTimer);
+    faqTimer = setTimeout(suggestFaq, FAQ_SUGGEST.delay);
+}
+
+async function suggestFaq() {
+    const text = els.title.value.replace(/\s+/g, " ").trim();
+    if (text === faqAsked) return;
+    faqAsked = text;
+    const request = ++faqRequest;
+    if (text.length < FAQ_SUGGEST.minLength) {
+        showFaq([]);
+        return;
+    }
+    let entries;
+    try {
+        entries = await apiClient.faqRelated(text, FAQ_SUGGEST.max);
+    } catch {
+        entries = [];     // a suggestion is never worth an error message on the form
+    }
+    if (request === faqRequest) showFaq(entries);
+}
+
+function showFaq(entries) {
+    const { box, status } = FAQ_SUGGEST;
+    if (!entries.length) {
+        box.hidden = true;
+        box.replaceChildren();
+        if (faqShown) status.textContent = "";
+        faqShown = 0;
+        return;
+    }
+    // An entry being read stays open while the list follows the typing
+    const open = new Set([...box.querySelectorAll("details[open]")].map((d) => d.dataset.faqId));
+    box.innerHTML = `<h3 id="faq-suggest-title">${ic("quiz")}Có thể đã có câu trả lời</h3>
+        <p class="note">Những câu hỏi thường gặp này giống điều bạn định hỏi. Nếu chưa đúng ý, bạn cứ đăng câu hỏi.</p>`;
+    const list = document.createElement("div");
+    list.className = "qa-faq-list";
+    list.append(...entries.map((entry) => faqItem(entry, { open: open.has(String(entry.id)), link: "new-tab" })));
+    box.append(list);
+    box.hidden = false;
+    if (entries.length !== faqShown) {
+        status.textContent = `Có ${entries.length} câu hỏi thường gặp giống câu bạn định hỏi, ngay dưới ô câu hỏi.`;
+    }
+    faqShown = entries.length;
+}
 els.content.addEventListener("input", () => {
     updateCounters();
     clearFieldError("content");

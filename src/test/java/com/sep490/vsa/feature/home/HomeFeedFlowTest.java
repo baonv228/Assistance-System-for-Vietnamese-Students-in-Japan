@@ -490,7 +490,7 @@ class HomeFeedFlowTest {
         long interestOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Việc làm thêm");
         long plain = blog(author, "POST", "PUBLISHED", day, 2 * HUGE, 0, false, null);
 
-        ForYouFeed all = home.forYouPage(viewer, null, 0);
+        ForYouFeed all = home.forYouPage(viewer, null, 0, null);
         assertThat(all.scope()).isEqualTo("ALL");
         assertThat(all.scopes()).extracting(ScopeCount::code).containsExactly("ALL", "NEAR", "STAGE", "INTEREST");
         assertThat(all.stage()).isEqualTo("PRE");
@@ -498,20 +498,20 @@ class HomeFeedFlowTest {
         // The Home's order: area, stage (+ interest), stage, interest, then the rest
         assertThat(all.items()).extracting(FeedPost::id).startsWith(nearOnly, both, stageOnly, interestOnly, plain);
 
-        ForYouFeed near = home.forYouPage(viewer, "NEAR", 0);
+        ForYouFeed near = home.forYouPage(viewer, "NEAR", 0, null);
         assertThat(near.scope()).isEqualTo("NEAR");
         assertThat(near.items()).extracting(FeedPost::id).containsExactly(nearOnly);
         assertThat(scopeCount(near, "NEAR")).isEqualTo(1);
         assertThat(near.hasMore()).isFalse();
 
-        ForYouFeed stage = home.forYouPage(viewer, "STAGE", 0);
+        ForYouFeed stage = home.forYouPage(viewer, "STAGE", 0, null);
         assertThat(stage.items()).extracting(FeedPost::id).startsWith(both, stageOnly)
                 .doesNotContain(nearOnly, interestOnly, plain, saved);
         assertThat(stage.items()).allSatisfy(post ->
                 assertThat(post.reasons()).extracting(FeedReason::code).contains("STAGE"));
         assertThat(scopeCount(stage, "STAGE")).isEqualTo(postsWithTopics(viewer, HomeService.STAGE_TOPICS.get("PRE")));
 
-        ForYouFeed interest = home.forYouPage(viewer, "INTEREST", 0);
+        ForYouFeed interest = home.forYouPage(viewer, "INTEREST", 0, null);
         assertThat(interest.items()).extracting(FeedPost::id).startsWith(both, interestOnly)
                 .doesNotContain(nearOnly, stageOnly, plain);
         assertThat(interest.items()).allSatisfy(post ->
@@ -597,6 +597,97 @@ class HomeFeedFlowTest {
         assertThat(near).extracting(item -> item.get("engaged")).containsExactly(false, true, true);
     }
 
+    // ---------------------------------------------------------------- "Tìm trong bài dành cho bạn" (?q=)
+
+    @Test
+    void searchKeepsThePostsHoldingTheTextInFeedOrderWithTheirReasonsAndCounts() throws Exception {
+        setProfile(viewer, area, "ARR");
+        Instant now = Instant.now();
+        String text = "z" + word;
+        // In the title (area + a topic that suits ARR), in the content, and one without the text
+        long inTitle = titled(author, "Chợ đêm Ueno " + text, "Đi dạo buổi tối.", now.minusSeconds(3600), true, "Nhà ở");
+        long inContent = titled(author, "Một bài khác", "Đi CHỢ ĐÊM UENO " + text.toUpperCase() + " rất vui.",
+                now.minusSeconds(7200), false, null);
+        titled(author, "Chợ sáng Ueno", "Không có chữ đó.", now, true, "Nhà ở");
+        // Never in the feed, whatever they hold: the viewer's own post, a question, a locked account's post, a hidden one
+        titled(viewer, "Chợ đêm Ueno " + text, "Của tôi", now, true, null);
+        long question = titled(author, "Chợ đêm Ueno " + text + "?", "Hỏi", now, true, null);
+        jdbc.update("UPDATE blogs SET blog_type = 'QA' WHERE id = ?", question);
+        titled(user("LOCKED"), "Chợ đêm Ueno " + text, "Khóa", now, true, null);
+        long hidden = titled(author, "Chợ đêm Ueno " + text, "Ẩn", now, true, null);
+        jdbc.update("UPDATE blogs SET status = 'HIDDEN' WHERE id = ?", hidden);
+
+        // Accents, case and the spaces around the text do not matter
+        for (String q : List.of("cho dem ueno " + text, "  CHỢ ĐÊM Ueno " + text.toUpperCase() + " ")) {
+            String body = search(viewer, null, q);
+            assertThat((String) JsonPath.read(body, "$.data.q")).as(q).isEqualTo(q.strip());
+            List<Map<String, Object>> items = JsonPath.read(body, "$.data.items");
+            assertThat(ids(items)).as(q).containsExactly(inTitle, inContent);
+            assertThat(items.get(0).get("reasons")).isEqualTo(List.of(
+                    Map.of("code", "AREA", "label", NEAR, "detail", "Feed place " + word),
+                    Map.of("code", "STAGE", "label", FITS, "detail", "Nhà ở")));
+            assertThat(items.get(1).get("reasons")).isEqualTo(List.of());
+            // Every scope is counted over the posts found
+            assertThat(count(body, "ALL")).isEqualTo(2);
+            assertThat(count(body, "NEAR")).isEqualTo(1);
+            assertThat(count(body, "STAGE")).isEqualTo(1);
+            assertThat((Boolean) JsonPath.read(body, "$.data.hasMore")).isFalse();
+        }
+        // A scope and a text together
+        String near = search(viewer, "NEAR", text);
+        assertThat((String) JsonPath.read(near, "$.data.scope")).isEqualTo("NEAR");
+        assertThat(ids(JsonPath.read(near, "$.data.items"))).containsExactly(inTitle);
+        // The name of a linked approved place counts too
+        long linked = titled(author, "Không nhắc tên", "Không nhắc tên.", now.minusSeconds(60), true, null);
+        assertThat(ids(JsonPath.read(search(viewer, null, "feed PLACE " + word), "$.data.items")))
+                .contains(linked, inTitle).doesNotContain(inContent);
+    }
+
+    @Test
+    void searchTreatsLikeSignsAsTextAndBlankAsNoSearch() throws Exception {
+        setProfile(viewer, area, null);
+        long post = titled(author, "Giảm 50% ở Ueno " + word, "Nội dung.", Instant.now(), true, null);
+        assertThat(ids(JsonPath.read(search(viewer, null, "50% ở ueno " + word), "$.data.items"))).containsExactly(post);
+        for (String q : List.of("%" + word, "_" + word, "Ueno_" + word)) {
+            String body = search(viewer, null, q);
+            assertThat((List<?>) JsonPath.read(body, "$.data.items")).as(q).isEmpty();
+            assertThat(count(body, "ALL")).as(q).isZero();
+        }
+        // Blank = the whole feed, and no text is echoed
+        String all = page(viewer, null, 0);
+        for (String q : List.of("", "   ")) {
+            String body = search(viewer, null, q);
+            assertThat((Object) JsonPath.read(body, "$.data.q")).as(q).isNull();
+            assertThat(count(body, "ALL")).as(q).isEqualTo(count(all, "ALL"));
+        }
+        // As long as the Blog's search text
+        search(viewer, null, "x".repeat(HomeService.FOR_YOU_KEYWORD_MAX));
+        String tooLong = mvc.perform(get("/api/me/for-you").session(session(viewer))
+                        .param("q", "x".repeat(HomeService.FOR_YOU_KEYWORD_MAX + 1)))
+                .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat((String) JsonPath.read(tooLong, "$.message")).isEqualTo("Từ khóa tìm kiếm tối đa 100 ký tự.");
+    }
+
+    @Test
+    void searchPagesTenAtATimeAndTheHomeIsNeverNarrowed() throws Exception {
+        setProfile(viewer, area, null);
+        Instant now = Instant.now();
+        List<Long> found = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            found.add(titled(author, "Tìm " + word + " số " + i, "Nội dung.", now.minusSeconds(60L * i), true, null));
+        }
+        String first = search(viewer, null, word);
+        assertThat((Boolean) JsonPath.read(first, "$.data.hasMore")).isTrue();
+        assertThat(ids(JsonPath.read(first, "$.data.items"))).isEqualTo(found.subList(0, 10));
+        String second = mvc.perform(get("/api/me/for-you").session(session(viewer)).param("q", word).param("page", "1"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(ids(JsonPath.read(second, "$.data.items"))).isEqualTo(found.subList(10, 12));
+        assertThat((Boolean) JsonPath.read(second, "$.data.hasMore")).isFalse();
+        assertThat(count(second, "ALL")).isEqualTo(12);
+        // The Home's "Dành cho bạn" has no search: it still leads with these posts in the area
+        assertThat(ids(forYou(viewer))).isEqualTo(found.subList(0, 5));
+    }
+
     @Test
     void forYouPageNeedsSignInAndHasACleanAddress() throws Exception {
         mvc.perform(get("/api/me/for-you")).andExpect(status().isUnauthorized());
@@ -657,6 +748,23 @@ class HomeFeedFlowTest {
         return id;
     }
 
+    /** A published post with its own title and content (not counted, not liked), as the search tests need. */
+    private long titled(long authorId, String title, String content, Instant createdAt, boolean inArea,
+                        String topicName) {
+        jdbc.update("""
+                INSERT INTO blogs (author_id, blog_type, title, content, status, created_at)
+                VALUES (?, 'POST', ?, ?, 'PUBLISHED', ?)""", authorId, title, content, Timestamp.from(createdAt));
+        long id = jdbc.queryForObject("SELECT MAX(id) FROM blogs WHERE author_id = ? AND title = ?", Long.class,
+                authorId, title);
+        if (inArea) {
+            jdbc.update("INSERT INTO blog_place_links (blog_id, place_id) VALUES (?, ?)", id, place);
+        }
+        if (topicName != null) {
+            topic(id, topicName);
+        }
+        return id;
+    }
+
     private void topic(long blogId, String topicName) {
         jdbc.update("INSERT INTO blog_topic_links (blog_id, topic_id) SELECT ?, id FROM blog_topics WHERE name = ?",
                 blogId, topicName);
@@ -697,6 +805,16 @@ class HomeFeedFlowTest {
     /** One page of /api/me/for-you; {@code scope} null leaves the parameter out. */
     private String page(long userId, String scope, int page) throws Exception {
         var request = get("/api/me/for-you").session(session(userId)).param("page", String.valueOf(page));
+        if (scope != null) {
+            request.param("scope", scope);
+        }
+        return mvc.perform(request)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    /** The first page of /api/me/for-you narrowed by {@code q}; {@code scope} null leaves it out. */
+    private String search(long userId, String scope, String q) throws Exception {
+        var request = get("/api/me/for-you").session(session(userId)).param("q", q);
         if (scope != null) {
             request.param("scope", scope);
         }
