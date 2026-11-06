@@ -121,9 +121,9 @@ export const apiClient = {
     // Homepage and "Tôi"
     guestHome: () => request("/home"),
     memberHome: () => request("/me/home"),
-    // "Dành cho bạn" (all of it): { scope, areaName, stage, interests, scopes: [{ code, count }], page, hasMore, items };
-    // scope ALL, NEAR, STAGE or INTEREST (left out or not available: ALL)
-    forYou: ({ scope, page = 0 } = {}) => request(`/me/for-you?${toQuery({ scope, page })}`),
+    // "Dành cho bạn" (all of it): { scope, q, areaName, stage, interests, scopes: [{ code, count }], page, hasMore, items };
+    // scope ALL, NEAR, STAGE or INTEREST (left out or not available: ALL); q keeps the posts holding that text
+    forYou: ({ scope, page = 0, q } = {}) => request(`/me/for-you?${toQuery({ scope, page, q })}`),
     // "Review mới": { scope, areaName, prefectureName, scopes: [{ code, count }], page, hasMore, items }; scope AREA,
     // PREFECTURE or ALL (left out: the first one holding reviews)
     homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),

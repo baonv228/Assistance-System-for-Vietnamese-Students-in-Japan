@@ -213,12 +213,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
   phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
-  `GET /api/me/for-you?scope=&page=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
+  `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
   (area or prefecture), STAGE, INTEREST keeps only the posts with that reason, each scope offered only when the member
-  has an area / a stage / an interest (else ALL), each with its count; answer also has `areaName`, `stage`, `interests`.
-  The page: "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons in
-  the address (`?scope=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
+  has an area / a stage / an interest (else ALL), each with its count; answer also has `q`, `areaName`, `stage`,
+  `interests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
+  approved linked place name holds it (the Blog's rule: folded text, `utf8mb4_0900_ai_ci`, LIKE signs escaped), order,
+  reasons and scope counts unchanged, counted over the posts found; blank = no search; the Home card never searches.
+  The page: search box first (typing asks after 350 ms, Enter at once; the text marked in titles and excerpts with
+  `lib/search-text.js`; nothing found → "Tìm … trên toàn Senpai ơi" `/search?q=` or "xóa từ khóa"; `#search` focuses
+  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons and text in
+  the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
   drawn twice (likes may move the ranking between two pages).
 - "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
   newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"

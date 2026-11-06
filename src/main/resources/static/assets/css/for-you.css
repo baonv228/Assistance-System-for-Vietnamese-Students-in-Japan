@@ -1,6 +1,8 @@
 /* "Dành cho bạn" (pages/for-you.html). Reason chips, titles, meta and "Dựa trên" chips come from site.css (.why,
    .feedtitle, .spot-meta, .spot-basis, .spot-chip), the scope buttons are .seg of blog.css. */
 .foryoupage #scopes { justify-self: start; }
+/* "Tìm trong bài dành cho bạn": where the text occurs in a title or an excerpt (lib/search-text.js) */
+.fy-list mark { padding: 0 1px; border-radius: 3px; background: var(--lantern-soft); color: inherit; }
 .fy-basis { display: grid; gap: 6px; }
 .fy-list { display: grid; gap: 12px; }
 .fy-list[aria-busy="true"] { opacity: .6; }
