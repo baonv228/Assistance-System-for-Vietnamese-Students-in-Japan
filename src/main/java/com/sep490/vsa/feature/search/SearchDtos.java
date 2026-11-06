@@ -50,7 +50,7 @@ public final class SearchDtos {
                            String coverImageUrl) {
     }
 
-    /** A published FAQ entry ({@code /faq?id=}); {@code answer} cut to one short paragraph. */
+    /** A published FAQ entry ({@code /qa?tab=faq&id=}); {@code answer} cut to one short paragraph. */
     public record FaqHit(long id, String question, String answer, String topicName) {
     }
 }

@@ -564,6 +564,22 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.
+- "Câu hỏi thường gặp" (FAQ, `feature/faq`, V16) is the second tab of `/qa` (user decision; it was the page `/faq`):
+  `/qa?tab=faq&q=&topic=&page=`, one entry `/qa?tab=faq&id=` (address read and written by `lib/qa-state.js`, Node test
+  `qa-state.test.mjs`; pages counted from 1). Old `/faq`, `/faq/` and `/pages/faq.html` answer 301 there, the old
+  0-based `page` turned 1-based (`CleanUrls.cleanAddress`). Entries are written by Moderators (`/moderator/faqs`, from
+  scratch or from a best answer, `faq_sources`), are not member content (no like, comment, report) and keep their own
+  tables and topics (`faq_topics`); they open in place (`faq-ui.js faqItem`). The tab: search box shared with the
+  community tab (the text is kept when switching), topic buttons with counts, 10 a page; a search holding no entry
+  word for word lists the related ones. The community tab shows up to 3 related entries above the questions of a
+  search (page 1 only), and "Đặt câu hỏi" (new questions only) offers up to 3 under the title while it is typed
+  (≥ 8 characters, 500 ms; they open in place, "Mở trong tab mới"). API (public): `GET /api/faqs` (`q` matches
+  question + answer as typed, accents and case ignored, `%`/`_` literal, like the Hỏi-Đáp search), `/api/faqs/topics`,
+  `/api/faqs/{id}`, `GET /api/faqs/related?q=&limit=` (1–5, default 3; `FaqService.related` + `FaqMatcher`: words of
+  the text that are not question words (`FaqMatcher.COMMON`, "cần chốt") score 2 in the question / 1 in the answer,
+  neighbouring word pairs 3 / 1; related from half of what the text can reach, at least 1, at most 4; Japanese runs
+  match inside longer ones; published entries only, newest 1000 read). Tests `FaqMatcherTest` (the V19 entries),
+  `FaqFlowTest` (own database `asvsj_faq_test_20261103`).
 - Navbar: see "Navigation" under Roles, homepage, profile (8 links on desktop with a "Thêm" menu for what does not
   fit; 5 tabs on phones, the last opening the "Thêm" sheet).
 

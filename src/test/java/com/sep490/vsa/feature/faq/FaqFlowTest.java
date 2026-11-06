@@ -67,12 +67,25 @@ class FaqFlowTest {
                 .andExpect(jsonPath("$.data[1].count").value(2));
         mvc.perform(get("/api/faqs/"+hidden.id())).andExpect(status().isNotFound());
         mvc.perform(get("/api/faqs/"+first.id())).andExpect(jsonPath("$.data.answer").value("Helpful answer"));
-        mvc.perform(get("/faq")).andExpect(status().isOk()).andExpect(forwardedUrl("/pages/faq.html"));
         mvc.perform(get("/moderator/faqs").session(moderator)).andExpect(status().isOk());
     }
 
     /** A word no other entry holds: letters and digits only, so the search and the matcher see it as one word. */
     private static String word() {return "w"+UUID.randomUUID().toString().replace("-","").substring(0,12);}
+
+    @Test void oldFaqAddressesOpenTheFaqTabOfHoiDap() throws Exception {
+        mvc.perform(get("/faq")).andExpect(status().isMovedPermanently()).andExpect(header().string("Location","/qa?tab=faq"));
+        mvc.perform(get("/faq/")).andExpect(status().isMovedPermanently()).andExpect(header().string("Location","/qa?tab=faq"));
+        // The old page counted pages from 0, Hỏi-Đáp from 1
+        mvc.perform(get("/faq?q=sim&topic=LIVING&page=1")).andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location","/qa?tab=faq&q=sim&topic=LIVING&page=2"));
+        mvc.perform(get("/pages/faq.html?id=3")).andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location","/qa?tab=faq&id=3"));
+        mvc.perform(get("/qa?tab=faq&id=3")).andExpect(status().isOk()).andExpect(forwardedUrl("/pages/qa.html"));
+        // The Moderator pages and the API keep their addresses
+        mvc.perform(get("/api/faqs")).andExpect(status().isOk());
+        mvc.perform(get("/moderator/faqs")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrlPattern("**/login"));
+    }
 
     @Test void relatedEntriesAreFoundByTheirWordsBestFirstAndOnlyWhenPublished() throws Exception {
         var moderator=session("MODERATOR");String a=word(),b=word(),c=word();
