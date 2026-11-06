@@ -208,7 +208,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
   linked place or the matching topic), `reason` = the first label and `engaged` (already liked, saved or commented
   on). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
-  Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
+  Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
+  bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
   first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
   phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.

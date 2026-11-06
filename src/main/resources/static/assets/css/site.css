@@ -401,6 +401,8 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 }
 .site-search .btn, .site-search .count { flex: none; }
 .site-search .count { padding-right: 10px; font-variant-numeric: tabular-nums; }
+.home-search { box-shadow: 0 6px 18px rgba(47, 62, 110, .07); }
+.hero .home-search { justify-self: stretch; max-width: 540px; }
 .promptcard { border: 1px dashed var(--brand); background: var(--brand-soft); }
 .mini {
     color: inherit;
@@ -596,6 +598,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     .homegrid, .two, .ranks, .spot-posts { grid-template-columns: 1fr; }
     .spot { padding: 16px; border-radius: 16px; }
     .spot-head .btn { display: none; }
+    .spot-head .btn.spot-find { display: inline-flex; }
     .spot .spot-more { display: inline-flex; justify-self: center; }
     .spot-head h2 { gap: 6px; font-size: 24px; }
     .spot-head h2 .ic { font-size: 24px; }
