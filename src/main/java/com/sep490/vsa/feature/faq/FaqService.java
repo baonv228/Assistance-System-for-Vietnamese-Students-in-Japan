@@ -17,18 +17,20 @@ public class FaqService {
  private final JdbcTemplate jdbc;
  public FaqService(JdbcTemplate jdbc){this.jdbc=jdbc;}
  private static final String SELECT="SELECT f.*,t.title AS topic_name FROM faq_entries f JOIN faq_topics t ON t.code=f.topic_code ";
- private static final String SEARCH=" AND (?='' OR LOCATE(LOWER(?),LOWER(CONCAT(f.question,' ',f.answer)))>0) ";
+ /** Question or answer holds the words as typed, accents and case ignored (as the Hỏi-Đáp search). */
+ private static final String SEARCH=" AND (?='' OR CONCAT(f.question,' ',f.answer) COLLATE utf8mb4_0900_ai_ci LIKE ?) ";
  private String query(String q){String value=q==null?"":q.trim();if(value.length()>200)throw bad("Từ khóa tối đa 200 ký tự.");return value;}
+ private static String like(String search){return "%"+search.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%";}
  private void paging(int page,int size){if(page<0||size<1||size>50)throw bad("Phân trang không hợp lệ.");}
  public List<Topic> topics(String q,boolean moderator){String search=query(q);return jdbc.query("""
  SELECT t.code,t.title,COUNT(f.id) FROM faq_topics t LEFT JOIN faq_entries f ON f.topic_code=t.code
  AND (?=TRUE OR f.published=TRUE)
- """+SEARCH+" GROUP BY t.code,t.title,t.sort_order ORDER BY t.sort_order",(r,n)->new Topic(r.getString(1),r.getString(2),r.getLong(3)),moderator,search,search);}
+ """+SEARCH+" GROUP BY t.code,t.title,t.sort_order ORDER BY t.sort_order",(r,n)->new Topic(r.getString(1),r.getString(2),r.getLong(3)),moderator,search,like(search));}
  public Page<Entry> list(String q,String topic,String status,int page,int size,boolean moderator){
   paging(page,size);String search=query(q),category=topic==null?"":topic.trim();
   if(!List.of("ALL","PUBLISHED","HIDDEN").contains(status))throw bad("Trạng thái không hợp lệ.");
   String where=" WHERE (?=TRUE OR f.published=TRUE) AND (?='ALL' OR f.published=?) AND (?='' OR f.topic_code=?) "+SEARCH;
-  Object[] args={moderator,status,"PUBLISHED".equals(status),category,category,search,search};
+  Object[] args={moderator,status,"PUBLISHED".equals(status),category,category,search,like(search)};
   long total=Objects.requireNonNull(jdbc.queryForObject("SELECT COUNT(*) FROM faq_entries f "+where,Long.class,args));
   int pages=(int)Math.ceil((double)total/size),current=Math.min(page,Math.max(0,pages-1));
   var params=new ArrayList<>(Arrays.asList(args));params.add(size);params.add((long)current*size);

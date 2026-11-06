@@ -71,6 +71,26 @@ class FaqFlowTest {
         mvc.perform(get("/moderator/faqs").session(moderator)).andExpect(status().isOk());
     }
 
+    /** A word no other entry holds: letters and digits only, so the search and the matcher see it as one word. */
+    private static String word() {return "w"+UUID.randomUUID().toString().replace("-","").substring(0,12);}
+
+    @Test void searchIgnoresAccentsAndCaseAndTakesWildcardsLiterally() throws Exception {
+        var moderator=session("MODERATOR");String key=word();
+        var entry=service.save(null,new Write("Mở tài khoản ngân hàng "+key,"Mang thẻ cư trú "+key,"PROCEDURES",true,List.of(),null,null),principal(moderator));
+        mvc.perform(get("/api/faqs").param("q","TAI KHOAN NGAN HANG "+key))
+                .andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.items[0].id").value(entry.id()));
+        mvc.perform(get("/api/faqs").param("q","the cu tru "+key.toUpperCase())).andExpect(jsonPath("$.data.total").value(1));
+        mvc.perform(get("/api/faqs/topics").param("q","tài khoản ngân hàng "+key))
+                .andExpect(jsonPath("$.data[?(@.code=='PROCEDURES')].count").value(1))
+                .andExpect(jsonPath("$.data[?(@.code=='LIVING')].count").value(0));
+        mvc.perform(get("/api/moderator/faqs").session(moderator).param("q","mo tai khoan "+"ngan hang "+key))
+                .andExpect(jsonPath("$.data.total").value(1));
+        // % and _ are characters to find, not wildcards
+        mvc.perform(get("/api/faqs").param("q","ngân_hàng "+key)).andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get("/api/faqs").param("q","Mở%"+key)).andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get("/api/faqs").param("q","\\"+key)).andExpect(jsonPath("$.data.total").value(0));
+    }
+
     @Test void moderatorCreatesEditsHidesAndRepublishesWhileOtherRolesAreBlocked() throws Exception {
         var moderator=session("MODERATOR");var member=session("USER");
         mvc.perform(get("/api/moderator/faqs")).andExpect(status().isUnauthorized());
