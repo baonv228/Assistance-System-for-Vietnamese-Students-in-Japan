@@ -74,6 +74,32 @@ class FaqFlowTest {
     /** A word no other entry holds: letters and digits only, so the search and the matcher see it as one word. */
     private static String word() {return "w"+UUID.randomUUID().toString().replace("-","").substring(0,12);}
 
+    @Test void relatedEntriesAreFoundByTheirWordsBestFirstAndOnlyWhenPublished() throws Exception {
+        var moderator=session("MODERATOR");String a=word(),b=word(),c=word();
+        var best=service.save(null,new Write("Làm sao "+a+" "+b+" "+c+"?","Trả lời","LIVING",true,List.of(),null,null),principal(moderator));
+        var weaker=service.save(null,new Write("Hỏi về "+a+" "+b,"Có nói "+c,"OTHER",true,List.of(new Resource("EXTERNAL",null,"https://www.moj.go.jp/","Cục xuất nhập cảnh")),null,null),principal(moderator));
+        service.save(null,new Write(a+" "+b+" "+c+" ẩn","Trả lời","LIVING",false,List.of(),null,null),principal(moderator));
+        mvc.perform(get("/api/faqs/related").param("q","Mình muốn hỏi "+a.toUpperCase()+" "+b+" "+c+" thế nào ạ?"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].id").value(best.id())).andExpect(jsonPath("$.data[1].id").value(weaker.id()))
+                .andExpect(jsonPath("$.data[0].topicName").value("Sinh hoạt và đời sống"))
+                .andExpect(jsonPath("$.data[1].answer").value("Có nói "+c))
+                .andExpect(jsonPath("$.data[1].resources[0].label").value("Cục xuất nhập cảnh"));
+        // The number asked for is kept within 1–5 (default 3)
+        mvc.perform(get("/api/faqs/related").param("q",a+" "+b).param("limit","1")).andExpect(jsonPath("$.data.length()").value(1));
+        mvc.perform(get("/api/faqs/related").param("q",a+" "+b).param("limit","0")).andExpect(jsonPath("$.data.length()").value(1));
+        mvc.perform(get("/api/faqs/related").param("q",a+" "+b).param("limit","99")).andExpect(jsonPath("$.data.length()").value(2));
+        // Question words alone, nothing, or too long a text
+        mvc.perform(get("/api/faqs/related").param("q","Làm sao ạ?")).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(0));
+        mvc.perform(get("/api/faqs/related")).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(0));
+        mvc.perform(get("/api/faqs/related").param("q","x".repeat(201))).andExpect(status().isBadRequest());
+        // An entry hidden later is no longer offered
+        mvc.perform(csrf(put("/api/moderator/faqs/"+best.id()+"/visibility"),moderator).contentType(MediaType.APPLICATION_JSON).content("{\"published\":false}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/faqs/related").param("q",a+" "+b+" "+c)).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(weaker.id()));
+    }
+
     @Test void searchIgnoresAccentsAndCaseAndTakesWildcardsLiterally() throws Exception {
         var moderator=session("MODERATOR");String key=word();
         var entry=service.save(null,new Write("Mở tài khoản ngân hàng "+key,"Mang thẻ cư trú "+key,"PROCEDURES",true,List.of(),null,null),principal(moderator));

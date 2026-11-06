@@ -13,6 +13,7 @@ public class FaqController {
  public FaqController(FaqService service){this.service=service;}
  @GetMapping("/api/faqs") public ApiResponse<Page<Entry>> list(@RequestParam(required=false) String q,@RequestParam(required=false) String topic,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size){return ApiResponse.ok("FAQ",service.list(q,topic,"PUBLISHED",page,size,false));}
  @GetMapping("/api/faqs/topics") public ApiResponse<List<Topic>> topics(@RequestParam(required=false) String q){return ApiResponse.ok("Chủ đề FAQ",service.topics(q,false));}
+ @GetMapping("/api/faqs/related") public ApiResponse<List<Entry>> related(@RequestParam(required=false) String q,@RequestParam(defaultValue="3") int limit){return ApiResponse.ok("FAQ liên quan",service.related(q,limit));}
  @GetMapping("/api/faqs/{id}") public ApiResponse<Entry> detail(@PathVariable long id){return ApiResponse.ok("FAQ",service.detail(id,false));}
  @GetMapping("/api/moderator/faqs") public ApiResponse<Page<Entry>> manage(@RequestParam(required=false) String q,@RequestParam(required=false) String topic,@RequestParam(defaultValue="ALL") String status,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="20") int size){return ApiResponse.ok("FAQ",service.list(q,topic,status,page,size,true));}
  @GetMapping("/api/moderator/faqs/topics") public ApiResponse<List<Topic>> manageTopics(){return ApiResponse.ok("Chủ đề FAQ",service.topics(null,true));}

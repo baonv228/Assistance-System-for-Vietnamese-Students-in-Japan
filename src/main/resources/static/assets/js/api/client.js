@@ -77,6 +77,7 @@ export const apiClient = {
     faqs: (params = {}) => request(`/faqs?${toQuery(params)}`),
     faqTopics: (q = "") => request(`/faqs/topics?${toQuery({ q })}`),
     faq: (id) => request(`/faqs/${id}`),
+    faqRelated: (q, limit = 3) => request(`/faqs/related?${toQuery({ q, limit })}`),
     moderatorFaqs: (params = {}) => request(`/moderator/faqs?${toQuery(params)}`),
     moderatorFaqTopics: () => request("/moderator/faqs/topics"),
     faqSuggestions: (params = {}) => request(`/moderator/faqs/suggestions?${toQuery(params)}`),
