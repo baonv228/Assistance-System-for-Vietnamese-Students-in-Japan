@@ -185,8 +185,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
   - Navigation (`TABS` in site-header.js: key, label, icon, href, on the phone tab bar, desktop priority): desktop
-    shows the 8 links (Hỏi-Đáp after Blog, FAQ last); the ones that do not fit beside the account buttons move into a
-    "Thêm" menu, lowest priority first (Nhật ngữ, FAQ, Cẩm nang, Sự kiện…; `fitNav`, again on resize and once fonts load), and
+    shows the 7 links (Hỏi-Đáp after Blog, Cẩm nang last; FAQ is a tab of Hỏi-Đáp, no link of its own); the ones that
+    do not fit beside the account buttons move into a
+    "Thêm" menu, lowest priority first (Nhật ngữ, Cẩm nang, Sự kiện…; `fitNav`, again on resize and once fonts load), and
     "Thêm" is marked when the page shown is in it. Phones (≤ 860 px) get 5 equal tabs: Trang chủ, Bản đồ, Blog,
     Hỏi-Đáp, "Thêm"; "Thêm" opens a bottom sheet (`<dialog id="more-sheet">`) with "Tôi" (or sign in / sign up), the
     other features, then "Đã lưu", "Tin nhắn", "Thông báo" (staff: their own page). A new feature gets its `TABS` row.
@@ -580,7 +581,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   neighbouring word pairs 3 / 1; related from half of what the text can reach, at least 1, at most 4; Japanese runs
   match inside longer ones; published entries only, newest 1000 read). Tests `FaqMatcherTest` (the V19 entries),
   `FaqFlowTest` (own database `asvsj_faq_test_20261103`).
-- Navbar: see "Navigation" under Roles, homepage, profile (8 links on desktop with a "Thêm" menu for what does not
+- Navbar: see "Navigation" under Roles, homepage, profile (7 links on desktop with a "Thêm" menu for what does not
   fit; 5 tabs on phones, the last opening the "Thêm" sheet).
 
 ## Nhật ngữ (feature/phrase)
