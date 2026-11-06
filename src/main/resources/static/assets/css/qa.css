@@ -1,5 +1,5 @@
-/* Hỏi-Đáp (pages/qa.html, qa-detail.html). Load after tokens.css, site.css and blog.css (search, filters,
-   cards, pager and side styles come from blog.css). */
+/* Hỏi-Đáp (pages/qa.html, qa-detail.html, qa-ask.html for the FAQ suggestions). Load after tokens.css, site.css and
+   blog.css (search, filters, cards, pager and side styles come from blog.css). */
 
 /* ---------------- tabs: "Cộng đồng hỏi" / "Câu hỏi thường gặp" ---------------- */
 .qa-tabs {
@@ -96,6 +96,19 @@
 .qa-faq-box p { margin: 0; }
 .qa-faq-box .link { display: inline-flex; align-items: center; gap: 4px; }
 
+/* "Đặt câu hỏi": FAQ entries like the question being typed */
+.qa-faq-suggest {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--brand);
+    border-radius: 12px;
+    background: var(--surface-2);
+}
+.qa-faq-suggest h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; }
+.qa-faq-suggest h3 .ic { color: var(--brand); }
+.qa-faq-suggest p { margin: 0; }
 
 /* ---------------- question card: answer count on the left ---------------- */
 .post.question { grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; align-items: start; }

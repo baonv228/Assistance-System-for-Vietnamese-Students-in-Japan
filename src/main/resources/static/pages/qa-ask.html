@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/assets/css/blog.css">
     <link rel="stylesheet" href="/assets/css/blog-detail.css">
     <link rel="stylesheet" href="/assets/css/blog-write.css">
+    <link rel="stylesheet" href="/assets/css/qa.css">
 </head>
 <body class="app" data-kind="QA">
 <!-- Hỏi-Đáp → "Đặt câu hỏi" (SRS 6.3). Same form and script as pages/blog-write.html, kind QA. -->
@@ -45,6 +46,10 @@
                     <span class="note counter" id="title-count" aria-live="polite">0/150</span>
                 </div>
             </div>
+
+            <!-- "Câu hỏi thường gặp" that look like the question being typed (new questions only, blog-write.js) -->
+            <section class="qa-faq-suggest" id="faq-suggest" aria-labelledby="faq-suggest-title" hidden></section>
+            <p class="sr-only" id="faq-suggest-status" role="status"></p>
 
             <fieldset class="field topics" data-field="topicIds" aria-describedby="topics-hint topicIds-error">
                 <legend>Chủ đề <span class="req" aria-hidden="true">*</span> <span class="note" id="topics-count">(0/3)</span></legend>
