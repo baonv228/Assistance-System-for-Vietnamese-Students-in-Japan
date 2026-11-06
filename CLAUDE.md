@@ -142,7 +142,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
-  `/messages`, `/messages/{id}`,
+  `/search`, `/messages`, `/messages/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
@@ -225,6 +225,24 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons and text in
   the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
   drawn twice (likes may move the ranking between two pages).
+- "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,
+  `SearchRepository`, `SearchDtos`; page `/search?q=`, `pages/search.html`, `search.js`, `search.css`; public). The Home
+  (guest hero and member, under the greeting) has a plain GET form to it (an empty box is not sent). `GET /api/search?q=`
+  searches every part at once, each by its own feature so it shows exactly what that part's page shows for the same text
+  and hides what it hides: posts `BlogFeedService` (an author also finds their own PROCESSING post), questions
+  `QaService`, guides `GuideService.browse` (published), events `EventService.list` (now and coming first, soonest
+  first, then past, latest first), phrases `PhraseService.list`, FAQ `FaqService.list` (published), places
+  `SearchRepository` (ACTIVE Senpai ơi places by name vi/ja/en or address, or category at a word start as the Map;
+  names starting with the text first; review count and average of active accounts; no OpenStreetMap call). Each part
+  `{total, items}` with its first 5 (`SECTION_SIZE`); `tooShort` when the text has under 2 letters/digits
+  (`VietnameseText.squash`) and no Han/kana (nothing searched); ≤ 100 characters else 400. The page: live search
+  (300 ms, Enter at once, `?q=` in the address and the title), chips jumping to each part, the text marked, "Xem tất cả"
+  → `/blog?q=`, `/qa?q=`, `/guides?q=`, `/events?q=`, `/phrases?q=`, `/qa?tab=faq&q=`, places "Tìm … trên Bản đồ"
+  `/map?q=` (with OSM); items open `/map?place=`, `/blog/{id}`, `/qa/{id}`, `/guides/{id}`, `/events/{id}`,
+  `/phrases?q=<japanese>` (with "Nghe"), `/qa?tab=faq&id=`; Members also get "Chỉ tìm trong bài dành cho bạn"
+  (`/for-you?q=`); empty box → ideas ("Thẻ cư trú", "Ngân hàng"…); nothing found → tips, `/map?q=`, "Đặt câu hỏi"
+  (guests via sign-in). Tests: `SearchFlowTest`, `HomeFeedFlowTest` (search), `src/test/js/search-text.test.mjs`.
+  Not done: a search button in the header of every page (the prototype has one).
 - "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
   newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"
   through `GuideNext.placeId`), `placeArea` and `near` (AREA / PREFECTURE / null). The title says "quanh <khu vực>" only

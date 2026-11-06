@@ -124,6 +124,9 @@ export const apiClient = {
     // "Dành cho bạn" (all of it): { scope, q, areaName, stage, interests, scopes: [{ code, count }], page, hasMore, items };
     // scope ALL, NEAR, STAGE or INTEREST (left out or not available: ALL); q keeps the posts holding that text
     forYou: ({ scope, page = 0, q } = {}) => request(`/me/for-you?${toQuery({ scope, page, q })}`),
+    // "Tìm kiếm" (Home, /search): { q, tooShort, total, places, posts, questions, guides, events, phrases, faqs }, each
+    // part { total, items } with its first 5 items
+    search: (q) => request(`/search?${toQuery({ q })}`),
     // "Review mới": { scope, areaName, prefectureName, scopes: [{ code, count }], page, hasMore, items }; scope AREA,
     // PREFECTURE or ALL (left out: the first one holding reviews)
     homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
