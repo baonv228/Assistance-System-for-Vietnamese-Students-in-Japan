@@ -490,7 +490,7 @@ class HomeFeedFlowTest {
         long interestOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Việc làm thêm");
         long plain = blog(author, "POST", "PUBLISHED", day, 2 * HUGE, 0, false, null);
 
-        ForYouFeed all = home.forYouPage(viewer, null, 0);
+        ForYouFeed all = home.forYouPage(viewer, null, 0, null);
         assertThat(all.scope()).isEqualTo("ALL");
         assertThat(all.scopes()).extracting(ScopeCount::code).containsExactly("ALL", "NEAR", "STAGE", "INTEREST");
         assertThat(all.stage()).isEqualTo("PRE");
@@ -498,20 +498,20 @@ class HomeFeedFlowTest {
         // The Home's order: area, stage (+ interest), stage, interest, then the rest
         assertThat(all.items()).extracting(FeedPost::id).startsWith(nearOnly, both, stageOnly, interestOnly, plain);
 
-        ForYouFeed near = home.forYouPage(viewer, "NEAR", 0);
+        ForYouFeed near = home.forYouPage(viewer, "NEAR", 0, null);
         assertThat(near.scope()).isEqualTo("NEAR");
         assertThat(near.items()).extracting(FeedPost::id).containsExactly(nearOnly);
         assertThat(scopeCount(near, "NEAR")).isEqualTo(1);
         assertThat(near.hasMore()).isFalse();
 
-        ForYouFeed stage = home.forYouPage(viewer, "STAGE", 0);
+        ForYouFeed stage = home.forYouPage(viewer, "STAGE", 0, null);
         assertThat(stage.items()).extracting(FeedPost::id).startsWith(both, stageOnly)
                 .doesNotContain(nearOnly, interestOnly, plain, saved);
         assertThat(stage.items()).allSatisfy(post ->
                 assertThat(post.reasons()).extracting(FeedReason::code).contains("STAGE"));
         assertThat(scopeCount(stage, "STAGE")).isEqualTo(postsWithTopics(viewer, HomeService.STAGE_TOPICS.get("PRE")));
 
-        ForYouFeed interest = home.forYouPage(viewer, "INTEREST", 0);
+        ForYouFeed interest = home.forYouPage(viewer, "INTEREST", 0, null);
         assertThat(interest.items()).extracting(FeedPost::id).startsWith(both, interestOnly)
                 .doesNotContain(nearOnly, stageOnly, plain);
         assertThat(interest.items()).allSatisfy(post ->

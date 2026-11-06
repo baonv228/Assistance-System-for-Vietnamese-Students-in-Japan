@@ -90,9 +90,10 @@ public final class HomeDtos {
     /**
      * Page "Dành cho bạn" ({@code /for-you}): one page of the whole personal feed in {@code scope} (ALL, or only the
      * posts that matched one reason: NEAR = area or prefecture, STAGE, INTEREST), the scopes this member can pick with
-     * how many posts each holds, and what the feed is based on (area, stage code, interests).
+     * how many posts each holds, and what the feed is based on (area, stage code, interests). {@code q} is the search
+     * text the posts and counts were narrowed by (null without one).
      */
-    public record ForYouFeed(String scope, String areaName, String stage, List<String> interests,
+    public record ForYouFeed(String scope, String q, String areaName, String stage, List<String> interests,
                              List<ScopeCount> scopes, int page, boolean hasMore, List<FeedPost> items) {
     }
 

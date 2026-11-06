@@ -36,13 +36,15 @@ public class HomeController {
 
     /**
      * Page "Dành cho bạn" (requires login: /api/me/**): the whole personal feed of the member Home, 10 posts a page;
-     * {@code scope} ALL, NEAR, STAGE or INTEREST (ALL when left out or not available to this user).
+     * {@code scope} ALL, NEAR, STAGE or INTEREST (ALL when left out or not available to this user); {@code q} keeps
+     * only the posts holding that text ("Tìm trong bài dành cho bạn").
      */
     @GetMapping("/api/me/for-you")
     public ApiResponse<ForYouFeed> forYou(@AuthenticationPrincipal AppUserPrincipal me,
                                           @RequestParam(required = false) String scope,
-                                          @RequestParam(defaultValue = "0") int page) {
-        return ApiResponse.ok("OK", homeService.forYouPage(me.id(), scope, page));
+                                          @RequestParam(defaultValue = "0") int page,
+                                          @RequestParam(required = false) String q) {
+        return ApiResponse.ok("OK", homeService.forYouPage(me.id(), scope, page, q));
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.sep490.vsa.feature.home;
 
+import com.sep490.vsa.common.exception.ApiException;
+import com.sep490.vsa.common.text.VietnameseText;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.home.HomeDtos.EventItem;
@@ -53,6 +55,8 @@ public class HomeService {
      */
     static final int FOR_YOU_PAGE_SIZE = 10;
     static final int FOR_YOU_MAX_PAGE = 199;
+    /** "Tìm trong bài dành cho bạn": as long as the Blog's search text. */
+    static final int FOR_YOU_KEYWORD_MAX = 100;
 
     /** The parts of the page "Dành cho bạn": every post, or only those that matched one kind of reason. */
     enum ForYouScope { ALL, NEAR, STAGE, INTEREST }
@@ -118,7 +122,7 @@ public class HomeService {
                 (rs, i) -> rs.getString(1), me.points()).stream().findFirst().orElse("Người mới");
 
         List<Topic> interests = interests(userId);
-        Ranking forYou = ranking(userId, me, interests);
+        Ranking forYou = ranking(userId, me, interests, null);
         return new MemberHome(me.displayName(), me.stage(), me.area() == null ? null : me.area().id(), me.areaName(),
                 me.points(), rankName,
                 phraseOfToday(), guide(userId, me.stage() == null ? "ARR" : me.stage()), events(),
@@ -131,12 +135,20 @@ public class HomeService {
      * five posts ({@link #ranking}), so it starts with them and goes on with every other published post by others.
      * {@code scope} NEAR, STAGE or INTEREST keeps only the posts that matched that reason, in the same order; a scope
      * this member cannot use (no area, no stage, no interest yet), an unknown one or none is ALL. {@code page} is kept
-     * within 0–{@value #FOR_YOU_MAX_PAGE}.
+     * within 0–{@value #FOR_YOU_MAX_PAGE}. {@code q} ("Tìm trong bài dành cho bạn") keeps only the posts whose title,
+     * content or linked place holds it, as the Blog's search (accents and case ignored, at most
+     * {@value #FOR_YOU_KEYWORD_MAX} characters, else 400); the order, the reasons and the scope counts stay those of
+     * the feed, counted over the posts found.
      */
-    public ForYouFeed forYouPage(Long userId, String scope, int page) {
+    public ForYouFeed forYouPage(Long userId, String scope, int page, String q) {
+        String text = q == null ? "" : q.strip();
+        if (text.length() > FOR_YOU_KEYWORD_MAX) {
+            throw ApiException.badRequest("Từ khóa tìm kiếm tối đa " + FOR_YOU_KEYWORD_MAX + " ký tự.");
+        }
+        String keyword = VietnameseText.fold(text);
         Me me = me(userId);
         List<Topic> interests = interests(userId);
-        Ranking ranking = ranking(userId, me, interests);
+        Ranking ranking = ranking(userId, me, interests, keyword.isEmpty() ? null : keyword);
         Map<String, Object> counts = named.queryForMap("""
                 SELECT COUNT(*) AS total, COALESCE(SUM(f.near > 0), 0) AS near,
                        COALESCE(SUM(f.stage_topic IS NOT NULL), 0) AS stage,
@@ -160,7 +172,8 @@ public class HomeService {
         List<FeedPost> rows = posts(ranking, ForYouScope.valueOf(chosen), FOR_YOU_PAGE_SIZE + 1,
                 shownPage * FOR_YOU_PAGE_SIZE);
         boolean hasMore = rows.size() > FOR_YOU_PAGE_SIZE && shownPage < FOR_YOU_MAX_PAGE;
-        return new ForYouFeed(chosen, me.areaName(), me.stage(), interests.stream().map(Topic::name).toList(), scopes,
+        return new ForYouFeed(chosen, keyword.isEmpty() ? null : text, me.areaName(), me.stage(),
+                interests.stream().map(Topic::name).toList(), scopes,
                 shownPage, hasMore, rows.size() > FOR_YOU_PAGE_SIZE ? rows.subList(0, FOR_YOU_PAGE_SIZE) : rows);
     }
 
@@ -234,9 +247,10 @@ public class HomeService {
      * list, then posts of the last 30 days come first and older ones fill the rest; within each group: linked to a
      * place in the user's area, then in the same prefecture, then a topic that suits the user's stage, then one of
      * their interests, then likes + 2 × comments, then newest. Each post says which of these reasons matched and what
-     * matched.
+     * matched. {@code keyword} (already {@link VietnameseText#fold folded}, null for none) keeps only the posts whose
+     * title, content or the name of an approved linked place holds it, the Blog's search rule.
      */
-    private Ranking ranking(Long userId, Me me, List<Topic> interests) {
+    private Ranking ranking(Long userId, Me me, List<Topic> interests, String keyword) {
         Area area = me.area();
         List<String> stageTopics = stageTopics(me.stage());
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -277,6 +291,18 @@ public class HomeService {
                     (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
                      WHERE btl.blog_id = b.id AND t.id IN (:interestIds) ORDER BY FIELD(t.id, :interestIds) LIMIT 1)""";
         }
+        // As BlogFeedRepository: MySQL's accent- and case-insensitive collation on the columns, the text folded here
+        String search = "";
+        if (keyword != null) {
+            params.addValue("kw", "%" + escapeLike(keyword) + "%");
+            search = """
+                     AND (b.title COLLATE utf8mb4_0900_ai_ci LIKE :kw OR b.content COLLATE utf8mb4_0900_ai_ci LIKE :kw
+                          OR EXISTS (SELECT 1 FROM blog_place_links kbl JOIN places kp ON kp.id = kbl.place_id
+                                     WHERE kbl.blog_id = b.id AND kp.status = 'ACTIVE'
+                                       AND (kp.name_vi COLLATE utf8mb4_0900_ai_ci LIKE :kw
+                                            OR kp.name_ja COLLATE utf8mb4_0900_ai_ci LIKE :kw
+                                            OR kp.name_en COLLATE utf8mb4_0900_ai_ci LIKE :kw)))""";
+        }
         String select = """
                 SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
                        b.comment_count, b.created_at, b.created_at >= :since AS recent,
@@ -289,9 +315,13 @@ public class HomeService {
                         OR EXISTS (SELECT 1 FROM comments c WHERE c.blog_id = b.id AND c.author_id = :userId))
                          AS engaged
                 FROM blogs b JOIN users u ON u.id = b.author_id
-                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> :userId AND %s"""
-                .formatted(near, nearPlace, stageTopic, interestTopic, ActiveAuthors.of("b"));
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> :userId AND %s %s"""
+                .formatted(near, nearPlace, stageTopic, interestTopic, ActiveAuthors.of("b"), search);
         return new Ranking(select, params);
+    }
+
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     /**
