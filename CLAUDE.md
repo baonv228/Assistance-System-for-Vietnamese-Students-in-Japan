@@ -297,6 +297,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
   `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
   `savedCount` for "Đã lưu (N)" on Tôi. Places are saved from the Map once it is built (`saved_places`).
+- Cẩm nang progress (`feature/guide`): one rule, `GuideProgressService.states(userId, guideIds)`: a guide with a
+  checklist ("Hướng dẫn chuẩn bị", `preparation_enabled` and ≥ 1 task) is done when every task is ticked
+  (`guide_preparation_progress`); any other guide when the Member pressed "Đánh dấu đã xong" (`user_guide_progress`,
+  ignored while a checklist exists). Guide page (`GuideMemberService`, `GuideMemberController`): `GET
+  /api/guides/{id}/viewer` (public: `{signedIn, member, saved, progress{checklist, tasksDone, tasksTotal, percent, done,
+  nextTask}}`, guests read as user 0), `POST|DELETE /api/guides/{id}/save` → `{saved}`, `POST|DELETE
+  /api/guides/{id}/done` → progress (a checklist guide → 400). Members only (guest 401, staff MSG18; a locked account's
+  session already ended, 401), published and not deleted guides only (else 404), guide row locked FOR UPDATE first,
+  writes idempotent. `GET /api/me/saved` also lists saved guides (V20 `saved_guides`).
+  Tests: `GuideMemberFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
   CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
   (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
@@ -893,8 +903,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.
-- The `guide` and `scholarship` starter features still map to tables that do not exist in the schema
-  (`guide`, `scholarship`); until rewritten, `GET /api/guides` and `/api/scholarships` answer 404 "Tính năng này sắp ra
-  mắt." without touching the database (entities and services kept, unused), and their pages show it as text.
-  Scholarships are not part of the agreed scope.
+- The `scholarship` starter feature still maps to a table that does not exist in the schema (`scholarship`);
+  `GET /api/scholarships` answers 404 "Tính năng này sắp ra mắt." without touching the database, and its page shows
+  it as text. Scholarships are not part of the agreed scope. (The guide feature, "Cẩm nang", is live: V7, V8, V11–V13,
+  `/guides`, `/guides/{id}`, `/moderator/guides`.)
 - Keep Vietnamese UI text as in the prototype. Code, identifiers and commit messages in English.
