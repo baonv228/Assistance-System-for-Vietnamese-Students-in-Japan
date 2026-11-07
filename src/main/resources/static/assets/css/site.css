@@ -294,7 +294,38 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .bar2 span { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
 
 .field { display: grid; gap: 6px; }
-.field label { font-weight: 600; font-size: 14px; }
+.field label, .field .field-title { font-weight: 600; font-size: 14px; }
+
+/* topics: toggle chips (Write Post / Đặt câu hỏi, "Chủ đề quan tâm" on Tôi and Home) */
+.topic-picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.topic-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.topic-pick:hover { border-color: var(--brand); }
+.topic-pick:focus-visible { outline: none; box-shadow: var(--focus); }
+.topic-pick[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-text); }
+.topic-pick[aria-pressed="true"] .ic { font-size: 17px; }
+.topic-pick[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.topic-pick[aria-disabled="true"]:hover { border-color: var(--line); }
+.topic-pick.other { border-style: dashed; }
+/* "Chủ đề quan tâm": a topic learnt from what the member did, not chosen yet */
+.topic-pick .pick-hint { font-size: 16px; color: var(--brand); }
+.interest-picker { display: grid; gap: 8px; }
+.interest-picker .topic-picks[aria-busy="true"] .topic-pick { opacity: .6; cursor: progress; }
+.interest-picker > .note { margin: 0; }
+.interest-learnt-note .ic { font-size: 16px; color: var(--brand); vertical-align: -3px; }
 .select {
     height: 44px;
     padding: 0 12px;
@@ -469,6 +500,9 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 }
 .spot-chip .ic { font-size: 17px; color: var(--brand); }
 .spot-chip.off { border: 1px dashed var(--brand); background: transparent; color: var(--muted); font-weight: 500; }
+/* a topic learnt from what the member did, after the chosen ones */
+.spot-chip.learnt { background: transparent; font-weight: 500; }
+.spot-chip.learnt .ic { color: var(--muted); }
 .spot .promptcard { background: var(--surface); }
 /* the first post across the whole width, the others two by two (an odd last one takes the whole row) */
 .spot-posts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -545,7 +579,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .spot-guide-progress .bar2 { flex: 1; min-width: 48px; }
 
 /* ---------------- "Tôi" ---------------- */
-#points, #area, #guides { scroll-margin-top: 76px; }   /* /profile#points, #area…: below the sticky top bar */
+#points, #area, #interests, #guides { scroll-margin-top: 76px; }   /* /profile#points, #area…: below the sticky top bar */
 /* "Cẩm nang của tôi": one row per stage (title, bar, done/total), then the guides started and finished */
 .guide-stages, .guide-list { list-style: none; margin: 0; padding: 0; display: grid; font-size: 14px; }
 .guide-stages li {

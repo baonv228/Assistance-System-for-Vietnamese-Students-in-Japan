@@ -1,8 +1,9 @@
 // Homepage: guests see an invitation, signed-in users see what matters to them today (as in the prototype).
 import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
+import { mountInterestPicker } from "../components/interest-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
+import { interestChips, interestNote, postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
 import {
     areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
 } from "../lib/ui.js";
@@ -109,11 +110,11 @@ async function renderMember(notice = "") {
 }
 
 /**
- * "Dành cho bạn": what the suggestions are based on (area, stage, topics learnt from the user's likes, saves, comments
- * and posts) with "Điều chỉnh" to change area and stage in place, then the first 5 posts chosen and ranked by the
- * server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed (/for-you). Then up to 3 guides of the
- * user's stage (`stageGuidesBlock`), shown even when no post fits. The form is open at once while area or stage is
- * missing, until "Để sau".
+ * "Dành cho bạn": what the suggestions are based on (area, stage, the topics the user chose, then those learnt from the
+ * user's likes, saves, comments and posts) with "Điều chỉnh" to change area, stage and topics in place, then the first
+ * 5 posts chosen and ranked by the server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed
+ * (/for-you). Then up to 3 guides of the user's stage (`stageGuidesBlock`), shown even when no post fits. The form is
+ * open at once while area or stage is missing, until "Để sau".
  */
 function forYouSection(home, notice) {
     const posts = home.forYou || [];
@@ -130,12 +131,10 @@ function forYouSection(home, notice) {
             <span class="spot-label">Dựa trên</span>
             ${home.areaName ? chip("location_on", areaShort(home.areaName), "Khu vực") : chip("location_off", "Chưa chọn khu vực", "", "off")}
             ${home.stage ? chip("flag", STAGES[home.stage], "Giai đoạn") : chip("flag", "Chưa chọn giai đoạn", "", "off")}
-            ${(home.interests || []).map((t) => chip("interests", t, "Chủ đề bạn quan tâm")).join("")}
+            ${interestChips(home, chip)}
             <button class="btn sm" type="button" data-tune aria-expanded="${open}" aria-controls="prompt">${ic("tune")}Điều chỉnh</button>
         </div>
-        <p class="note">${home.interests?.length
-            ? "Chủ đề quan tâm được rút ra từ những bài bạn đã thích, lưu, bình luận hoặc viết trong 90 ngày qua."
-            : "Hãy thích, lưu hoặc bình luận bài viết: Senpai ơi sẽ biết bạn quan tâm chủ đề nào để gợi ý sát hơn."}</p>
+        <p class="note">${interestNote(home)}</p>
         ${notice ? `<p class="alert success" role="status">${ic("check_circle")} ${esc(notice)}</p>` : ""}
         ${profileForm(home, open)}
         ${lead ? `<div class="spot-posts">
@@ -279,20 +278,22 @@ function greeting(home) {
 }
 
 /**
- * Area and stage, inside "Dành cho bạn". Not required: while one is missing it is a gentle reminder, open until the
- * user saves both or presses "Để sau"; afterwards "Điều chỉnh" opens it to change them.
+ * Area, stage and "Chủ đề quan tâm", inside "Dành cho bạn". Not required: while area or stage is missing it is a gentle
+ * reminder, open until the user saves both or presses "Để sau"; afterwards "Điều chỉnh" opens it to change them.
  */
 function profileForm(home, open) {
     const complete = home.areaName && home.stage;
     const where = home.stage === "PRE" ? "bạn sắp đến" : home.stage === "HOME" ? "bạn từng sống" : "bạn đang sinh sống";
     return `<div class="card promptcard" id="prompt" ${open ? "" : "hidden"}>
-        <b>${ic("location_on")} ${complete ? "Đổi khu vực hoặc giai đoạn của bạn" : `Mong bạn cho Senpai ơi biết khu vực ${where}`}</b>
+        <b>${ic("location_on")} ${complete ? "Đổi khu vực, giai đoạn hoặc chủ đề quan tâm" : `Mong bạn cho Senpai ơi biết khu vực ${where}`}</b>
         <p class="note">${complete ? "Gợi ý bên dưới đổi theo ngay khi bạn lưu." : "Để website gợi ý đúng những gì gần bạn nhất: việc cần làm, review và sự kiện quanh đó."}
             Chỉ lưu khu vực (quận, thành phố), không lưu địa chỉ hay vị trí; chỉ mình bạn thấy.</p>
         <div class="field"><label for="hp-stage">Giai đoạn</label>
             <select class="select" id="hp-stage"><option value="">Chưa chọn</option>
             ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === home.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         <div id="hp-area-box"><p class="note">Đang tải danh sách khu vực…</p></div>
+        <div class="field"><span class="field-title">Chủ đề quan tâm</span>
+            <div id="hp-interests-box"><p class="note">Đang tải danh sách chủ đề…</p></div></div>
         <p class="alert error" data-error role="alert" hidden></p>
         <div class="row"><button class="btn pri sm" type="button" data-save disabled>Lưu</button>
             <button class="btn sm" type="button" data-later>${complete ? "Đóng" : "Để sau"}</button></div>
@@ -305,18 +306,30 @@ function bindForYou(home) {
     const save = prompt.querySelector("[data-save]");
     const error = prompt.querySelector("[data-error]");
     let picker = null;
+    let interests = null;
     let mounting = null;
-    // The picker loads the prefectures and the current area, so only once the form is shown
+    // The pickers load the prefectures, the current area and the topics, so only once the form is shown. "Lưu" waits
+    // for the first one: without the area picker (failed to load) the area stays as it is, without the topics they do.
     const mount = () => {
-        mounting ??= mountAreaPicker(prompt.querySelector("#hp-area-box"), { id: "hp", areaId: home.areaId, stage: home.stage })
-            .then((p) => {
-                picker = p;
-                prompt.querySelector("#hp-stage").addEventListener("change", (e) => p.setStage(e.target.value));
-                save.disabled = false;
-            })
-            .catch((err) => {
-                prompt.querySelector("#hp-area-box").innerHTML = `<p class="alert error">${esc(err.message)}</p>`;
-            });
+        mounting ??= Promise.all([
+            mountAreaPicker(prompt.querySelector("#hp-area-box"), { id: "hp", areaId: home.areaId, stage: home.stage })
+                .then((p) => {
+                    picker = p;
+                    prompt.querySelector("#hp-stage").addEventListener("change", (e) => p.setStage(e.target.value));
+                    save.disabled = false;
+                })
+                .catch((err) => {
+                    prompt.querySelector("#hp-area-box").innerHTML = `<p class="alert error">${esc(err.message)}</p>`;
+                }),
+            mountInterestPicker(prompt.querySelector("#hp-interests-box"), { id: "hp" })
+                .then((p) => {
+                    interests = p;
+                    save.disabled = false;
+                })
+                .catch((err) => {
+                    prompt.querySelector("#hp-interests-box").innerHTML = `<p class="alert error">${esc(err.message)}</p>`;
+                })
+        ]);
     };
     const show = (visible) => {
         prompt.hidden = !visible;
@@ -335,15 +348,24 @@ function bindForYou(home) {
         }
     });
     save.addEventListener("click", async () => {
-        const areaId = picker ? picker.value() : null;
+        // Without the area picker the area is sent as it was, never cleared
+        const areaId = picker ? picker.value() : home.areaId;
         const stage = document.querySelector("#hp-stage").value;
         save.disabled = true;                       // one save at a time
         save.textContent = "Đang lưu…";
         error.hidden = true;
+        let topicsSaved = false;
+        let profileSaved = false;
         try {
+            // The topics only when they changed; both saves send the whole choice, so pressing "Lưu" again is safe
+            if (interests?.changed()) {
+                await interests.save();
+                topicsSaved = true;
+            }
             await apiClient.updateProfile({ areaId, stage: stage || null });
-            // Draws the page again: the suggestions, the greeting and the cards follow the new area and stage
-            await renderMember("Đã lưu. Gợi ý bên dưới đã theo khu vực và giai đoạn mới của bạn.");
+            profileSaved = true;
+            // Draws the page again: the suggestions, the greeting and the cards follow the new choices
+            await renderMember("Đã lưu. Gợi ý bên dưới đã theo lựa chọn mới của bạn.");
             document.querySelector("#foryou").scrollIntoView({ block: "start" });
         } catch (err) {
             // The choices stay; "Lưu" can be pressed again (also when the page could not be reloaded after saving)
@@ -351,9 +373,11 @@ function bindForYou(home) {
             save.textContent = "Lưu";
             // The server's message; a network failure gets MSG14 (the browser's own text is in English)
             const message = err instanceof ApiError && err.message ? err.message : "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
+            const saved = topicsSaved && !profileSaved
+                ? "Đã lưu chủ đề quan tâm, nhưng chưa lưu được khu vực và giai đoạn: " : "";
             error.innerHTML = err.status === 401
-                ? `${esc(message)} <a class="link" href="${esc(loginUrl())}">Đăng nhập lại</a>`
-                : esc(message);
+                ? `${esc(saved + message)} <a class="link" href="${esc(loginUrl())}">Đăng nhập lại</a>`
+                : esc(saved + message);
             error.hidden = false;
         }
     });

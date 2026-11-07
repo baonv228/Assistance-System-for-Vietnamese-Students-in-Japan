@@ -138,6 +138,9 @@ export const apiClient = {
     homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
+    // "Chủ đề quan tâm" (Members): { max, topics: [{ id, name, chosen, learnt }] }; save sends the whole choice
+    interests: () => request("/me/interests"),
+    saveInterests: (topicIds) => request("/me/interests", { method: "PUT", body: JSON.stringify({ topicIds }) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
     // "Đã lưu": { places, posts, questions, guides, counts }. Unsave with saveBlog / saveQuestion / saveGuide(id, false).
     saved: () => request("/me/saved"),

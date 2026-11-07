@@ -214,7 +214,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below).
   Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
   bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
-  "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
+  "Điều chỉnh" opens the area/stage/topics form in place and the feed is redrawn after "Lưu", the reasons on every post, the
   first post across the width, "Xem tất cả" → `/for-you`, then "Cẩm nang cho giai đoạn …" = `stageGuides`, see
   "Cẩm nang progress" below), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
   Post pieces shared with `/for-you`: `lib/feed-posts.js`.
@@ -224,8 +224,13 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `CHOSEN_MAX` 5 different topics, repeats count once; else 400 "Bạn chọn được tối đa 5 chủ đề.", a topic not offered
   400 "Có chủ đề không còn để chọn…", no list 400 "Danh sách chủ đề không hợp lệ."). Members only (role USER, ACTIVE;
   staff MSG18); the users row is locked FOR UPDATE first (READ COMMITTED), so two saves run one after the other; topics
-  kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save.
-  "Xóa tài khoản" deletes the rows. Tests: `InterestFlowTest`, `HomeFeedFlowTest`.
+  kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save. UI:
+  `components/interest-picker.js` (toggle buttons `.topic-pick` in site.css, at most 5, a "gợi ý" mark on learnt ones),
+  card "Chủ đề quan tâm" on Tôi (`#interests`, Members only, own "Lưu"; an unsaved choice survives the page redraw after
+  "Lưu" of area and stage) and in the Home's "Điều chỉnh" form (saved with area and stage). "Dựa trên" chips
+  (`lib/feed-posts.js interestChips`): chosen ones first (icon `interests`), learnt ones after (`history`, `.learnt`).
+  "Xóa tài khoản" deletes the rows. Tests: `InterestFlowTest`, `HomeFeedFlowTest`, `src/test/js/feed-posts.test.mjs`.
+  Not done: choosing topics while signing up.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
   `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
@@ -236,7 +241,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   reasons and scope counts unchanged, counted over the posts found; blank = no search; the Home card never searches.
   The page: search box first (typing asks after 350 ms, Enter at once; the text marked in titles and excerpts with
   `lib/search-text.js`; nothing found → "Tìm … trên toàn Senpai ơi" `/search?q=` or "xóa từ khóa"; `#search` focuses
-  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons and text in
+  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card, "Chủ đề quan tâm" right
+  under it), scope buttons and text in
   the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
   drawn twice (likes may move the ranking between two pages).
 - "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,

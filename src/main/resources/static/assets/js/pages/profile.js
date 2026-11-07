@@ -1,7 +1,8 @@
-// "Tôi": points and rank, new-account limits, identity tag, area and stage, guide progress ("Cẩm nang của tôi"),
-// account actions (as in the prototype).
+// "Tôi": points and rank, new-account limits, identity tag, area and stage, "Chủ đề quan tâm", guide progress
+// ("Cẩm nang của tôi"), account actions (as in the prototype).
 import { apiClient } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
+import { mountInterestPicker } from "../components/interest-picker.js";
 import { logout, mountSiteHeader } from "../components/site-header.js";
 import { esc, ic, LOGO_SVG, STAGES, tagChips } from "../lib/ui.js";
 
@@ -17,8 +18,11 @@ const PERKS = {
 const PROVIDERS = { GOOGLE: "Google", FACEBOOK: "Facebook" };
 
 let areaPicker = null;
+/** "Chủ đề quan tâm" of the page drawn last; a choice not saved yet is carried over when the page is drawn again. */
+let interestPicker = null;
 /** "/profile#guides" (the count of "Việc tiếp theo" on Home) scrolls once, not again each time the page is drawn. */
 let guidesScrolled = false;
+let interestsScrolled = false;
 await mountSiteHeader("me");
 try {
     render(await apiClient.profile());
@@ -83,6 +87,14 @@ function render(p) {
             <div class="row"><button class="btn sm" type="button" id="save">Lưu</button><span class="note" id="saved" role="status"></span></div>
         </div>
 
+        ${p.role === "USER" ? `<div class="card" id="interests">
+            <h3>${ic("interests")} Chủ đề quan tâm</h3>
+            <p class="note">Không bắt buộc. Chỉ mình bạn thấy.</p>
+            <div id="interests-box" aria-busy="true"><p class="note">Đang tải…</p></div>
+            <div class="row"><button class="btn sm" type="button" id="interests-save" disabled>Lưu</button>
+                <span class="note" id="interests-saved" role="status"></span></div>
+        </div>` : ""}
+
         ${p.role === "USER" ? `<div class="card" id="guides">
             <div class="row"><h3>${ic("menu_book")} Cẩm nang của tôi</h3><span class="grow"></span>
                 <a class="btn sm" href="/guides">Mở Cẩm nang${ic("arrow_forward")}</a></div>
@@ -126,7 +138,10 @@ function render(p) {
     bindHistory();
     const areaShown = bindArea(p);
     // Drawn again after "Lưu" of area and stage, so "Giai đoạn của bạn" follows the new stage
-    if (p.role === "USER") loadGuides(areaShown);
+    if (p.role === "USER") {
+        bindInterests(areaShown);
+        loadGuides(areaShown);
+    }
     // From "Điều chỉnh" on the page "Dành cho bạn" (/profile#area): the card is drawn after loading, so scroll now
     if (location.hash === "#area") document.querySelector("#area").scrollIntoView({ block: "start" });
 }
@@ -176,6 +191,51 @@ async function loadGuides(areaShown) {
         guidesScrolled = true;
         await areaShown;
         if (box.isConnected) document.querySelector("#guides").scrollIntoView({ block: "start" });
+    }
+}
+
+/**
+ * "Chủ đề quan tâm" (Members): the topics "Dành cho bạn" suggests first, chosen with toggles and saved with "Lưu" (the
+ * whole choice). A choice not saved yet survives the page being drawn again (after "Lưu" of area and stage).
+ * `areaShown` settles once the area picker above it is drawn, for "/profile#interests".
+ */
+async function bindInterests(areaShown) {
+    const box = document.querySelector("#interests-box");
+    const save = document.querySelector("#interests-save");
+    const status = document.querySelector("#interests-saved");
+    const kept = interestPicker?.changed() ? interestPicker.value() : null;
+    interestPicker = null;
+    let picker;
+    try {
+        picker = await mountInterestPicker(box, { id: "me", selected: kept, onChange: () => { status.textContent = ""; } });
+    } catch (error) {
+        if (box.isConnected) {
+            box.innerHTML = `<div class="alert error" role="alert">${esc(error.message)}</div>`;
+            box.removeAttribute("aria-busy");
+        }
+        return;
+    }
+    if (!box.isConnected) return;             // the page was drawn again meanwhile and loads its own copy
+    interestPicker = picker;
+    box.removeAttribute("aria-busy");
+    save.disabled = false;
+    save.addEventListener("click", async () => {
+        save.disabled = true;                   // one save at a time
+        status.textContent = "";
+        try {
+            await picker.save();
+            status.textContent = "Đã lưu. “Dành cho bạn” trên Trang chủ đã theo các chủ đề này.";
+        } catch (error) {
+            status.textContent = error.message;
+        } finally {
+            save.disabled = false;
+        }
+    });
+    // From "/profile#interests": the card is drawn after loading, so scroll to it now, below the area picker
+    if (location.hash === "#interests" && !interestsScrolled) {
+        interestsScrolled = true;
+        await areaShown;
+        if (box.isConnected) document.querySelector("#interests").scrollIntoView({ block: "start" });
     }
 }
 
