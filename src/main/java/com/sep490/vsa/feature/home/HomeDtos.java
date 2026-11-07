@@ -26,10 +26,21 @@ public final class HomeDtos {
     public record GuestHome(Stats stats, List<Quote> quotes, Phrase phrase) {
     }
 
-    /** {@code placeId} opens the place on the Map ({@code /map?place=}). */
-    public record GuideNext(String title, String dueNote, String placeName, Long placeId) {
+    /**
+     * The guide "Việc tiếp theo" opens ({@code /guides/{guideId}}, its checklist tab when {@code checklist}).
+     * {@code placeName} / {@code placeId}: the guide's place while it is ACTIVE, opened on the Map
+     * ({@code /map?place=}). {@code tasksDone} / {@code tasksTotal} / {@code nextTask} (the first task not ticked) only
+     * for a checklist ("Hướng dẫn chuẩn bị"), else 0, 0 and null.
+     */
+    public record GuideNext(Long guideId, String title, String dueNote, String placeName, Long placeId,
+                            boolean checklist, int tasksDone, int tasksTotal, String nextTask) {
     }
 
+    /**
+     * "Việc tiếp theo": the published guides of one stage ({@code stageCode}, the user's or ARR), {@code done} of
+     * {@code total} finished by the user ({@code GuideProgressService}), and the guide to open next (null when every
+     * guide is done or the stage has none).
+     */
     public record GuideProgress(String stageCode, String stageTitle, int done, int total, GuideNext next) {
     }
 

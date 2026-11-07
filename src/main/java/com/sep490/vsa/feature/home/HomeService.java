@@ -4,6 +4,8 @@ import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.text.VietnameseText;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
+import com.sep490.vsa.feature.guide.GuideProgressService;
+import com.sep490.vsa.feature.guide.GuideProgressService.State;
 import com.sep490.vsa.feature.home.HomeDtos.EventItem;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
@@ -38,7 +40,8 @@ import java.util.Map;
 
 /**
  * Read-only data for the homepage. Places, reviews, events, blogs and the guide are owned by other
- * features, so this service only reads their tables with SQL and never writes to them.
+ * features, so this service only reads their tables with SQL and never writes to them. Whether a guide is done is
+ * the guide feature's rule, read through {@link GuideProgressService}.
  */
 @Service
 @Transactional(readOnly = true)
@@ -79,17 +82,22 @@ public class HomeService {
                     "Cảnh báo lừa đảo"),
             "LEAVE", List.of("Thủ tục giấy tờ", "Visa và cư trú", "Ngân hàng và tiền", "Nhà ở"),
             "HOME", List.of("Sau khi về nước", "Kinh nghiệm"));
+    /** "Việc tiếp theo" for a user who has not chosen a stage yet. */
+    static final String DEFAULT_GUIDE_STAGE = "ARR";
 
     private final JdbcTemplate jdbc;
     private final NamedParameterJdbcTemplate named;
     private final Clock clock;
     private final FeaturedSnapshotService featuredPosts;
+    private final GuideProgressService guideProgress;
 
-    public HomeService(JdbcTemplate jdbc, Clock clock, FeaturedSnapshotService featuredPosts) {
+    public HomeService(JdbcTemplate jdbc, Clock clock, FeaturedSnapshotService featuredPosts,
+                       GuideProgressService guideProgress) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.clock = clock;
         this.featuredPosts = featuredPosts;
+        this.guideProgress = guideProgress;
     }
 
     /**
@@ -123,9 +131,14 @@ public class HomeService {
 
         List<Topic> interests = interests(userId);
         Ranking forYou = ranking(userId, me, interests, null);
+        // "Việc tiếp theo" reads the user's stage (ARR until one is chosen)
+        String guideStage = me.stage() == null ? DEFAULT_GUIDE_STAGE : me.stage();
+        List<StageGuide> guides = stageGuides(guideStage);
+        Map<Long, State> states = guideProgress.states(userId, guides.stream().map(StageGuide::id).toList());
+        GuideProgress guide = guide(guideStage, guides, states);
         return new MemberHome(me.displayName(), me.stage(), me.area() == null ? null : me.area().id(), me.areaName(),
                 me.points(), rankName,
-                phraseOfToday(), guide(userId, me.stage() == null ? "ARR" : me.stage()), events(),
+                phraseOfToday(), guide, events(),
                 reviews(userId, me.area()), featured(), posts(forYou, ForYouScope.ALL, FOR_YOU_SIZE, 0),
                 interests.stream().map(Topic::name).toList());
     }
@@ -367,23 +380,48 @@ public class HomeService {
                 });
     }
 
-    private GuideProgress guide(Long userId, String stageCode) {
+    /**
+     * A guide members can read (published, not deleted) of one stage, with its place only while that place is ACTIVE.
+     */
+    private record StageGuide(long id, String title, String dueNote, String placeName, Long placeId) {
+    }
+
+    /** The stage's guides in guide order ({@code sort_order}, then id), as on the guide pages. */
+    private List<StageGuide> stageGuides(String stageCode) {
+        return jdbc.query("""
+                SELECT gi.id, gi.title, gi.due_note, p.name_vi AS place_name, p.id AS place_id
+                FROM guide_items gi
+                LEFT JOIN places p ON p.id = gi.place_id AND p.status = 'ACTIVE'
+                WHERE gi.stage_code = ? AND gi.published = TRUE AND gi.deleted_at IS NULL
+                ORDER BY gi.sort_order, gi.id""",
+                (rs, i) -> new StageGuide(rs.getLong("id"), rs.getString("title"), rs.getString("due_note"),
+                        rs.getString("place_name"), rs.getObject("place_id", Long.class)),
+                stageCode);
+    }
+
+    /**
+     * "Việc tiếp theo": how many of the stage's guides the user finished (the rule of {@link GuideProgressService}:
+     * every task of a checklist ticked, "Đánh dấu đã xong" on any other guide) and the guide to open next: the first
+     * checklist the user already started, else the first guide not done, in guide order; null when none is left.
+     */
+    private GuideProgress guide(String stageCode, List<StageGuide> guides, Map<Long, State> states) {
         String title = jdbc.query("SELECT title FROM guide_stages WHERE code = ?", (rs, i) -> rs.getString(1), stageCode)
                 .stream().findFirst().orElse(stageCode);
-        record Item(String title, String due, String place, Long placeId, boolean done) {
-        }
-        List<Item> items = jdbc.query("""
-                SELECT gi.title, gi.due_note, p.name_vi, p.id, (ugp.item_id IS NOT NULL) FROM guide_items gi
-                LEFT JOIN places p ON p.id = gi.place_id AND p.status = 'ACTIVE'
-                LEFT JOIN user_guide_progress ugp ON ugp.item_id = gi.id AND ugp.user_id = ?
-                WHERE gi.stage_code = ? AND gi.published = TRUE AND gi.deleted_at IS NULL ORDER BY gi.sort_order, gi.id""",
-                (rs, i) -> new Item(rs.getString(1), rs.getString(2), rs.getString(3), rs.getObject(4, Long.class),
-                        rs.getBoolean(5)),
-                userId, stageCode);
-        int done = (int) items.stream().filter(Item::done).count();
-        GuideNext next = items.stream().filter(it -> !it.done()).findFirst()
-                .map(it -> new GuideNext(it.title(), it.due(), it.place(), it.placeId())).orElse(null);
-        return new GuideProgress(stageCode, title, done, items.size(), next);
+        int done = (int) guides.stream().filter(g -> state(states, g).done()).count();
+        GuideNext next = guides.stream().filter(g -> state(states, g).inProgress()).findFirst()
+                .or(() -> guides.stream().filter(g -> !state(states, g).done()).findFirst())
+                .map(g -> {
+                    State s = state(states, g);
+                    return new GuideNext(g.id(), g.title(), g.dueNote(), g.placeName(), g.placeId(), s.checklist(),
+                            s.tasksDone(), s.tasksTotal(), s.nextTask());
+                })
+                .orElse(null);
+        return new GuideProgress(stageCode, title, done, guides.size(), next);
+    }
+
+    /** A guide the progress lookup did not return (deleted meanwhile) counts as not started. */
+    private static State state(Map<Long, State> states, StageGuide guide) {
+        return states.getOrDefault(guide.id(), new State(guide.id(), false, 0, 0, false, null, null));
     }
 
     private List<EventItem> events() {

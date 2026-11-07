@@ -309,7 +309,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   writes idempotent. `guide-browse.js memberActions`: under the title, above the tabs: "Lưu"/"Đã lưu", "Đánh dấu đã
   xong"/"Đã xong" or "Tiến độ: x/y việc" (opens the checklist tab, follows ticks through the `guide-progress` event of
   `guide-preparation.js`, whose `preparationTabs` returns `{select}`); guests get a sign-in line, staff nothing.
-  Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
+  Member Home: "Việc tiếp theo" (`HomeService#guide`) = visible guides of the user's stage (ARR until chosen), done/total
+  by the rule, `next` = the first started checklist, else the first guide not done, in `sort_order, id` order, with
+  `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Cả giai
+  đoạn" `/guides?category=`, the count → `/profile#guides`. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
   `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
   Tests: `GuideMemberFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,

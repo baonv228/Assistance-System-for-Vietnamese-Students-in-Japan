@@ -74,7 +74,6 @@ const feature = (icon, title, text, href) =>
  */
 async function renderMember(notice = "") {
     const home = await apiClient.memberHome();
-    const g = home.guide;
     main.innerHTML = `
         <div class="page">
             <div class="greet">${LOGO_SVG}<div>
@@ -84,16 +83,7 @@ async function renderMember(notice = "") {
             ${searchForm()}
             ${forYouSection(home, notice)}
             <div class="homegrid">
-                <div class="card">
-                    <div class="row"><span class="badge br">${ic("menu_book")}Việc tiếp theo</span><span class="grow"></span>
-                        <span class="note">${g.done}/${g.total} · ${esc(g.stageTitle)}</span></div>
-                    <div class="bar2"><span style="width:${g.total ? (g.done / g.total) * 100 : 0}%"></span></div>
-                    ${g.next ? `<b>${esc(g.next.title)}</b>
-                        ${g.next.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(g.next.dueNote)}</span></span>` : ""}
-                        <div class="row">${g.next.placeName ? `<a class="btn sm" href="${placeUrl(g.next.placeId)}">${ic("location_on")}${esc(g.next.placeName)}</a>` : ""}
-                            <a class="btn sm" href="/guides">Mở cẩm nang</a></div>`
-                        : `<p>${g.total ? "Bạn đã xong giai đoạn này." : "Cẩm nang cho giai đoạn này đang được biên soạn."}</p>`}
-                </div>
+                ${nextCard(home.guide)}
                 ${reviewCard(home)}
                 <div class="card">
                     <div class="row"><span class="badge lan">${ic("celebration")}Sự kiện 2 tuần tới</span><span class="grow"></span>
@@ -166,6 +156,39 @@ function forYouSection(home, notice) {
 /** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
 const chip = (icon, text, what, extra = "") =>
     `<span class="spot-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
+
+/**
+ * "Việc tiếp theo": how many guides of the user's stage (ARR until one is chosen) are done, then the guide to open next,
+ * chosen by the server (a checklist already started, else the first guide not done) with what is left of it. The count
+ * opens "Cẩm nang của tôi" on Tôi.
+ */
+function nextCard(g) {
+    const n = g.next;
+    const href = n ? guideUrl(n.guideId, n.checklist) : "";
+    const percent = g.total ? Math.round((g.done / g.total) * 100) : 0;
+    const whole = `<a class="btn sm" href="${stageGuidesUrl(g.stageCode)}">Cả giai đoạn</a>`;
+    return `<div class="card">
+        <div class="row"><span class="badge br">${ic("menu_book")}Việc tiếp theo</span><span class="grow"></span>
+            <span class="note"><a class="link" href="/profile#guides" title="Xem tiến độ cẩm nang của bạn">${g.done}/${g.total} · ${esc(g.stageTitle)}</a></span></div>
+        <div class="bar2" ${g.total ? `role="progressbar" aria-label="Cẩm nang đã xong" aria-valuemin="0" aria-valuemax="${g.total}"
+             aria-valuenow="${g.done}"` : 'aria-hidden="true"'}><span style="width:${percent}%"></span></div>
+        ${n ? `<a class="feedtitle" href="${href}">${esc(n.title)}</a>
+            <span class="note">${n.checklist
+                ? `${n.tasksDone}/${n.tasksTotal} việc${n.nextTask ? ` · Tiếp theo: ${esc(n.nextTask)}` : ""}`
+                : "Đọc xong thì bấm “Đánh dấu đã xong” trong cẩm nang."}</span>
+            ${n.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(n.dueNote)}</span></span>` : ""}
+            <div class="row">${n.placeName ? `<a class="btn sm" href="${placeUrl(n.placeId)}">${ic("location_on")}${esc(n.placeName)}</a>` : ""}
+                <a class="btn sm pri" href="${href}">${ic("menu_book")}Mở cẩm nang này</a>${whole}</div>`
+            : g.total ? `<p>Bạn đã xong giai đoạn này.</p><div class="row">${whole}</div>`
+                : "<p>Cẩm nang cho giai đoạn này đang được biên soạn.</p>"}
+    </div>`;
+}
+
+/** A guide's page; a guide with a checklist opens on its "Hướng dẫn chuẩn bị" tab. */
+const guideUrl = (id, checklist) => `/guides/${encodeURIComponent(id)}${checklist ? "?tab=preparation" : ""}`;
+
+/** Every guide of one stage. */
+const stageGuidesUrl = (stageCode) => `/guides?category=${encodeURIComponent(stageCode)}`;
 
 /** The place's panel on the Map. */
 const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;

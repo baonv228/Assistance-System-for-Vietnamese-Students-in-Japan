@@ -516,6 +516,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .why.stage { background: var(--lantern-soft); color: var(--lantern-text); }
 .why.interest { background: var(--ai-soft); color: var(--ink); }
 .spot-empty { padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
+.homegrid .card:has(.feedtitle:focus-visible) { box-shadow: var(--focus); }   /* "Việc tiếp theo": the guide's title */
 
 /* ---------------- "Tôi" ---------------- */
 #points, #area, #guides { scroll-margin-top: 76px; }   /* /profile#points, #area…: below the sticky top bar */
