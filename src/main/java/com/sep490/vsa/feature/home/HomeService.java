@@ -521,11 +521,13 @@ public class HomeService {
         return value == null ? 0 : value;
     }
 
+    /** At most {@code max} code points on one line, so an emoji at the cut is never split in half. */
     static String excerpt(String text, int max) {
         if (text == null) {
             return "";
         }
         String flat = text.replaceAll("\\s+", " ").trim();
-        return flat.length() <= max ? flat : flat.substring(0, max).trim() + "…";
+        return flat.codePointCount(0, flat.length()) <= max ? flat
+                : flat.substring(0, flat.offsetByCodePoints(0, max)).trim() + "…";
     }
 }
