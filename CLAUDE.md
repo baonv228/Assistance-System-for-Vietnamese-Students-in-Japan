@@ -294,9 +294,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (target USER). `expireOld` (hourly at :15) closes requests older than `proof_keep_days` (14) as EXPIRED, deletes the
   photo and tells the user. A request handled meanwhile → 409 "Yêu cầu này đã được xử lý.".
 - "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
-  shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
-  `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
-  `savedCount` for "Đã lưu (N)" on Tôi. Places are saved from the Map once it is built (`saved_places`).
+  shows the place it was merged into), PUBLISHED posts and questions of active accounts and published, not deleted
+  guides (`guides`, V20 `saved_guides`, summary cut to 160), newest saved first; page `/saved` (`pages/saved.html` +
+  `assets/js/pages/saved.js`, "Bỏ lưu" uses the save API of each kind). The profile has `savedCount` for "Đã lưu (N)"
+  on Tôi (guides included). Places are saved from the Map (`saved_places`).
 - Cẩm nang progress (`feature/guide`): one rule, `GuideProgressService.states(userId, guideIds)`: a guide with a
   checklist ("Hướng dẫn chuẩn bị", `preparation_enabled` and ≥ 1 task) is done when every task is ticked
   (`guide_preparation_progress`); any other guide when the Member pressed "Đánh dấu đã xong" (`user_guide_progress`,
@@ -305,10 +306,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   nextTask}}`, guests read as user 0), `POST|DELETE /api/guides/{id}/save` → `{saved}`, `POST|DELETE
   /api/guides/{id}/done` → progress (a checklist guide → 400). Members only (guest 401, staff MSG18; a locked account's
   session already ended, 401), published and not deleted guides only (else 404), guide row locked FOR UPDATE first,
-  writes idempotent. `GET /api/me/saved` also lists saved guides (V20 `saved_guides`). `guide-browse.js memberActions`:
-  under the title, above the tabs: "Lưu"/"Đã lưu", "Đánh dấu đã xong"/"Đã xong" or "Tiến độ: x/y việc" (opens the
-  checklist tab, follows ticks through the `guide-progress` event of `guide-preparation.js`, whose `preparationTabs`
-  returns `{select}`); guests get a sign-in line, staff nothing.
+  writes idempotent. `guide-browse.js memberActions`: under the title, above the tabs: "Lưu"/"Đã lưu", "Đánh dấu đã
+  xong"/"Đã xong" or "Tiến độ: x/y việc" (opens the checklist tab, follows ticks through the `guide-progress` event of
+  `guide-preparation.js`, whose `preparationTabs` returns `{select}`); guests get a sign-in line, staff nothing.
   Tests: `GuideMemberFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
   CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`

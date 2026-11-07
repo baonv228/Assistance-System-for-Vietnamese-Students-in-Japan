@@ -139,7 +139,7 @@ export const apiClient = {
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
-    // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
+    // "Đã lưu": { places, posts, questions, guides, counts }. Unsave with saveBlog / saveQuestion / saveGuide(id, false).
     saved: () => request("/me/saved"),
     // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
     pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),

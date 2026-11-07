@@ -1,4 +1,4 @@
-/* "Đã lưu" (pages/saved.html). Post and question cards use .post from blog.css. */
+/* "Đã lưu" (pages/saved.html). Post, question and guide cards use .post from blog.css. */
 .savedpage #content { display: grid; gap: 22px; }
 .saved-section { display: grid; gap: 10px; }
 .saved-section h3 { display: flex; align-items: center; gap: 6px; }
