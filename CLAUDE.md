@@ -305,7 +305,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   nextTask}}`, guests read as user 0), `POST|DELETE /api/guides/{id}/save` → `{saved}`, `POST|DELETE
   /api/guides/{id}/done` → progress (a checklist guide → 400). Members only (guest 401, staff MSG18; a locked account's
   session already ended, 401), published and not deleted guides only (else 404), guide row locked FOR UPDATE first,
-  writes idempotent. `GET /api/me/saved` also lists saved guides (V20 `saved_guides`).
+  writes idempotent. `GET /api/me/saved` also lists saved guides (V20 `saved_guides`). `guide-browse.js memberActions`:
+  under the title, above the tabs: "Lưu"/"Đã lưu", "Đánh dấu đã xong"/"Đã xong" or "Tiến độ: x/y việc" (opens the
+  checklist tab, follows ticks through the `guide-progress` event of `guide-preparation.js`, whose `preparationTabs`
+  returns `{select}`); guests get a sign-in line, staff nothing.
   Tests: `GuideMemberFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
   CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`

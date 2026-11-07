@@ -89,6 +89,11 @@ export const apiClient = {
     guideSubjects: () => request("/guides/subjects"),
     guidePreparation: (id) => request(`/guides/${id}/preparation`),
     checkGuideTask: (id, taskId, completed) => request(`/guides/${id}/preparation/${taskId}`, { method: "PUT", body: JSON.stringify({ completed }) }),
+    // Guide page, the viewer's side: { signedIn, member, saved, progress: { checklist, tasksDone, tasksTotal, percent,
+    // done, nextTask } }. saveGuide → { saved }; markGuideDone (guides without a checklist only) → progress
+    guideViewer: (id) => request(`/guides/${id}/viewer`),
+    saveGuide: (id, on) => request(`/guides/${id}/save`, { method: on ? "POST" : "DELETE" }),
+    markGuideDone: (id, on) => request(`/guides/${id}/done`, { method: on ? "POST" : "DELETE" }),
     moderatorGuide: (id) => request(`/moderator/guides/${id}`),
     deleteGuide: (id) => request(`/moderator/guides/${id}`, { method: "DELETE" }),
     updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),
