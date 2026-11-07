@@ -240,7 +240,7 @@ class HomeFeedFlowTest {
         long fresh = blog(author, "POST", "PUBLISHED", future.instant().minus(Duration.ofDays(1)), 0, 0, false, null);
         long oldNear = blog(author, "POST", "PUBLISHED", Instant.now().minus(Duration.ofDays(60)), 0, 0, true, null);
 
-        List<FeedPost> feed = new HomeService(jdbc, future, featuredPosts, guideProgress).member(viewer).forYou();
+        List<FeedPost> feed = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future)).member(viewer).forYou();
         assertThat(feed).extracting(FeedPost::id).startsWith(fresh, oldNear);
         assertThat(feed.get(0).reason()).isNull();
         assertThat(feed.get(1).reason()).isEqualTo(NEAR);
@@ -251,7 +251,7 @@ class HomeFeedFlowTest {
         // Seen from ten years ahead, so only what this test dates in that future is recent
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
         Instant day = future.instant().minus(Duration.ofDays(1));
-        Instant tooOld = future.instant().minus(Duration.ofDays(HomeService.INTEREST_DAYS + 5));
+        Instant tooOld = future.instant().minus(Duration.ofDays(InterestService.LEARNT_DAYS + 5));
         // "Ăn uống": an own post (3) and a save (2) = 5
         blog(viewer, "POST", "PUBLISHED", day, 0, 0, false, "Ăn uống");
         save(viewer, blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Ăn uống"), day);
@@ -273,7 +273,7 @@ class HomeFeedFlowTest {
         like(viewer, old, tooOld);
         blog(viewer, "POST", "PUBLISHED", tooOld, 0, 0, false, "Nhà ở");
 
-        assertThat(new HomeService(jdbc, future, featuredPosts, guideProgress).member(viewer).interests())
+        assertThat(new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future)).member(viewer).interests())
                 .containsExactly("Ăn uống", "Y tế", "Đi lại");
     }
 
@@ -301,7 +301,7 @@ class HomeFeedFlowTest {
     @Test
     void interestsRankAfterAreaAndStageAndPostsAlreadyReadComeLast() {
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress);
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
         Instant day = future.instant().minus(Duration.ofDays(1));
         setProfile(viewer, area, "PRE");
         // Saving a "Việc làm thêm" post makes it an interest (2), and that post one the viewer already read
@@ -338,10 +338,106 @@ class HomeFeedFlowTest {
     }
 
     @Test
+    void chosenTopicsRankRightAfterAreaBeforeStageAndLearntTopics() {
+        Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        Instant day = future.instant().minus(Duration.ofDays(1));
+        setProfile(viewer, area, "PRE");
+        choose(viewer, "Ăn uống");
+        // Saving a "Việc làm thêm" post makes it a learnt interest (2), and that post one the viewer already read
+        long saved = blog(author, "POST", "PUBLISHED", day, 3 * HUGE, 0, false, "Việc làm thêm");
+        save(viewer, saved, day);
+
+        long near = blog(author, "POST", "PUBLISHED", day, 0, 0, true, null);
+        long chosenStage = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Ăn uống");
+        topic(chosenStage, "Nhà ở");                                                     // suits PRE
+        long chosenLearnt = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Việc làm thêm");
+        topic(chosenLearnt, "Ăn uống");
+        long chosenOnly = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Ăn uống");
+        long stageOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Visa và cư trú");
+        long learntOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Việc làm thêm");
+        long plain = blog(author, "POST", "PUBLISHED", day, 2 * HUGE, 0, false, null);
+
+        var member = home.member(viewer);
+        assertThat(member.interests()).containsExactly("Ăn uống", "Việc làm thêm");
+        assertThat(member.chosenInterests()).containsExactly("Ăn uống");
+        // Area, then a chosen topic (with the stage first, then with a learnt topic), the stage, a learnt topic, the rest
+        assertThat(member.forYou()).extracting(FeedPost::id)
+                .containsExactly(near, chosenStage, chosenLearnt, chosenOnly, stageOnly);
+        ForYouFeed all = home.forYouPage(viewer, null, 0, null);
+        assertThat(all.chosenInterests()).containsExactly("Ăn uống");
+        assertThat(all.items()).extracting(FeedPost::id)
+                .startsWith(near, chosenStage, chosenLearnt, chosenOnly, stageOnly, learntOnly, plain);
+        Map<Long, List<FeedReason>> reasons = new java.util.HashMap<>();
+        all.items().forEach(post -> reasons.put(post.id(), post.reasons()));
+        FeedReason eating = new FeedReason("INTEREST", HomeService.REASON_INTEREST, "Ăn uống");
+        assertThat(reasons.get(chosenStage)).containsExactly(eating, new FeedReason("STAGE", FITS, "Nhà ở"));
+        assertThat(reasons.get(chosenLearnt)).containsExactly(eating);           // one INTEREST, the chosen topic
+        assertThat(reasons.get(chosenOnly)).containsExactly(eating);
+        assertThat(reasons.get(stageOnly)).containsExactly(new FeedReason("STAGE", FITS, "Visa và cư trú"));
+        assertThat(reasons.get(learntOnly)).containsExactly(
+                new FeedReason("INTEREST", HomeService.REASON_INTEREST, "Việc làm thêm"));
+        assertThat(reasons.get(plain)).isEmpty();
+        assertThat(all.items().get(1).reason()).isEqualTo(HomeService.REASON_INTEREST);
+
+        // "Chủ đề quan tâm" keeps the chosen and the learnt ones, counted over both
+        ForYouFeed interest = home.forYouPage(viewer, "INTEREST", 0, null);
+        assertThat(interest.items()).extracting(FeedPost::id)
+                .startsWith(chosenStage, chosenLearnt, chosenOnly, learntOnly)
+                .doesNotContain(near, stageOnly, plain);
+        assertThat(scopeCount(interest, "INTEREST"))
+                .isEqualTo(postsWithTopics(viewer, List.of("Ăn uống", "Việc làm thêm")));
+    }
+
+    @Test
+    void theStageReasonNamesAnotherTopicThanTheChosenOneWhenThePostHasOne() {
+        Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        Instant day = future.instant().minus(Duration.ofDays(1));
+        setProfile(viewer, null, "PRE");
+        choose(viewer, "Visa và cư trú");                                     // also a PRE topic
+        long twoStageTopics = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Visa và cư trú");
+        topic(twoStageTopics, "Nhà ở");                                       // PRE, after "Visa và cư trú"
+        long oneStageTopic = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Visa và cư trú");
+
+        Map<Long, List<FeedReason>> reasons = new java.util.HashMap<>();
+        home.forYouPage(viewer, null, 0, null).items().forEach(post -> reasons.put(post.id(), post.reasons()));
+        FeedReason visa = new FeedReason("INTEREST", HomeService.REASON_INTEREST, "Visa và cư trú");
+        assertThat(reasons.get(twoStageTopics)).containsExactly(visa, new FeedReason("STAGE", FITS, "Nhà ở"));
+        // Its only stage topic is the chosen one: still in "Hợp giai đoạn"
+        assertThat(reasons.get(oneStageTopic)).containsExactly(visa, new FeedReason("STAGE", FITS, "Visa và cư trú"));
+    }
+
+    @Test
+    void aNewMemberWhoChoosesATopicGetsItsPostsAtOnce() throws Exception {
+        long japanese = blog(author, "POST", "PUBLISHED", Instant.now(), HUGE, 0, false, "Học tiếng Nhật");
+        // Nothing chosen, nothing done: no interest, "Tất cả" only
+        assertThat(scopeCodes(page(viewer, null, 0))).containsExactly("ALL");
+
+        long topicId = jdbc.queryForObject("SELECT id FROM blog_topics WHERE name = 'Học tiếng Nhật'", Long.class);
+        mvc.perform(put("/api/me/interests").session(session(viewer))
+                        .cookie(new Cookie("XSRF-TOKEN", CSRF)).header("X-XSRF-TOKEN", CSRF)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"topicIds\":[" + topicId + "]}"))
+                .andExpect(status().isOk());
+        String body = home(viewer);
+        assertThat((List<String>) JsonPath.read(body, "$.data.interests")).containsExactly("Học tiếng Nhật");
+        assertThat((List<String>) JsonPath.read(body, "$.data.chosenInterests")).containsExactly("Học tiếng Nhật");
+        Map<String, Object> first = forYou(viewer).get(0);
+        assertThat(((Number) first.get("id")).longValue()).isEqualTo(japanese);
+        assertThat(first.get("reason")).isEqualTo(HomeService.REASON_INTEREST);
+
+        String interest = page(viewer, "INTEREST", 0);
+        assertThat(scopeCodes(interest)).containsExactly("ALL", "INTEREST");
+        assertThat((String) JsonPath.read(interest, "$.data.scope")).isEqualTo("INTEREST");
+        assertThat(((Number) JsonPath.read(interest, "$.data.items[0].id")).longValue()).isEqualTo(japanese);
+        assertThat((List<String>) JsonPath.read(interest, "$.data.chosenInterests")).containsExactly("Học tiếng Nhật");
+    }
+
+    @Test
     void inactiveTopicsAndTagTypesAreLeftOut() {
         // Seen from ten years ahead only this test's posts are recent, so they lead the feed and are featured
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress);
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
         setProfile(viewer, null, "ARR");
         long post = blog(author, "POST", "PUBLISHED", future.instant().minus(Duration.ofDays(1)), 50, 0, false, "Nhà ở");
         long staff = user("ACTIVE");
@@ -480,7 +576,7 @@ class HomeFeedFlowTest {
     void scopesKeepOnlyThePostsThatMatchedThatReason() throws Exception {
         // Seen from ten years ahead only this test's posts are recent, so they lead every scope of the shared database
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress);
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
         Instant day = future.instant().minus(Duration.ofDays(1));
         setProfile(viewer, area, "PRE");
         // Saving a "Việc làm thêm" post makes it an interest (2 points), and that post one the viewer already read
@@ -771,6 +867,14 @@ class HomeFeedFlowTest {
     private void topic(long blogId, String topicName) {
         jdbc.update("INSERT INTO blog_topic_links (blog_id, topic_id) SELECT ?, id FROM blog_topics WHERE name = ?",
                 blogId, topicName);
+    }
+
+    /** The member chose these topics ("Chủ đề quan tâm"). */
+    private void choose(long userId, String... topicNames) {
+        for (String name : topicNames) {
+            jdbc.update("INSERT INTO user_interest_topics (user_id, topic_id) SELECT ?, id FROM blog_topics WHERE name = ?",
+                    userId, name);
+        }
     }
 
     private void like(long userId, long blogId, Instant at) {

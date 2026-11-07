@@ -203,13 +203,15 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Personalized feed = the member Home, which leads with it: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
   5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
   30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
-  prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic
-  name), then one of the user's interests ("Chủ đề bạn quan tâm"), then likes + 2 × comments, then newest) and
-  `interests`: up to 3 topics learnt from the last 90 days (like 1, save 2, published comment 2 once per post, own
-  published post or question 3; at least 2 points; "Khác" and inactive topics left out; "cần chốt" constants in
-  `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
-  linked place or the matching topic), `reason` = the first label and `engaged` (already liked, saved or commented
-  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+  prefecture ("Cùng tỉnh với bạn"), then a topic the user chose ("Chủ đề bạn quan tâm"), then a topic that suits the
+  user's stage (`HomeService.STAGE_TOPICS`, by topic name), then a topic learnt from what the user did (same label),
+  then likes + 2 × comments, then newest), `interests` (the chosen topics in the Blog's topic order, then up to 3
+  learnt from the last 90 days: like 1, save 2, published comment 2 once per post, own published post or question 3;
+  at least 2 points; never a chosen one) and `chosenInterests`; "Khác" and inactive topics are never chosen nor learnt
+  ("cần chốt" constants in `InterestService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST,
+  `label`, `detail` = the linked place or the matching topic; one INTEREST at most, the chosen topic before the learnt
+  one, listed before STAGE when chosen), `reason` = the first label and `engaged` (already liked, saved or commented
+  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below).
   Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
   bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
@@ -223,13 +225,13 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   400 "Có chủ đề không còn để chọn…", no list 400 "Danh sách chủ đề không hợp lệ."). Members only (role USER, ACTIVE;
   staff MSG18); the users row is locked FOR UPDATE first (READ COMMITTED), so two saves run one after the other; topics
   kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save.
-  "Xóa tài khoản" deletes the rows.
+  "Xóa tài khoản" deletes the rows. Tests: `InterestFlowTest`, `HomeFeedFlowTest`.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
   `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
   (area or prefecture), STAGE, INTEREST keeps only the posts with that reason, each scope offered only when the member
-  has an area / a stage / an interest (else ALL), each with its count; answer also has `q`, `areaName`, `stage`,
-  `interests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
+  has an area / a stage / an interest, chosen or learnt (else ALL), each with its count; answer also has `q`,
+  `areaName`, `stage`, `interests`, `chosenInterests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
   approved linked place name holds it (the Blog's rule: folded text, `utf8mb4_0900_ai_ci`, LIKE signs escaped), order,
   reasons and scope counts unchanged, counted over the posts found; blank = no search; the Home card never searches.
   The page: search box first (typing asks after 350 ms, Enter at once; the text marked in titles and excerpts with
