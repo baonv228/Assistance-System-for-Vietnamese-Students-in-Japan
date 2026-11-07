@@ -317,7 +317,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   the user's own stage (none without a stage), started checklists first, never `guide.next`, shown even when no post
   fits. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
   `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
-  Tests: `GuideMemberFlowTest`.
+  Tests: `GuideMemberFlowTest`, `HomeGuideFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
   CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
   (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
