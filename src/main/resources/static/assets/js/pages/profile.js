@@ -1,4 +1,5 @@
-// "Tôi": points and rank, new-account limits, identity tag, area and stage, account actions (as in the prototype).
+// "Tôi": points and rank, new-account limits, identity tag, area and stage, guide progress ("Cẩm nang của tôi"),
+// account actions (as in the prototype).
 import { apiClient } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { logout, mountSiteHeader } from "../components/site-header.js";
@@ -15,8 +16,10 @@ const PERKS = {
 };
 const PROVIDERS = { GOOGLE: "Google", FACEBOOK: "Facebook" };
 
-await mountSiteHeader("me");
 let areaPicker = null;
+/** "/profile#guides" (the count of "Việc tiếp theo" on Home) scrolls once, not again each time the page is drawn. */
+let guidesScrolled = false;
+await mountSiteHeader("me");
 try {
     render(await apiClient.profile());
 } catch (error) {
@@ -80,6 +83,12 @@ function render(p) {
             <div class="row"><button class="btn sm" type="button" id="save">Lưu</button><span class="note" id="saved" role="status"></span></div>
         </div>
 
+        ${p.role === "USER" ? `<div class="card" id="guides">
+            <div class="row"><h3>${ic("menu_book")} Cẩm nang của tôi</h3><span class="grow"></span>
+                <a class="btn sm" href="/guides">Mở Cẩm nang${ic("arrow_forward")}</a></div>
+            <div id="guides-body" aria-busy="true"><p class="note">Đang tải…</p></div>
+        </div>` : ""}
+
         <div class="card" id="password-card">
             <div class="row"><h3>${ic("password")} Mật khẩu</h3><span class="grow"></span>
                 <button class="btn sm" type="button" id="pw-open">${p.hasPassword ? "Đổi mật khẩu" : "Tạo mật khẩu"}</button></div>
@@ -115,9 +124,59 @@ function render(p) {
     document.querySelector("#delete-ask").addEventListener("click", askDelete);
     bindPassword(p);
     bindHistory();
-    bindArea(p);
+    const areaShown = bindArea(p);
+    // Drawn again after "Lưu" of area and stage, so "Giai đoạn của bạn" follows the new stage
+    if (p.role === "USER") loadGuides(areaShown);
     // From "Điều chỉnh" on the page "Dành cho bạn" (/profile#area): the card is drawn after loading, so scroll now
     if (location.hash === "#area") document.querySelector("#area").scrollIntoView({ block: "start" });
+}
+
+/**
+ * "Cẩm nang của tôi" (Members): done/total per stage with the member's own stage marked, the checklists left half done
+ * and the guides finished last. Done = every task of a checklist ticked, or "Đánh dấu đã xong" on any other guide.
+ * `areaShown` settles once the area picker above it is drawn (it makes the page taller), for "/profile#guides".
+ */
+async function loadGuides(areaShown) {
+    const box = document.querySelector("#guides-body");
+    let data;
+    try {
+        data = await apiClient.myGuideProgress();
+    } catch (error) {
+        if (box.isConnected) {
+            box.innerHTML = `<div class="alert error" role="alert">${esc(error.message)}</div>`;
+            box.removeAttribute("aria-busy");
+        }
+        return;
+    }
+    if (!box.isConnected) return;             // the page was drawn again meanwhile and loads its own copy
+    const stageRows = data.stages.map((s) => `<li>
+            <span class="what"><a class="link" href="/guides?category=${encodeURIComponent(s.code)}">${esc(s.title)}</a>${s.current
+                ? `<span class="badge br">${ic("flag")}Giai đoạn của bạn</span>` : ""}</span>
+            <span class="bar2" aria-hidden="true"><span style="width:${s.total ? Math.round((s.done / s.total) * 100) : 0}%"></span></span>
+            <span class="note count">${s.total ? `${s.done}/${s.total}<span class="sr-only"> cẩm nang đã xong</span>` : "Chưa có"}</span>
+        </li>`).join("");
+    const started = data.inProgress.map((g) => `<li>
+            <span class="what"><a class="link" href="/guides/${encodeURIComponent(g.id)}?tab=preparation">${esc(g.title)}</a>${g.stageTitle
+                ? `<span class="note"> · ${esc(g.stageTitle)}</span>` : ""}</span>
+            <span class="bar2" aria-hidden="true"><span style="width:${Number(g.percent) || 0}%"></span></span>
+            <span class="note">${g.tasksDone}/${g.tasksTotal} việc${g.nextTask ? ` · Tiếp theo: ${esc(g.nextTask)}` : ""}</span>
+        </li>`).join("");
+    const finished = data.recentlyDone.map((g) => `<li>
+            <span class="what">${ic("check_circle", "done-ic")}<a class="link" href="/guides/${encodeURIComponent(g.id)}">${esc(g.title)}</a></span>
+            <span class="note">${g.stageTitle ? `${esc(g.stageTitle)} · ` : ""}Xong ngày ${esc(new Date(g.doneAt).toLocaleDateString("vi-VN"))}</span>
+        </li>`).join("");
+    box.innerHTML = `<p class="note">Cẩm nang có danh sách chuẩn bị xong khi bạn đánh dấu hết các việc; cẩm nang khác xong khi bạn bấm “Đánh dấu đã xong”.</p>
+        <ul class="guide-stages">${stageRows}</ul>
+        ${started ? `<h4 class="guide-sub">Đang làm dở</h4><ul class="guide-list">${started}</ul>` : ""}
+        ${finished ? `<h4 class="guide-sub">Đã xong gần đây</h4><ul class="guide-list">${finished}</ul>` : ""}
+        ${started || finished ? "" : '<p class="note">Bạn chưa bắt đầu cẩm nang nào. Mở Cẩm nang để xem việc cần làm ở từng giai đoạn.</p>'}`;
+    box.removeAttribute("aria-busy");
+    // The card is drawn after loading, so scroll to it now, once the area picker above it has its height
+    if (location.hash === "#guides" && !guidesScrolled) {
+        guidesScrolled = true;
+        await areaShown;
+        if (box.isConnected) document.querySelector("#guides").scrollIntoView({ block: "start" });
+    }
 }
 
 /** The area picker (prefecture → area, quick search, map); its label follows the stage chosen above it. */

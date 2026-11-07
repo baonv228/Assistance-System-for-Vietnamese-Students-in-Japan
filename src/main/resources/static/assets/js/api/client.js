@@ -143,6 +143,10 @@ export const apiClient = {
     saved: () => request("/me/saved"),
     // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
     pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),
+    // "Cẩm nang của tôi" (Members): { stage, stages: [{ code, title, done, total, current }], inProgress: [{ id, title,
+    // topicName, stageCode, stageTitle, tasksDone, tasksTotal, percent, nextTask, lastActivityAt }], recentlyDone:
+    // [{ id, title, stageCode, stageTitle, doneAt }] }
+    myGuideProgress: () => request("/me/guides/progress"),
     // UC-U09 "Xin tag định danh": { tags: [{ id, name, description, color, selfieOnly, proofTypes, owned }], pending,
     // keepDays, photoMaxMb }; submitTagRequest takes FormData: part "request" (JSON {tagId, proofTypeId, consent}) + "photo"
     tagCompose: () => request("/me/tag-requests/compose"),
