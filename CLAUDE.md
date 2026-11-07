@@ -212,8 +212,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
   bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
-  first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
-  phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+  first post across the width, "Xem tất cả" → `/for-you`, then "Cẩm nang cho giai đoạn …" = `stageGuides`, see
+  "Cẩm nang progress" below), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
+  Post pieces shared with `/for-you`: `lib/feed-posts.js`.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
   `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
@@ -312,7 +313,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Member Home: "Việc tiếp theo" (`HomeService#guide`) = visible guides of the user's stage (ARR until chosen), done/total
   by the rule, `next` = the first started checklist, else the first guide not done, in `sort_order, id` order, with
   `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Cả giai
-  đoạn" `/guides?category=`, the count → `/profile#guides`. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
+  đoạn" `/guides?category=`, the count → `/profile#guides`. `stageGuides` in "Dành cho bạn": up to 3 not-done guides of
+  the user's own stage (none without a stage), started checklists first, never `guide.next`, shown even when no post
+  fits. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
   `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
   Tests: `GuideMemberFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,

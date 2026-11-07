@@ -44,6 +44,15 @@ public final class HomeDtos {
     public record GuideProgress(String stageCode, String stageTitle, int done, int total, GuideNext next) {
     }
 
+    /**
+     * A guide of the user's stage shown in "Dành cho bạn". {@code excerpt}: the start of its summary as plain text
+     * (null without one); {@code percent} 0–100 of its checklist; {@code tasksDone} / {@code tasksTotal} /
+     * {@code nextTask} only for a checklist; {@code inProgress} = a checklist with some, not all, tasks ticked.
+     */
+    public record GuideCard(Long id, String title, String topicName, String excerpt, boolean checklist, int tasksDone,
+                            int tasksTotal, int percent, String nextTask, boolean inProgress) {
+    }
+
     /** {@code daysUntil} is 0 when the event is happening today. */
     public record EventItem(Long id, String title, LocalDate startDate, LocalDate endDate, String locationName, long daysUntil) {
     }
@@ -82,10 +91,15 @@ public final class HomeDtos {
                            int readMinutes, String period) {
     }
 
-    /** {@code interests}: the topics "Dành cho bạn" learnt from what the user liked, saved, commented on or wrote. */
+    /**
+     * {@code interests}: the topics "Dành cho bạn" learnt from what the user liked, saved, commented on or wrote;
+     * {@code stageGuides}: up to 3 guides of the user's own stage not done yet, in progress first, never the one
+     * "Việc tiếp theo" shows (empty without a stage).
+     */
     public record MemberHome(String displayName, String stage, Long areaId, String areaName, int points, String rankName,
                              Phrase phrase, GuideProgress guide, List<EventItem> events, List<ReviewItem> reviews,
-                             Featured featured, List<FeedPost> forYou, List<String> interests) {
+                             Featured featured, List<FeedPost> forYou, List<String> interests,
+                             List<GuideCard> stageGuides) {
     }
 
     /**

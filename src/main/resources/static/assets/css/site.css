@@ -516,7 +516,33 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .why.stage { background: var(--lantern-soft); color: var(--lantern-text); }
 .why.interest { background: var(--ai-soft); color: var(--ink); }
 .spot-empty { padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
+/* "Cẩm nang cho giai đoạn …" under the posts: guides of the member's stage, side by side while each keeps 220 px */
+.spot-guides { display: grid; gap: 10px; }
+.spot-guides-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+/* the title keeps 240 px: on a phone "Xem tất cả" goes under it instead of squeezing it onto three lines */
+.spot-guides-head h3 { display: flex; flex: 1 1 240px; gap: 6px; align-items: center; min-width: 0; font-size: 19px; overflow-wrap: anywhere; }
+.spot-guides-head h3 .ic { color: var(--brand); }
+.spot-guide-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.spot-guide {
+    position: relative;                         /* the title's link covers the whole card (.spot .feedtitle::after) */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--lantern);
+    border-radius: 12px;
+    transition: border-color .15s, box-shadow .15s;
+}
+.spot-guide:hover { border-color: var(--brand); border-left-color: var(--lantern); box-shadow: 0 6px 18px rgba(194, 69, 110, .14); }
+.spot-guide:has(.feedtitle:focus-visible) { box-shadow: var(--focus); }
 .homegrid .card:has(.feedtitle:focus-visible) { box-shadow: var(--focus); }   /* "Việc tiếp theo": the guide's title */
+.spot-guide .spot-excerpt { font-size: 14px; }
+.spot-guide-foot { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: auto; }
+.spot-guide-progress { display: flex; flex: 1 1 120px; gap: 8px; align-items: center; min-width: 0; }
+.spot-guide-progress .bar2 { flex: 1; min-width: 48px; }
 
 /* ---------------- "Tôi" ---------------- */
 #points, #area, #guides { scroll-margin-top: 76px; }   /* /profile#points, #area…: below the sticky top bar */

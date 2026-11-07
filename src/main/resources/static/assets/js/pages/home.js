@@ -111,8 +111,9 @@ async function renderMember(notice = "") {
 /**
  * "Dành cho bạn": what the suggestions are based on (area, stage, topics learnt from the user's likes, saves, comments
  * and posts) with "Điều chỉnh" to change area and stage in place, then the first 5 posts chosen and ranked by the
- * server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed (/for-you). Open at once while area or
- * stage is missing, until "Để sau".
+ * server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed (/for-you). Then up to 3 guides of the
+ * user's stage (`stageGuidesBlock`), shown even when no post fits. The form is open at once while area or stage is
+ * missing, until "Để sau".
  */
 function forYouSection(home, notice) {
     const posts = home.forYou || [];
@@ -124,7 +125,7 @@ function forYouSection(home, notice) {
             ${lead ? `<a class="btn sm spot-find" href="${FOR_YOU_PAGE}#search" title="Tìm trong bài dành cho bạn">${ic("search")}<span class="sr-only">Tìm trong bài dành cho bạn</span></a>
             <a class="btn sm" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("arrow_forward")}</a>` : ""}
         </div>
-        <p class="spot-sub">Bài viết Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
+        <p class="spot-sub">Bài viết và cẩm nang Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
         <div class="spot-basis">
             <span class="spot-label">Dựa trên</span>
             ${home.areaName ? chip("location_on", areaShort(home.areaName), "Khu vực") : chip("location_off", "Chưa chọn khu vực", "", "off")}
@@ -150,12 +151,48 @@ function forYouSection(home, notice) {
         </div>
         <a class="btn sm spot-more" href="${FOR_YOU_PAGE}">Xem tất cả bài viết dành cho bạn${ic("arrow_forward")}</a>`
         : '<p class="spot-empty">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
+        ${stageGuidesBlock(home)}
     </section>`;
 }
 
 /** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
 const chip = (icon, text, what, extra = "") =>
     `<span class="spot-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
+
+/**
+ * "Cẩm nang cho giai đoạn …" in "Dành cho bạn": up to 3 guides of the user's stage not finished yet, chosen and ordered
+ * by the server (checklists already started first, never the guide "Việc tiếp theo" shows). Each card opens its guide.
+ */
+function stageGuidesBlock(home) {
+    const guides = home.stageGuides || [];
+    if (!guides.length || !home.stage) {
+        return "";
+    }
+    const stage = STAGES[home.stage] || "";
+    return `<div class="spot-guides">
+        <div class="spot-guides-head">
+            <h3>${ic("menu_book")}Cẩm nang cho giai đoạn ${esc(stage)}</h3>
+            <a class="link" href="${stageGuidesUrl(home.stage)}" aria-label="Xem tất cả cẩm nang cho giai đoạn ${esc(stage)}">Xem tất cả</a>
+        </div>
+        <div class="spot-guide-list">${guides.map(guideCard).join("")}</div>
+    </div>`;
+}
+
+/** One guide of "Dành cho bạn": why it is there, title, start of the summary, topic and progress. */
+const guideCard = (c) => `<article class="spot-guide">
+        <div class="whys">${c.inProgress
+            ? `<span class="why stage">${ic("pending_actions")}<span>Đang làm dở</span></span>`
+            : `<span class="why stage">${ic("flag")}<span>Hợp giai đoạn của bạn</span></span>`}</div>
+        <a class="feedtitle" href="${guideUrl(c.id, c.checklist)}">${esc(c.title)}</a>
+        ${c.excerpt ? `<p class="spot-excerpt">${esc(c.excerpt)}</p>` : ""}
+        <div class="spot-guide-foot">
+            ${c.topicName ? `<span class="badge">${esc(c.topicName)}</span>` : ""}
+            ${c.checklist
+                ? `<span class="spot-guide-progress"><span class="bar2" aria-hidden="true"><span style="width:${Number(c.percent) || 0}%"></span></span>
+                    <span class="note">${c.tasksDone}/${c.tasksTotal} việc</span></span>`
+                : '<span class="note">Chưa đọc</span>'}
+        </div>
+    </article>`;
 
 /**
  * "Việc tiếp theo": how many guides of the user's stage (ARR until one is chosen) are done, then the guide to open next,

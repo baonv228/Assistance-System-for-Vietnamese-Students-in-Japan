@@ -12,6 +12,7 @@ import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
 import com.sep490.vsa.feature.home.HomeDtos.FeedReason;
 import com.sep490.vsa.feature.home.HomeDtos.ForYouFeed;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
+import com.sep490.vsa.feature.home.HomeDtos.GuideCard;
 import com.sep490.vsa.feature.home.HomeDtos.GuideNext;
 import com.sep490.vsa.feature.home.HomeDtos.GuideProgress;
 import com.sep490.vsa.feature.home.HomeDtos.MemberHome;
@@ -35,6 +36,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -84,6 +86,9 @@ public class HomeService {
             "HOME", List.of("Sau khi về nước", "Kinh nghiệm"));
     /** "Việc tiếp theo" for a user who has not chosen a stage yet. */
     static final String DEFAULT_GUIDE_STAGE = "ARR";
+    /** "Dành cho bạn": at most 3 guides of the user's stage, each with the start of its summary. */
+    static final int STAGE_GUIDES = 3;
+    private static final int GUIDE_EXCERPT = 120;
 
     private final JdbcTemplate jdbc;
     private final NamedParameterJdbcTemplate named;
@@ -131,7 +136,8 @@ public class HomeService {
 
         List<Topic> interests = interests(userId);
         Ranking forYou = ranking(userId, me, interests, null);
-        // "Việc tiếp theo" reads the user's stage (ARR until one is chosen)
+        // "Việc tiếp theo" reads the user's stage (ARR until one is chosen), "Dành cho bạn" the user's own stage only:
+        // the same guides, so one query and one progress lookup serve both
         String guideStage = me.stage() == null ? DEFAULT_GUIDE_STAGE : me.stage();
         List<StageGuide> guides = stageGuides(guideStage);
         Map<Long, State> states = guideProgress.states(userId, guides.stream().map(StageGuide::id).toList());
@@ -140,7 +146,8 @@ public class HomeService {
                 me.points(), rankName,
                 phraseOfToday(), guide, events(),
                 reviews(userId, me.area()), featured(), posts(forYou, ForYouScope.ALL, FOR_YOU_SIZE, 0),
-                interests.stream().map(Topic::name).toList());
+                interests.stream().map(Topic::name).toList(),
+                me.stage() == null ? List.of() : guideCards(guides, states, guide.next()));
     }
 
     /**
@@ -381,21 +388,28 @@ public class HomeService {
     }
 
     /**
-     * A guide members can read (published, not deleted) of one stage, with its place only while that place is ACTIVE.
+     * A guide members can read (published, not deleted) of one stage, with what the Home shows of it: the topic name
+     * as the guide pages show it (the stage's title when it has no topic), the start of its summary, and its place
+     * only while that place is ACTIVE.
      */
-    private record StageGuide(long id, String title, String dueNote, String placeName, Long placeId) {
+    private record StageGuide(long id, String title, String summary, String topicName, String dueNote,
+                              String placeName, Long placeId) {
     }
 
     /** The stage's guides in guide order ({@code sort_order}, then id), as on the guide pages. */
     private List<StageGuide> stageGuides(String stageCode) {
         return jdbc.query("""
-                SELECT gi.id, gi.title, gi.due_note, p.name_vi AS place_name, p.id AS place_id
+                SELECT gi.id, gi.title, LEFT(gi.summary, 400) AS summary_start,
+                       COALESCE(t.title, s.title) AS topic_name, gi.due_note, p.name_vi AS place_name, p.id AS place_id
                 FROM guide_items gi
+                LEFT JOIN guide_stages s ON s.code = gi.stage_code
+                LEFT JOIN guide_topics t ON t.code = gi.topic_code
                 LEFT JOIN places p ON p.id = gi.place_id AND p.status = 'ACTIVE'
                 WHERE gi.stage_code = ? AND gi.published = TRUE AND gi.deleted_at IS NULL
                 ORDER BY gi.sort_order, gi.id""",
-                (rs, i) -> new StageGuide(rs.getLong("id"), rs.getString("title"), rs.getString("due_note"),
-                        rs.getString("place_name"), rs.getObject("place_id", Long.class)),
+                (rs, i) -> new StageGuide(rs.getLong("id"), rs.getString("title"), rs.getString("summary_start"),
+                        rs.getString("topic_name"), rs.getString("due_note"), rs.getString("place_name"),
+                        rs.getObject("place_id", Long.class)),
                 stageCode);
     }
 
@@ -417,6 +431,25 @@ public class HomeService {
                 })
                 .orElse(null);
         return new GuideProgress(stageCode, title, done, guides.size(), next);
+    }
+
+    /**
+     * "Cẩm nang cho giai đoạn …" in "Dành cho bạn": up to {@value #STAGE_GUIDES} guides of the stage the user has not
+     * finished, checklists already started first, then guide order, without the one "Việc tiếp theo" shows.
+     */
+    private static List<GuideCard> guideCards(List<StageGuide> guides, Map<Long, State> states, GuideNext next) {
+        Long shown = next == null ? null : next.guideId();
+        return guides.stream()
+                .filter(g -> !state(states, g).done() && (shown == null || g.id() != shown))
+                .sorted(Comparator.comparing((StageGuide g) -> !state(states, g).inProgress()))   // stable: guide order
+                .limit(STAGE_GUIDES)
+                .map(g -> {
+                    State s = state(states, g);
+                    String excerpt = excerpt(g.summary(), GUIDE_EXCERPT);
+                    return new GuideCard(g.id(), g.title(), g.topicName(), excerpt.isEmpty() ? null : excerpt,
+                            s.checklist(), s.tasksDone(), s.tasksTotal(), s.percent(), s.nextTask(), s.inProgress());
+                })
+                .toList();
     }
 
     /** A guide the progress lookup did not return (deleted meanwhile) counts as not started. */
