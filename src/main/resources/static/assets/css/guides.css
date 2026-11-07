@@ -38,6 +38,12 @@
 .guide-browse #browse-back { margin: 0 0 12px; }
 .guide-browse #browse-back-bottom { margin: 18px 0 0; }
 .guide-browse .guide-detail-section { border-top: 1px solid var(--line); padding-top: 16px; min-width: 0; }
+/* The viewer's row under the title (guide-browse.js memberActions): "Lưu", "Đánh dấu đã xong" / "Tiến độ", or the
+   sign-in hint. Buttons wrap to the next line on narrow phones. */
+.guide-browse .guide-member-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.guide-browse .guide-member-actions .btn { max-width: 100%; }
+.guide-browse .guide-member-status { flex-basis: 100%; }
+.guide-browse .guide-member-status.error { color: var(--crit); }
 .guide-browse #browse-error { margin-bottom: 16px; }
 
 .guide-page .guide-editor { padding:24px; }

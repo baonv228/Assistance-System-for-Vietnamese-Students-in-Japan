@@ -21,10 +21,10 @@
 | 5. Địa điểm và bản đồ | `place_categories`, `category_google_types`, `category_osm_tags`, `places`, `place_history`, `place_closed_reports`, `saved_places`, `place_merges`, `duplicate_dismissals` |
 | 6. Review | `reviews`, `review_media`, `review_likes` |
 | 7. Sự kiện | `events` |
-| 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots` |
+| 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots`, `user_interest_topics` (V21) |
 | 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks` (`practice_sentences` bỏ ở V18) |
 | 10. Kiểm duyệt và báo cáo | `reason_options`, `banned_keywords`, `moderation_scans`, `report_cases`, `reports`, `appeals` |
-| 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress` |
+| 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress`, `saved_guides` (V20) |
 | 12. Thông báo và hệ thống | `notifications`, `system_settings`, `activity_logs`, `api_usage` |
 | 13. Tin nhắn (V14, V15) | `chat_conversations`, `chat_members`, `chat_messages`, `chat_blocks`, `chat_keys`, `chat_message_edits`, `chat_reactions`, `chat_files`, `chat_report_evidence`, `chat_notify_settings`, `push_subscriptions`, `web_push_keys` |
 
@@ -441,6 +441,15 @@ Bài "Cảnh báo lừa đảo" gắn địa điểm thì ghim đó hiện dấu
 | user_id | BIGINT | PK, FK → users |
 | created_at | DATETIME | NN |
 
+### `user_interest_topics` – Chủ đề quan tâm do thành viên tự chọn (V21)
+Thành viên chọn ở trang Tôi hoặc ở nút "Điều chỉnh" của "Dành cho bạn", tối đa 5 chủ đề (ứng dụng kiểm tra). Bài thuộc chủ đề đã chọn được xếp ngay sau bài gần khu vực của thành viên, trước chủ đề hợp giai đoạn và chủ đề rút ra từ hoạt động. Chủ đề "Khác" và chủ đề đang tắt không được chọn, không được đọc; dòng của chủ đề bị tắt sau này bị xóa ở lần lưu kế tiếp. Xóa tài khoản thì xóa các dòng này.
+
+| Cột | Kiểu | Ràng buộc |
+|---|---|---|
+| user_id | BIGINT | PK, FK → users (xóa theo) |
+| topic_id | BIGINT | PK, FK → blog_topics (xóa theo) |
+| created_at | DATETIME | NN, mặc định lúc chọn |
+
 ### `comments` – Bình luận, câu trả lời và trả lời bình luận
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |---|---|---|---|
@@ -619,11 +628,22 @@ hoặc thêm như từ khóa khác.
 | created_at, updated_at | DATETIME | NN | |
 
 ### `user_guide_progress` – Người dùng đánh dấu đã làm
+Lưu nút "Đánh dấu đã xong" của cẩm nang **không có** danh sách chuẩn bị. Cẩm nang có danh sách chuẩn bị được tính là đã xong khi mọi việc đã được tick (`guide_preparation_progress`), dòng ở bảng này không tính cho nó.
+
 | Cột | Kiểu | Ràng buộc |
 |---|---|---|
 | user_id | BIGINT | PK, FK → users |
 | item_id | BIGINT | PK, FK → guide_items |
 | done_at | DATETIME | NN |
+
+### `saved_guides` – Cẩm nang đã lưu (V20)
+Nút "Lưu" trên trang cẩm nang; danh sách hiện trong "Đã lưu". Chỉ hiện cẩm nang đang công khai và chưa xóa; dòng của cẩm nang bị ẩn hoặc xóa mềm vẫn giữ, cẩm nang công khai lại thì hiện lại.
+
+| Cột | Kiểu | Ràng buộc |
+|---|---|---|
+| user_id | BIGINT | PK, FK → users |
+| guide_id | BIGINT | PK, FK → guide_items |
+| created_at | DATETIME | NN |
 
 ---
 

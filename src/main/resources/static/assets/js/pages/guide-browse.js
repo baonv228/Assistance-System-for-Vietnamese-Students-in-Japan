@@ -2,6 +2,7 @@ import { preparationTabs } from "../lib/guide-preparation.js";
 import { guideContent } from "../lib/guide-content.js";
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
+import { loginUrl } from "../lib/ui.js";
 
 const $ = selector => document.querySelector(selector);
 const params = new URLSearchParams(location.search);
@@ -90,17 +91,86 @@ async function list() {
  });
  $("#browse-list").replaceChildren(...cards); pager(result);
 }
+/** Text of a toggle button: icon + label, pressed state in aria-pressed and the "on" look. */
+function setToggle(button, pressed, icon, label) {
+ const glyph = el("span", "ic", icon); glyph.setAttribute("aria-hidden", "true");
+ button.replaceChildren(glyph, label);
+ button.classList.toggle("on", pressed);
+ button.setAttribute("aria-pressed", String(pressed));
+}
+/**
+ * The viewer's row under the title: guests are invited to sign in; Members get "Lưu" and, for a guide without a
+ * checklist, "Đánh dấu đã xong", or for one with a checklist "Tiến độ", which opens the "Hướng dẫn chuẩn bị" tab and
+ * follows its ticks ("guide-progress" events). Staff get nothing.
+ */
+function memberActions(row, guide, viewer, tabs) {
+ if (!viewer.signedIn) {
+  const hint = el("p", "note", "Đăng nhập để lưu cẩm nang và theo dõi tiến độ. ");
+  const signIn = link("Đăng nhập", loginUrl(), "link");
+  signIn.addEventListener("click", () => { signIn.href = loginUrl(); });   // back to the tab shown when pressed
+  hint.append(signIn); row.append(hint); row.hidden = false;
+  return;
+ }
+ if (!viewer.member) return;
+ const status = el("p", "note guide-member-status");
+ status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
+ const button = () => { const node = el("button", "btn sm"); node.type = "button"; return node; };
+ async function act(control, run) {
+  control.disabled = true; status.textContent = ""; status.classList.remove("error");
+  try { status.textContent = await run(); }
+  catch (error) {
+   if (error.status === 401) { location.assign(loginUrl()); return; }
+   status.textContent = error.message; status.classList.add("error");
+  } finally { control.disabled = false; }
+ }
+ const save = button();
+ const drawSave = saved => setToggle(save, saved, saved ? "bookmark_added" : "bookmark", saved ? "Đã lưu" : "Lưu");
+ drawSave(viewer.saved);
+ save.addEventListener("click", () => act(save, async () => {
+  const { saved } = await apiClient.saveGuide(guide.id, save.getAttribute("aria-pressed") !== "true");
+  drawSave(saved);
+  return saved ? "Đã lưu cẩm nang. Xem lại trong Tôi → Đã lưu." : "Đã bỏ lưu cẩm nang.";
+ }));
+ row.append(save);
+ if (viewer.progress.checklist) {
+  const progress = button();
+  const drawProgress = state => {
+   const glyph = el("span", "ic", "checklist"); glyph.setAttribute("aria-hidden", "true");
+   progress.replaceChildren(glyph, state.done ? "Đã xong · " + state.tasksTotal + "/" + state.tasksTotal + " việc"
+    : "Tiến độ: " + state.tasksDone + "/" + state.tasksTotal + " việc");
+   progress.classList.toggle("on", state.done);
+  };
+  drawProgress(viewer.progress); progress.title = "Mở tab “Hướng dẫn chuẩn bị”";
+  // Without tabs (the checklist appeared after the guide was read) the page is opened again on that tab.
+  progress.addEventListener("click", () => tabs ? tabs.select(true) : location.assign(location.pathname + "?tab=preparation"));
+  $("#browse-detail").addEventListener("guide-progress", event => drawProgress(event.detail));
+  row.append(progress);
+ } else {
+  const done = button();
+  const drawDone = finished => setToggle(done, finished, "task_alt", finished ? "Đã xong" : "Đánh dấu đã xong");
+  drawDone(viewer.progress.done);
+  done.addEventListener("click", () => act(done, async () => {
+   const state = await apiClient.markGuideDone(guide.id, done.getAttribute("aria-pressed") !== "true");
+   drawDone(state.done);
+   return state.done ? "Đã đánh dấu xong cẩm nang này." : "Đã bỏ đánh dấu đã xong.";
+  }));
+  row.append(done);
+ }
+ row.append(status); row.hidden = false;
+}
 async function detail() {
  $("#browse-listing").hidden = true;
  for (const back of document.querySelectorAll(".guide-back")) { back.href = url("/guides"); back.hidden = false; }
  const target = $("#browse-detail"); target.hidden = false;
  target.append(el("p", "note", "Đang tải cẩm nang…"));
+ const viewerRequest = apiClient.guideViewer(id).catch(() => null);   // without it the row is simply left out
  try {
   const guide = await apiClient.guide(id);
   document.title = guide.title + " – Cẩm nang – Senpai ơi";
-  target.replaceChildren(el("span", "badge", guide.topicName), el("h2", null, guide.title),
-   el("p", "note", "Ngày tạo: " + date(guide.createdAt) + (guide.creatorName ? " · " + guide.creatorName : "")),
-   el("p", "guide-content", guide.summary));
+  const actions = el("div", "guide-member-actions"); actions.hidden = true;
+  const head = [el("span", "badge", guide.topicName), el("h2", null, guide.title),
+   el("p", "note", "Ngày tạo: " + date(guide.createdAt) + (guide.creatorName ? " · " + guide.creatorName : "")), actions];
+  target.replaceChildren(...head, el("p", "guide-content", guide.summary));
   if (guide.coverImageUrl && safeUrl(guide.coverImageUrl, true)) { const image = el("img"); image.src = safeUrl(guide.coverImageUrl, true); image.alt = guide.title; target.append(image); }
   if (guide.stageName) target.append(el("p", "note", "Giai đoạn: " + guide.stageName));
   if (guide.sourceUrl && safeUrl(guide.sourceUrl)) { const source = link("Đường dẫn gốc ↗", safeUrl(guide.sourceUrl), "link"); source.target = "_blank"; source.rel = "noopener noreferrer"; target.append(source); }
@@ -120,7 +190,16 @@ async function detail() {
    target.append(block);
   }
   if (!guide.sections.length) target.append(el("p", "note", "Nội dung hướng dẫn đang được cập nhật."));
-  if (guide.preparationEnabled) preparationTabs(target, guide, true);
+  // The checklist's own load and ticks made before the viewer answers are newer than its progress
+  let latest = null;
+  target.addEventListener("guide-progress", event => { latest = event.detail; });
+  const tabs = guide.preparationEnabled ? preparationTabs(target, guide, true) : null;
+  // The title and the viewer's row stay above the tabs, so "Lưu" and "Tiến độ" show on both of them.
+  if (tabs) target.prepend(...head);
+  const viewer = await viewerRequest;
+  // A fault in the row must not hide the guide itself: the row is then simply left out
+  try { if (viewer) memberActions(actions, guide, latest ? { ...viewer, progress: latest } : viewer, tabs); }
+  catch (error) { actions.replaceChildren(); actions.hidden = true; console.error(error); }
  } catch (error) { target.hidden = true; showError(error); }
 }
 

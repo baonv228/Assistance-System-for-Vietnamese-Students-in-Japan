@@ -89,6 +89,11 @@ export const apiClient = {
     guideSubjects: () => request("/guides/subjects"),
     guidePreparation: (id) => request(`/guides/${id}/preparation`),
     checkGuideTask: (id, taskId, completed) => request(`/guides/${id}/preparation/${taskId}`, { method: "PUT", body: JSON.stringify({ completed }) }),
+    // Guide page, the viewer's side: { signedIn, member, saved, progress: { checklist, tasksDone, tasksTotal, percent,
+    // done, nextTask } }. saveGuide → { saved }; markGuideDone (guides without a checklist only) → progress
+    guideViewer: (id) => request(`/guides/${id}/viewer`),
+    saveGuide: (id, on) => request(`/guides/${id}/save`, { method: on ? "POST" : "DELETE" }),
+    markGuideDone: (id, on) => request(`/guides/${id}/done`, { method: on ? "POST" : "DELETE" }),
     moderatorGuide: (id) => request(`/moderator/guides/${id}`),
     deleteGuide: (id) => request(`/moderator/guides/${id}`, { method: "DELETE" }),
     updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),
@@ -133,11 +138,18 @@ export const apiClient = {
     homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
+    // "Chủ đề quan tâm" (Members): { max, topics: [{ id, name, chosen, learnt }] }; save sends the whole choice
+    interests: () => request("/me/interests"),
+    saveInterests: (topicIds) => request("/me/interests", { method: "PUT", body: JSON.stringify({ topicIds }) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
-    // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
+    // "Đã lưu": { places, posts, questions, guides, counts }. Unsave with saveBlog / saveQuestion / saveGuide(id, false).
     saved: () => request("/me/saved"),
     // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
     pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),
+    // "Cẩm nang của tôi" (Members): { stage, stages: [{ code, title, done, total, current }], inProgress: [{ id, title,
+    // topicName, stageCode, stageTitle, tasksDone, tasksTotal, percent, nextTask, lastActivityAt }], recentlyDone:
+    // [{ id, title, stageCode, stageTitle, doneAt }] }
+    myGuideProgress: () => request("/me/guides/progress"),
     // UC-U09 "Xin tag định danh": { tags: [{ id, name, description, color, selfieOnly, proofTypes, owned }], pending,
     // keepDays, photoMaxMb }; submitTagRequest takes FormData: part "request" (JSON {tagId, proofTypeId, consent}) + "photo"
     tagCompose: () => request("/me/tag-requests/compose"),

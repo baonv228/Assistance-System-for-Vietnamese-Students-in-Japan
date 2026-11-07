@@ -1,12 +1,12 @@
 // "Dành cho bạn" ("Xem tất cả" on the member Home): the whole personal feed, ranked by the server exactly like the
-// Home's five posts (a place in the user's area, then the prefecture, a topic that suits the stage, an interest; posts
-// of the last 30 days first; posts already liked, saved or commented on last), 10 at a time. A scope keeps only the
-// posts that matched one reason; "Tìm trong bài dành cho bạn" only the posts holding a text (title, content or linked
+// Home's five posts (a place in the user's area, then the prefecture, a topic the user chose, a topic that suits the
+// stage, a topic learnt from what the user did; posts of the last 30 days first; posts already liked, saved or
+// commented on last), 10 at a time. A scope keeps only the posts that matched one reason; "Tìm trong bài dành cho bạn" only the posts holding a text (title, content or linked
 // place, as the Blog's search), in the same order. Both are kept in the address (?scope=&q=); /for-you#search (the
 // magnifier of the Home's "Dành cho bạn") opens with the focus in the search box.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
-import { postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
+import { interestChips, interestNote, postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
 import { markHits } from "../lib/search-text.js";
 import { areaShort, esc, ic, loginUrl, STAGES } from "../lib/ui.js";
 
@@ -136,18 +136,16 @@ function summaryText(count) {
     }
 }
 
-/** What the feed is based on, as on Home; area and stage are changed on "Tôi". */
+/** What the feed is based on, as on Home; area, stage and the chosen topics are changed on "Tôi". */
 function basis() {
     const chips = [
         feed.areaName ? chip("location_on", areaShort(feed.areaName), "Khu vực") : chip("location_off", "Chưa chọn khu vực", "", "off"),
         feed.stage ? chip("flag", STAGES[feed.stage] || feed.stage, "Giai đoạn") : chip("flag", "Chưa chọn giai đoạn", "", "off"),
-        ...(feed.interests || []).map((t) => chip("interests", t, "Chủ đề bạn quan tâm"))
+        interestChips(feed, chip)
     ];
     return `<div class="spot-basis"><span class="spot-label">Dựa trên</span>${chips.join("")}
-            <a class="btn sm" href="/profile#area" aria-label="Điều chỉnh khu vực và giai đoạn ở trang Tôi">${ic("tune")}Điều chỉnh</a></div>
-        <p class="note">${feed.interests?.length
-            ? "Chủ đề quan tâm được rút ra từ những bài bạn đã thích, lưu, bình luận hoặc viết trong 90 ngày qua."
-            : "Hãy thích, lưu hoặc bình luận bài viết: Senpai ơi sẽ biết bạn quan tâm chủ đề nào để gợi ý sát hơn."}</p>`;
+            <a class="btn sm" href="/profile#area" aria-label="Điều chỉnh khu vực, giai đoạn và chủ đề quan tâm ở trang Tôi">${ic("tune")}Điều chỉnh</a></div>
+        <p class="note">${interestNote(feed)}</p>`;
 }
 
 /** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */

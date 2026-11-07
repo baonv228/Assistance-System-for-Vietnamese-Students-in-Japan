@@ -48,30 +48,7 @@ textarea.input { min-height: 220px; resize: vertical; line-height: 1.6; }
 .searchbox input:disabled { cursor: not-allowed; }
 .searchbox:has(input:disabled) { background: var(--surface-2); }
 
-/* topics: toggle chips */
-.topic-picks { display: flex; flex-wrap: wrap; gap: 8px; }
-.topic-pick {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 36px;
-    padding: 0 14px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface);
-    color: var(--ink);
-    font: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-}
-.topic-pick:hover { border-color: var(--brand); }
-.topic-pick:focus-visible { outline: none; box-shadow: var(--focus); }
-.topic-pick[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-text); }
-.topic-pick[aria-pressed="true"] .ic { font-size: 17px; }
-.topic-pick[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
-.topic-pick[aria-disabled="true"]:hover { border-color: var(--line); }
-.topic-pick.other { border-style: dashed; }
+/* topics: toggle chips .topic-pick, in site.css (also "Chủ đề quan tâm") */
 
 /* places: chips + suggestion list */
 .place-chip { gap: 4px; padding: 4px 4px 4px 10px; background: var(--brand-soft); color: var(--brand-text); font-size: 13.5px; }
