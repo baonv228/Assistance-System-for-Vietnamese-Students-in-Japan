@@ -103,6 +103,21 @@ public final class HomeDtos {
     }
 
     /**
+     * A topic of "Chủ đề quan tâm": {@code chosen} by the Member, or {@code learnt} from what the Member did (never
+     * both: a suggestion to choose it).
+     */
+    public record InterestTopic(long id, String name, boolean chosen, boolean learnt) {
+    }
+
+    /** {@code /api/me/interests}: every topic a Member can choose, in the Blog's order, and how many at most. */
+    public record InterestSettings(int max, List<InterestTopic> topics) {
+    }
+
+    /** {@code PUT /api/me/interests}: the whole new choice, empty for none. */
+    public record UpdateInterestsRequest(List<Long> topicIds) {
+    }
+
+    /**
      * A post chosen for the user; {@code reason} is the first badge text ("Gần khu vực của bạn"…) or null, {@code reasons}
      * every reason that matched, in ranking order; {@code engaged} when the user already liked, saved or commented on
      * it (such posts come last).

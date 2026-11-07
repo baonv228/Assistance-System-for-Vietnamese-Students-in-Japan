@@ -136,7 +136,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   session listener) and the owner gets an email. Reset and change both close the account's live streams
   (`LiveEvents.close`; this device reconnects under its new session id). **The local profile may have a real SMTP server: a manual test of
   these flows sends real emails** (the seed addresses belong to strangers).
-- "Xóa tài khoản" (`ProfileService.deleteAccount`) also revokes the user's tags, closes pending tag requests (REJECTED,
+- "Xóa tài khoản" (`ProfileService.deleteAccount`) also deletes the chosen "Chủ đề quan tâm", revokes the user's tags,
+  closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
@@ -215,6 +216,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   first post across the width, "Xem tất cả" → `/for-you`, then "Cẩm nang cho giai đoạn …" = `stageGuides`, see
   "Cẩm nang progress" below), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
   Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+- "Chủ đề quan tâm" (`feature/home`: `InterestService`, `InterestController`; V21 `user_interest_topics`): `GET
+  /api/me/interests` → `{max, topics[{id, name, chosen, learnt}]}` (every active topic but "Khác", Blog order; `learnt`
+  = a suggestion, never also chosen), `PUT /api/me/interests` `{topicIds}` = the whole new choice (empty clears; at most
+  `CHOSEN_MAX` 5 different topics, repeats count once; else 400 "Bạn chọn được tối đa 5 chủ đề.", a topic not offered
+  400 "Có chủ đề không còn để chọn…", no list 400 "Danh sách chủ đề không hợp lệ."). Members only (role USER, ACTIVE;
+  staff MSG18); the users row is locked FOR UPDATE first (READ COMMITTED), so two saves run one after the other; topics
+  kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save.
+  "Xóa tài khoản" deletes the rows.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
   `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
