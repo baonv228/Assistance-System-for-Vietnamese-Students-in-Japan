@@ -123,7 +123,8 @@ public class ProfileService {
      * counts of the posts it commented on are recounted in the same transaction, and "Bài nổi bật" after it
      * ({@link AuthorStatusSync}).
      * <p>
-     * As the "Xóa tài khoản" box says: the profile is anonymized, the points go to 0, the identity tags are revoked,
+     * As the "Xóa tài khoản" box says: the profile is anonymized (area, stage and chosen interest topics included),
+     * the points go to 0, the identity tags are revoked,
      * pending tag requests are closed (REJECTED, "Tài khoản đã xóa") and every tag proof photo is discarded (file
      * removed after commit). Point and tag history rows stay. The chat encryption key is revoked and the Web Push
      * subscriptions are deleted; its live update streams close after the commit.
@@ -155,6 +156,9 @@ public class ProfileService {
                 WHERE user_id = ? AND status = 'PENDING'""", DELETED_ACCOUNT_REASON, Timestamp.from(now), userId);
         // points is read-only in User (kept in step with point_transactions by PointService)
         jdbc.update("UPDATE users SET points = 0 WHERE id = ?", userId);
+        // "Chủ đề quan tâm" go with the area and stage (User.anonymize). After the users row is locked, the order of
+        // InterestService.update, so a save of the topics at the same moment waits instead of deadlocking
+        jdbc.update("DELETE FROM user_interest_topics WHERE user_id = ?", userId);
         user.anonymize(now);
         // Write the DELETED status now, so the recount (plain SQL in this transaction) sees it
         users.flush();

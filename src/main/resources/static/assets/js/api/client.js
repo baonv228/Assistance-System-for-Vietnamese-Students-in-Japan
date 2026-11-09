@@ -77,6 +77,7 @@ export const apiClient = {
     faqs: (params = {}) => request(`/faqs?${toQuery(params)}`),
     faqTopics: (q = "") => request(`/faqs/topics?${toQuery({ q })}`),
     faq: (id) => request(`/faqs/${id}`),
+    faqRelated: (q, limit = 3) => request(`/faqs/related?${toQuery({ q, limit })}`),
     moderatorFaqs: (params = {}) => request(`/moderator/faqs?${toQuery(params)}`),
     moderatorFaqTopics: () => request("/moderator/faqs/topics"),
     faqSuggestions: (params = {}) => request(`/moderator/faqs/suggestions?${toQuery(params)}`),
@@ -88,6 +89,11 @@ export const apiClient = {
     guideSubjects: () => request("/guides/subjects"),
     guidePreparation: (id) => request(`/guides/${id}/preparation`),
     checkGuideTask: (id, taskId, completed) => request(`/guides/${id}/preparation/${taskId}`, { method: "PUT", body: JSON.stringify({ completed }) }),
+    // Guide page, the viewer's side: { signedIn, member, saved, progress: { checklist, tasksDone, tasksTotal, percent,
+    // done, nextTask } }. saveGuide → { saved }; markGuideDone (guides without a checklist only) → progress
+    guideViewer: (id) => request(`/guides/${id}/viewer`),
+    saveGuide: (id, on) => request(`/guides/${id}/save`, { method: on ? "POST" : "DELETE" }),
+    markGuideDone: (id, on) => request(`/guides/${id}/done`, { method: on ? "POST" : "DELETE" }),
     moderatorGuide: (id) => request(`/moderator/guides/${id}`),
     deleteGuide: (id) => request(`/moderator/guides/${id}`, { method: "DELETE" }),
     updateGuide: (id, body) => request(`/moderator/guides/${id}`, { method: "PUT", body }),
@@ -121,13 +127,22 @@ export const apiClient = {
     // Homepage and "Tôi"
     guestHome: () => request("/home"),
     memberHome: () => request("/me/home"),
+    // "Dành cho bạn" (all of it): { scope, q, areaName, stage, interests, scopes: [{ code, count }], page, hasMore, items };
+    // scope ALL, NEAR, STAGE or INTEREST (left out or not available: ALL); q keeps the posts holding that text
+    forYou: ({ scope, page = 0, q } = {}) => request(`/me/for-you?${toQuery({ scope, page, q })}`),
+    // "Tìm kiếm" (Home, /search): { q, tooShort, total, places, posts, questions, guides, events, phrases, faqs }, each
+    // part { total, items } with its first 5 items
+    search: (q) => request(`/search?${toQuery({ q })}`),
     // "Review mới": { scope, areaName, prefectureName, scopes: [{ code, count }], page, hasMore, items }; scope AREA,
     // PREFECTURE or ALL (left out: the first one holding reviews)
     homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
     profile: () => request("/me/profile"),
     updateProfile: (body) => request("/me/profile", { method: "PUT", body: JSON.stringify(body) }),
+    // "Chủ đề quan tâm" (Members): { max, topics: [{ id, name, chosen, learnt }] }; save sends the whole choice
+    interests: () => request("/me/interests"),
+    saveInterests: (topicIds) => request("/me/interests", { method: "PUT", body: JSON.stringify({ topicIds }) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
-    // "Đã lưu": { places, posts, questions, counts }. Unsave with saveBlog / saveQuestion(id, false).
+    // "Đã lưu": { places, posts, questions, guides, counts }. Unsave with saveBlog / saveQuestion / saveGuide(id, false).
     saved: () => request("/me/saved"),
     // Public profile (UC-U07). The lists answer { items, page, hasMore }
     publicProfile: (id) => request(`/users/${id}`),
@@ -136,6 +151,10 @@ export const apiClient = {
     userQuestions: (id, page = 0) => request(`/users/${id}/questions?${toQuery({ page })}`),
     // UC-U10 "Lịch sử điểm": { items: [{ delta, reasonLabel, title, link, createdAt }], page, size, total, points }
     pointHistory: (page = 0) => request(`/me/points?${toQuery({ page })}`),
+    // "Cẩm nang của tôi" (Members): { stage, stages: [{ code, title, done, total, current }], inProgress: [{ id, title,
+    // topicName, stageCode, stageTitle, tasksDone, tasksTotal, percent, nextTask, lastActivityAt }], recentlyDone:
+    // [{ id, title, stageCode, stageTitle, doneAt }] }
+    myGuideProgress: () => request("/me/guides/progress"),
     // UC-U09 "Xin tag định danh": { tags: [{ id, name, description, color, selfieOnly, proofTypes, owned }], pending,
     // keepDays, photoMaxMb }; submitTagRequest takes FormData: part "request" (JSON {tagId, proofTypeId, consent}) + "photo"
     tagCompose: () => request("/me/tag-requests/compose"),
