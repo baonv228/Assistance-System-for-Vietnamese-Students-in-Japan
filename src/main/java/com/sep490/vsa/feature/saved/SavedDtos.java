@@ -33,11 +33,22 @@ public final class SavedDtos {
                             int likeCount, int commentCount, boolean solved, Instant createdAt, Instant savedAt) {
     }
 
-    public record Counts(int places, int posts, int questions, int total) {
+    /**
+     * A saved guide ("Cẩm nang") that is still published and not deleted; opens /guides/{id}.
+     *
+     * @param summary   plain text, cut to {@link SavedRepository#SUMMARY_MAX} characters with "…"; null when empty
+     * @param stageName the guide's stage ("Giai đoạn")
+     * @param topicName the guide's topic, else its stage (as on the guide list)
+     */
+    public record SavedGuide(Long id, String title, String summary, String stageName, String topicName,
+                             Instant savedAt) {
+    }
+
+    public record Counts(int places, int posts, int questions, int guides, int total) {
     }
 
     /** Each list is newest saved first. */
     public record SavedResponse(List<SavedPlace> places, List<SavedBlog> posts, List<SavedBlog> questions,
-                                Counts counts) {
+                                List<SavedGuide> guides, Counts counts) {
     }
 }

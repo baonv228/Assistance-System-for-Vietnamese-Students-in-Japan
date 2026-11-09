@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.place;
 
+import com.sep490.vsa.feature.area.AreaService;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.place.MapDtos.MapCategory;
 import com.sep490.vsa.feature.place.MapDtos.MapEvent;
@@ -56,14 +57,15 @@ public class MapRepository {
         return jdbc.query("""
                 SELECT c.id, c.name_vi, c.icon,
                        (SELECT COUNT(*) FROM places p WHERE p.category_id = c.id AND p.status = 'ACTIVE'
-                          AND p.lat IS NOT NULL AND p.lng IS NOT NULL) AS n
-                FROM place_categories c ORDER BY c.sort_order, c.id""",
+                          AND %s) AS n
+                FROM place_categories c ORDER BY c.sort_order, c.id""".formatted(AreaService.PLACE_IN_JAPAN),
                 (rs, i) -> new MapCategory(rs.getString(1), rs.getString(2), rs.getString(3), rs.getInt(4)));
     }
 
     /**
-     * Every approved place with a position, plus the viewer's own pins waiting for a Moderator. Places saved from
-     * Google Maps before the switch to OpenStreetMap without a position cannot be drawn and are left out.
+     * Every approved place in Japan with a position, plus the viewer's own pins waiting for a Moderator. Places saved
+     * from Google Maps before the switch to OpenStreetMap without a position cannot be drawn and are left out; places
+     * in Vietnam exist only as links of posts and questions.
      */
     public List<MapPlace> places(Long viewerId) {
         Set<Long> scam = new HashSet<>(scamPlaceIds());
@@ -72,10 +74,10 @@ public class MapRepository {
                        p.is_closed, p.osm_id, COUNT(r.id) AS reviews, AVG(r.rating) AS rating
                 FROM places p
                 LEFT JOIN reviews r ON r.place_id = p.id AND r.status = 'PUBLISHED' AND %s
-                WHERE p.lat IS NOT NULL AND p.lng IS NOT NULL
+                WHERE %s
                   AND (p.status = 'ACTIVE' OR (p.status = 'PENDING' AND p.created_by = ?))
                 GROUP BY p.id
-                ORDER BY p.id""".formatted(ActiveAuthors.of("r")),
+                ORDER BY p.id""".formatted(ActiveAuthors.of("r"), AreaService.PLACE_IN_JAPAN),
                 (rs, i) -> new MapPlace(rs.getLong("id"), rs.getString("name_vi"), rs.getString("name_ja"),
                         rs.getString("name_en"), rs.getString("category_id"), rs.getDouble("lat"),
                         rs.getDouble("lng"), rs.getString("source"), rs.getString("status"),

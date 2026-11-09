@@ -212,6 +212,35 @@ class MapFlowTest {
                 .andExpect(jsonPath("$.data.categories[*].id", not(hasItem("bank"))));
     }
 
+    @Test
+    void theMapShowsAndSearchesPlacesInJapanOnlyPostsMayStillLinkVietnam() throws Exception {
+        long hanoi = insertPlace("Hà Nội " + word, "ACTIVE", 21.0278, 105.8342, "OSM", null);
+        long tokyo = insertPlace("Tokyo " + word, "ACTIVE", 35.7, 139.7, "OSM", null);
+        ExternalPlaces.Hit hitJp = new ExternalPlaces.Hit("N9" + System.nanoTime(), "Quán Nhật " + word, null, null, null,
+                "Ueno, Tokyo", "amenity=cafe", "jp", 35.71, 139.77);
+        ExternalPlaces.Hit hitVn = new ExternalPlaces.Hit("N8" + System.nanoTime(), "Quán Việt " + word, null, null, null,
+                "Hoàn Kiếm, Hà Nội", "amenity=cafe", "vn", 21.03, 105.85);
+        when(map.search(anyString())).thenReturn(List.of(hitJp, hitVn));
+
+        mvc.perform(get("/api/map").session(session(viewer)))
+                .andExpect(jsonPath("$.data.places[*].id", hasItem((int) tokyo)))
+                .andExpect(jsonPath("$.data.places[*].id", not(hasItem((int) hanoi))));
+        // Asked again with another text each time: the same text within 10 minutes is answered from memory
+        mvc.perform(get("/api/map/search").param("q", word + " a").session(session(viewer)))
+                .andExpect(jsonPath("$.data.places[*].externalId", hasItem(hitJp.id())))
+                .andExpect(jsonPath("$.data.places[*].externalId", not(hasItem(hitVn.id()))));
+        mvc.perform(get("/api/map/search").param("q", word))
+                .andExpect(jsonPath("$.data.places[*].id", hasItem((int) tokyo)))
+                .andExpect(jsonPath("$.data.places[*].id", not(hasItem((int) hanoi))));
+        mvc.perform(get("/api/map/nearby").param("lat", "21.03").param("lng", "105.85").session(session(viewer)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.places").isEmpty());
+        verify(map, never()).nearby(21.03, 105.85);
+
+        mvc.perform(get("/api/places/search").param("q", "Hà Nội " + word).session(session(viewer)))
+                .andExpect(jsonPath("$.data.items[*].externalId", hasItem(hitVn.id())))
+                .andExpect(jsonPath("$.data.items[*].id", hasItem((int) hanoi)));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private long insertPlace(String name, String status, double lat, double lng, String source, Long mergedInto) {

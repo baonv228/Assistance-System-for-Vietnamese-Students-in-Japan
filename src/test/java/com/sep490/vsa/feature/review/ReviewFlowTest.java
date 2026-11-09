@@ -184,6 +184,29 @@ class ReviewFlowTest {
     }
 
     @Test
+    void onlyPlacesInJapanCanBeReviewed() throws Exception {
+        String osmId = "N" + ThreadLocalRandom.current().nextLong(100_000_000_000L, 900_000_000_000L);
+        Hit hanoi = new Hit(osmId, "Cafe " + word, "Cafe " + word, null, null, "Hoàn Kiếm, Hà Nội",
+                "amenity=cafe", "vn", 21.03, 105.85);
+        when(map.lookup(anyCollection())).thenReturn(Map.of(osmId, hanoi));
+        send(post("/api/reviews"), author,
+                "{\"externalPlaceId\":\"" + osmId + "\",\"rating\":5,\"content\":\"Cà phê ngon, có ổ cắm sạc.\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(ReviewService.ONLY_JAPAN));
+        // Nothing stays behind: neither the place nor a count toward the daily limit
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM places WHERE osm_id = ?", Integer.class, osmId)).isZero();
+
+        jdbc.update("""
+                INSERT INTO places (name_vi, category_id, lat, lng, source, status, created_by)
+                VALUES (?, 'food', 21.03, 105.85, 'OSM', 'ACTIVE', ?)""", "Hà Nội " + word, author);
+        long linked = jdbc.queryForObject("SELECT id FROM places WHERE name_vi = ?", Long.class, "Hà Nội " + word);
+        send(post("/api/reviews"), author,
+                "{\"placeId\":" + linked + ",\"rating\":5,\"content\":\"Cà phê ngon, có ổ cắm sạc.\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(ReviewService.ONLY_JAPAN));
+    }
+
+    @Test
     void aReviewPhotoIsServedToEveryoneOnceTheReviewIsPublished() throws Exception {
         when(moderator.engine()).thenReturn("OPENAI");
         when(moderator.check(any(byte[].class))).thenReturn(new Verdict("PASS", "{}"));

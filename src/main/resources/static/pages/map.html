@@ -29,7 +29,8 @@
     <div class="map-top">
         <div class="mtools">
             <form class="map-search" id="search-form" role="search" autocomplete="off">
-                <span class="ic" aria-hidden="true">search</span>
+                <button class="icon-btn search-go" type="submit" aria-label="Tìm">
+                    <span class="ic" aria-hidden="true">search</span></button>
                 <label class="sr-only" for="q">Tìm địa điểm</label>
                 <input id="q" type="search" placeholder="Tìm địa điểm" maxlength="100"
                        aria-controls="suggest" aria-expanded="false">
@@ -91,7 +92,7 @@
 <dialog class="dlg" id="report-dlg" aria-labelledby="report-title">
     <form method="dialog" id="report-form">
         <h3 id="report-title">Báo cáo review</h3>
-        <p class="note">Moderator sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.</p>
+        <p class="note" id="report-intro">Moderator sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.</p>
         <fieldset class="reasons" id="report-reasons"><legend class="sr-only">Lý do</legend></fieldset>
         <p class="field-error" id="report-error" role="alert" hidden></p>
         <div class="field">
@@ -112,6 +113,19 @@
         <div class="row end">
             <button class="btn" type="submit" value="cancel">Hủy</button>
             <button class="btn dan solid" type="submit" value="ok" id="confirm-ok">Đồng ý</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- "Đưa cho nhân viên xem" on a phrase of the place, as on the "Nhật ngữ" page -->
+<dialog class="staff-dlg" id="staff-dlg" aria-labelledby="staff-ja">
+    <form method="dialog" class="staff-in">
+        <p class="note">Đưa màn hình này cho nhân viên</p>
+        <div class="staff-ja" id="staff-ja" lang="ja"></div>
+        <p id="staff-vi"></p>
+        <div class="row center">
+            <button class="btn" type="button" data-act="speak-staff"><span class="ic" aria-hidden="true">volume_up</span>Nghe phát âm</button>
+            <button class="btn" type="submit">Đóng</button>
         </div>
     </form>
 </dialog>

@@ -60,7 +60,7 @@ public final class ReviewDtos {
                              String address, Integer rating, String content, Boolean confirmDuplicate) {
     }
 
-    public record PinSaved(long placeId, long reviewId, String reviewStatus) {
+    public record PinSaved(long placeId, long reviewId, String reviewStatus, boolean approved) {
     }
 
     /** An approved place within 200 m with a similar name. */
@@ -72,6 +72,6 @@ public final class ReviewDtos {
 
     /** Form options: categories, review limits, today's pins of a new account. */
     public record PinCompose(List<PinCategory> categories, Limits limits, boolean newAccount, int pinsUsed,
-                             int pinsLimit, int newAccountDays) {
+                             int pinsLimit, int newAccountDays, boolean noApprovalNeeded) {
     }
 }

@@ -4,6 +4,7 @@ import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.common.text.VietnameseText;
+import com.sep490.vsa.feature.area.AreaService;
 import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.media.MediaService.Prepared;
 import com.sep490.vsa.feature.moderation.ContentFilter;
@@ -13,6 +14,7 @@ import com.sep490.vsa.feature.review.ReviewDtos.PinRequest;
 import com.sep490.vsa.feature.review.ReviewDtos.PinSaved;
 import com.sep490.vsa.feature.review.ReviewRepository.Account;
 import com.sep490.vsa.feature.review.ReviewRepository.NearPlace;
+import com.sep490.vsa.feature.user.PointService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,9 +61,12 @@ public class PinService {
     private final SystemSettings settings;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final PointService points;
 
     public PinService(ReviewRepository repository, ReviewService reviews, MediaService media, ContentFilter filter,
-                      SystemSettings settings, PlatformTransactionManager transactionManager, Clock clock) {
+                      SystemSettings settings, PlatformTransactionManager transactionManager, Clock clock,
+                      PointService points) {
+        this.points = points;
         this.repository = repository;
         this.reviews = reviews;
         this.media = media;
@@ -78,7 +83,7 @@ public class PinService {
         int newDays = settings.getInt(SystemSettings.NEW_ACCOUNT_DAYS, 7);
         return new PinCompose(repository.categories(), reviews.limits(), isNew(account, newDays, now),
                 repository.pinsToday(account.id(), LocalDate.ofInstant(now, JAPAN)),
-                settings.getInt(SystemSettings.PINS_PER_DAY, 2), newDays);
+                settings.getInt(SystemSettings.PINS_PER_DAY, 2), newDays, repository.topRank(account.id()));
     }
 
     /** Approved places within 200 m whose name looks like one of the pin's names, nearest first. */
@@ -120,6 +125,8 @@ public class PinService {
         }
         if (r.lat() == null || r.lng() == null || Math.abs(r.lat()) > 90 || Math.abs(r.lng()) > 180) {
             errors.put("position", "Hãy bấm lên bản đồ để đặt vị trí.");
+        } else if (!AreaService.inJapan(r.lat(), r.lng())) {
+            errors.put("position", AreaService.NOT_IN_JAPAN);
         }
         Map<String, String> reviewErrors = new LinkedHashMap<>();
         String content = ReviewService.clean(r.rating(), r.content(), reviewErrors);
@@ -169,8 +176,14 @@ public class PinService {
             repository.linkMedia(reviewId, media.save(userId, "review", file), order++);
         }
         repository.addPin(userId, today);
+        // "Senpai tin cậy" needs no Moderator, unless they went past the "Có thể trùng" warning: then one still looks
+        boolean approved = repository.topRank(userId) && !Boolean.TRUE.equals(r.confirmDuplicate());
+        if (approved) {
+            repository.approveOwnPin(placeId, userId, now);
+            points.add(userId, PointService.PIN_APPROVED, "PIN_APPROVED", "PLACE", placeId);
+        }
         reviews.afterSave(userId, reviewId, withMedia);
-        return new PinSaved(placeId, reviewId, withMedia ? "PROCESSING" : "PUBLISHED");
+        return new PinSaved(placeId, reviewId, withMedia ? "PROCESSING" : "PUBLISHED", approved);
     }
 
     private static String clean(String value, int max, String field, String tooLong, Map<String, String> errors) {

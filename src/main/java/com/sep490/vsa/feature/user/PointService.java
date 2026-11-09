@@ -29,6 +29,8 @@ public class PointService {
      * +10 like a review until the team confirms it.
      */
     public static final int BLOG_POST = 10;
+    /** Content a Moderator removed (reason CONTENT_REMOVED), UC-M04. */
+    public static final int CONTENT_REMOVED = -20;
 
     private final JdbcTemplate jdbc;
     private final Clock clock;

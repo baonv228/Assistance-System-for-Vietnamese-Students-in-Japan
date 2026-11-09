@@ -47,7 +47,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   its files are scanned and again right before it is published (`BlogPublishService`): a hit → REJECTED without
   scanning, author notified with the keyword. Content published before a keyword was added is not re-checked.
   Reports: 1–5 → "Cần xử lý"; more than 5 → auto-hidden and "Khẩn". More than 5 false reports → reporting
-  locked 7 days. Removed content is kept 30 days for appeals, then purged.
+  locked 7 days. Removed content is kept 30 days (`removed_keep_days`), then purged. No appeals (user decision: the
+  `appeals` table stays unused and the "Khiếu nại" menu entry is gone).
 - Posts, questions, comments and answers of LOCKED or DELETED accounts are hidden everywhere Members and Guests read
   content (feed, search, statistics, featured, detail → 404 MSG19, Hỏi-Đáp, "Đã lưu", Home, scam warnings); nothing is
   deleted, and an unlocked account's content shows again. One SQL rule for every read: `feature/blog/ActiveAuthors`.
@@ -61,7 +62,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
 - Places: OpenStreetMap places store their `osm_id`, names, address and coordinates (ODbL allows it; credit
   "© OpenStreetMap contributors"); places saved from Google Maps before keep their `google_place_id` (no address or
-  coordinates); user pins need Moderator approval; same name within 200 m
+  coordinates); user pins need Moderator approval, except those of the top rank ("Senpai tin cậy", 300 points); same name within 200 m
   → warning. Moderator removes places softly (with reason, restorable) and merges duplicates (final, no undo).
   5 "đã đóng cửa" reports → Moderator queue; only the Moderator sets the closed label.
 - One review per user per place, and per year of an event. Review text ≤ 2,000 chars, ≤ 5 photos
@@ -136,15 +137,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   session listener) and the owner gets an email. Reset and change both close the account's live streams
   (`LiveEvents.close`; this device reconnects under its new session id). **The local profile may have a real SMTP server: a manual test of
   these flows sends real emails** (the seed addresses belong to strangers).
-- "Xóa tài khoản" (`ProfileService.deleteAccount`) also revokes the user's tags, closes pending tag requests (REJECTED,
+- "Xóa tài khoản" (`ProfileService.deleteAccount`) also deletes the chosen "Chủ đề quan tâm", revokes the user's tags,
+  closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
-  `/search`, `/messages`, `/messages/{id}`,
+  `/search`, `/messages`, `/messages/{id}`, `/users/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
-  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
+  `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/moderator/reports`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
   addresses; a new page gets its entry in `CleanUrls.PAGES`.
 - Each role lands on `Role.homePath()`: USER `/`, MODERATOR `/moderator`, ACADEMIC_MANAGER
@@ -202,29 +204,46 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Personalized feed = the member Home, which leads with it: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
   5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
   30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
-  prefecture ("Cùng tỉnh với bạn"), then a topic that suits the user's stage (`HomeService.STAGE_TOPICS`, by topic
-  name), then one of the user's interests ("Chủ đề bạn quan tâm"), then likes + 2 × comments, then newest) and
-  `interests`: up to 3 topics learnt from the last 90 days (like 1, save 2, published comment 2 once per post, own
-  published post or question 3; at least 2 points; "Khác" and inactive topics left out; "cần chốt" constants in
-  `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
-  linked place or the matching topic), `reason` = the first label and `engaged` (already liked, saved or commented
-  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+  prefecture ("Cùng tỉnh với bạn"), then a topic the user chose ("Chủ đề bạn quan tâm"), then a topic that suits the
+  user's stage (`HomeService.STAGE_TOPICS`, by topic name), then a topic learnt from what the user did (same label),
+  then likes + 2 × comments, then newest), `interests` (the chosen topics in the Blog's topic order, then up to 3
+  learnt from the last 90 days: like 1, save 2, published comment 2 once per post, own published post or question 3;
+  at least 2 points; never a chosen one) and `chosenInterests`; "Khác" and inactive topics are never chosen nor learnt
+  ("cần chốt" constants in `InterestService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST,
+  `label`, `detail` = the linked place or the matching topic; one INTEREST at most, the chosen topic before the learnt
+  one, listed before STAGE when chosen), `reason` = the first label and `engaged` (already liked, saved or commented
+  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below).
   Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
   bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
-  "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
-  first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
-  phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+  "Điều chỉnh" opens the area/stage/topics form in place and the feed is redrawn after "Lưu", the reasons on every post, the
+  first post across the width, "Xem tất cả" → `/for-you`, then "Cẩm nang cho giai đoạn …" = `stageGuides`, see
+  "Cẩm nang progress" below), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
+  Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+- "Chủ đề quan tâm" (`feature/home`: `InterestService`, `InterestController`; V21 `user_interest_topics`): `GET
+  /api/me/interests` → `{max, topics[{id, name, chosen, learnt}]}` (every active topic but "Khác", Blog order; `learnt`
+  = a suggestion, never also chosen), `PUT /api/me/interests` `{topicIds}` = the whole new choice (empty clears; at most
+  `CHOSEN_MAX` 5 different topics, repeats count once; else 400 "Bạn chọn được tối đa 5 chủ đề.", a topic not offered
+  400 "Có chủ đề không còn để chọn…", no list 400 "Danh sách chủ đề không hợp lệ."). Members only (role USER, ACTIVE;
+  staff MSG18); the users row is locked FOR UPDATE first (READ COMMITTED), so two saves run one after the other; topics
+  kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save. UI:
+  `components/interest-picker.js` (toggle buttons `.topic-pick` in site.css, at most 5, a "gợi ý" mark on learnt ones),
+  card "Chủ đề quan tâm" on Tôi (`#interests`, Members only, own "Lưu"; an unsaved choice survives the page redraw after
+  "Lưu" of area and stage) and in the Home's "Điều chỉnh" form (saved with area and stage). "Dựa trên" chips
+  (`lib/feed-posts.js interestChips`): chosen ones first (icon `interests`), learnt ones after (`history`, `.learnt`).
+  "Xóa tài khoản" deletes the rows. Tests: `InterestFlowTest`, `HomeFeedFlowTest`, `src/test/js/feed-posts.test.mjs`.
+  Not done: choosing topics while signing up.
 - "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
   `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
   the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
   (area or prefecture), STAGE, INTEREST keeps only the posts with that reason, each scope offered only when the member
-  has an area / a stage / an interest (else ALL), each with its count; answer also has `q`, `areaName`, `stage`,
-  `interests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
+  has an area / a stage / an interest, chosen or learnt (else ALL), each with its count; answer also has `q`,
+  `areaName`, `stage`, `interests`, `chosenInterests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
   approved linked place name holds it (the Blog's rule: folded text, `utf8mb4_0900_ai_ci`, LIKE signs escaped), order,
   reasons and scope counts unchanged, counted over the posts found; blank = no search; the Home card never searches.
   The page: search box first (typing asks after 350 ms, Enter at once; the text marked in titles and excerpts with
   `lib/search-text.js`; nothing found → "Tìm … trên toàn Senpai ơi" `/search?q=` or "xóa từ khóa"; `#search` focuses
-  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons and text in
+  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card, "Chủ đề quan tâm" right
+  under it), scope buttons and text in
   the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
   drawn twice (likes may move the ranking between two pages).
 - "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,
@@ -278,6 +297,24 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   points on the member Home link to `/profile#points`. `PointService.add` keeps `users.points` ≥ 0 (`GREATEST`), the
   history keeps every point taken. Sample data sets `users.points` without history lines ("Chưa có lần cộng hoặc trừ
   điểm nào được ghi lại."). Rank badges next to names elsewhere (reviews, posts, comments) are not done yet.
+- "Báo cáo nội dung" (UC-M03, UC-M04; `feature/report`: `ReportCaseService`, `ReportCaseRepository`, `ReportCaseController`,
+  `ReportCaseDtos`; page `/moderator/reports`, `mod-reports.js`). `GET /api/moderator/reports?tab=URGENT|NORMAL|REMOVED&kind=POST|QA|
+  ANSWER|COMMENT|REVIEW|MESSAGE&reason=&page=` (open MODERATOR cases, most reports first, 10 a page, both tab counts), `GET
+  …/{id}` (full content, files that passed the scan, reasons counted, reporters with notes and false-report counts; a
+  handled case → 409), `POST …/{id}/remove` `{reasonId, note}` and `POST …/{id}/dismiss`. Locks: reported row (post then
+  comment; review; conversation) → case → users, as a Member's report; a case handled meanwhile → 409 "Hồ sơ này đã được xử
+  lý.". Remove: status REMOVED + `purge_at` (`removed_keep_days`), −20 (`PointService.CONTENT_REMOVED`), author notified with
+  the reason (`CONTENT_REMOVED`), reporters thanked (`REPORT_RESOLVED`); a removed post also closes its comments' cases
+  without taking points; a message is recalled for both members (`ChatService.removeReported`). Dismiss: HIDDEN → PUBLISHED,
+  `reports.is_false`, +1 `false_report_count` per reporter; past `false_report_max` reporting locks `mute_days` days, the
+  member is told (`REPORT_MUTED`) and the count restarts. An encrypted message shows only the text the reporter revealed
+  (`chat_report_evidence`, checked by its franking tag), with the number of files. `purgeRemoved` (03:45 Japan time, 200 of
+  each a run) deletes expired reviews and posts with their files; a comment with replies stays as an empty placeholder.
+  Tab "Đã gỡ" (`tab=REMOVED`, newest removal first, what is still kept; not messages) → `POST …/{id}/restore` "Khôi phục"
+  for a removal made by mistake: PUBLISHED again, +20 back (reason CONTENT_RESTORED), author told (`CONTENT_RESTORED`),
+  case decision KEEP, reporters not counted as wrong; a recalled message cannot come back (400). `MediaAccess` also shows
+  a Moderator the files of removed content until the purge.
+  A member whose review was removed cannot write another for that place until the purge (`uq_review_place`).
 - Identity tags (UC-U09, UC-M01, UC-M02; `feature/tag`: `TagService`, `TagRepository`, `TagController`, `TagDtos`).
   "Xin tag định danh" on Tôi → page `/tag-request` (`tag-request.js`): `GET /api/me/tag-requests/compose` (active tags
   with description, colour, proof types, `selfieOnly`, `owned`; the waiting request; keep days) and `POST
@@ -293,10 +330,40 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   "Yêu cầu tag X bị từ chối: lý do. Bạn có thể gửi lại."). Either way the photo is discarded at once and the action logged
   (target USER). `expireOld` (hourly at :15) closes requests older than `proof_keep_days` (14) as EXPIRED, deletes the
   photo and tells the user. A request handled meanwhile → 409 "Yêu cầu này đã được xử lý.".
+- Public profile (UC-U07; `feature/user/PublicProfileService`, `PublicProfileController`, `PublicProfileDtos`): page
+  `/users/{id}` (`pages/user-profile.html`, `user-profile.js`, `user-profile.css`; `?tab=posts|questions`), opened from a
+  name on Blog, Hỏi-Đáp, post detail and Map reviews and from "Xem hồ sơ công khai của tôi" on Tôi. Public GETs:
+  `/api/users/{id}` (name, avatar, tags, rank or a staff account's role, join date, numbers of reviews, posts, questions,
+  best answers and likes received; `self`, `canMessage`), `/api/users/{id}/reviews|posts|questions?page=` (10 a page,
+  newest first, pages kept within 0–199). Never the email, area, stage or exact points. Only what everyone can see counts,
+  for the owner too: PUBLISHED content, place reviews of ACTIVE places, event reviews of events not deleted. LOCKED,
+  DELETED or missing → 404 "Không tìm thấy người dùng này.". "Nhắn tin" opens `/messages?to={id}` (a guest signs in first
+  with that `next`; only towards Members; not for staff viewers); one's own page shows "Chỉnh sửa hồ sơ". "Review mới"
+  and `/reviews` (Home) and the event pages show names without a link yet.
 - "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
-  shows the place it was merged into), PUBLISHED posts and questions of active accounts, newest saved first; page
-  `/saved` (`pages/saved.html` + `assets/js/pages/saved.js`, "Bỏ lưu" uses the existing save APIs). The profile has
-  `savedCount` for "Đã lưu (N)" on Tôi. Places are saved from the Map once it is built (`saved_places`).
+  shows the place it was merged into), PUBLISHED posts and questions of active accounts and published, not deleted
+  guides (`guides`, V20 `saved_guides`, summary cut to 160), newest saved first; page `/saved` (`pages/saved.html` +
+  `assets/js/pages/saved.js`, "Bỏ lưu" uses the save API of each kind). The profile has `savedCount` for "Đã lưu (N)"
+  on Tôi (guides included). Places are saved from the Map (`saved_places`).
+- Cẩm nang progress (`feature/guide`): one rule, `GuideProgressService.states(userId, guideIds)`: a guide with a
+  checklist ("Hướng dẫn chuẩn bị", `preparation_enabled` and ≥ 1 task) is done when every task is ticked
+  (`guide_preparation_progress`); any other guide when the Member pressed "Đánh dấu đã xong" (`user_guide_progress`,
+  ignored while a checklist exists). Guide page (`GuideMemberService`, `GuideMemberController`): `GET
+  /api/guides/{id}/viewer` (public: `{signedIn, member, saved, progress{checklist, tasksDone, tasksTotal, percent, done,
+  nextTask}}`, guests read as user 0), `POST|DELETE /api/guides/{id}/save` → `{saved}`, `POST|DELETE
+  /api/guides/{id}/done` → progress (a checklist guide → 400). Members only (guest 401, staff MSG18; a locked account's
+  session already ended, 401), published and not deleted guides only (else 404), guide row locked FOR UPDATE first,
+  writes idempotent. `guide-browse.js memberActions`: under the title, above the tabs: "Lưu"/"Đã lưu", "Đánh dấu đã
+  xong"/"Đã xong" or "Tiến độ: x/y việc" (opens the checklist tab, follows ticks through the `guide-progress` event of
+  `guide-preparation.js`, whose `preparationTabs` returns `{select}`); guests get a sign-in line, staff nothing.
+  Member Home: "Việc tiếp theo" (`HomeService#guide`) = visible guides of the user's stage (ARR until chosen), done/total
+  by the rule, `next` = the first started checklist, else the first guide not done, in `sort_order, id` order, with
+  `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Cả giai
+  đoạn" `/guides?category=`, the count → `/profile#guides`. `stageGuides` in "Dành cho bạn": up to 3 not-done guides of
+  the user's own stage (none without a stage), started checklists first, never `guide.next`, shown even when no post
+  fits. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
+  `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
+  Tests: `GuideMemberFlowTest`, `HomeGuideFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
   CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
   (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
@@ -402,8 +469,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   - Tests: `ChatFlowTest`, `ChatEncryptionFlowTest`, `ChatUtilitiesFlowTest`, `ChatFilesFlowTest`, `ChatLiveFlowTest`
     (who is told what on the live stream), `common/live/LiveEventsTest`, `notify/*Test`; the
     browser libraries with `node --test src/test/js/` (Node ≥ 20, no npm packages).
-  - Not built yet: group chat, Moderator reading of reported messages, "Nhắn tin" on Map and event reviews (Tiến's / the
-    events team's pages), a privacy-policy line saying reported messages are read by Moderators, `pushsubscriptionchange`.
+  - Not built yet: group chat, a link from event reviews to the public profile
+    with its "Nhắn tin" (the Map's reviews have it), a privacy-policy line saying reported messages are read by Moderators, `pushsubscriptionchange`.
 - Profile `local` runs `DevDataSeeder`: test accounts (password 123456, see README) and
   `dev/sample-data.sql`. Never use profile `local` on the server.
 
@@ -416,7 +483,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `utf8mb4_0900_ai_ci`. A signed-in author also sees their own `PROCESSING` posts.
 - `FeaturedSnapshotService` fills `featured_snapshots` (WEEK = last 7 days, MONTH = last 30) at startup, every hour
   and after an account is locked, unlocked or deleted. Page: `pages/blog.html` + `assets/js/pages/blog.js`; links to Write Post, Map and Public Profile
-  go through `ROUTES` at the top of blog.js (Map and Public Profile are coming-soon pages for now). Old
+  go through `ROUTES` at the top of blog.js. Old
   `blog.html?type=QA` links redirect to `qa.html`.
 - Post Detail (UC-10): `GET /api/blogs/{id}` (public) returns the post, media, comment tree and `viewer` flags.
   Actions (signed-in role USER only, never on one's own content for like/report): `POST|DELETE
@@ -515,7 +582,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   nothing, keys not in the form "folder/yyyy/MM/uuid.ext" (encoded slashes and ".." are refused earlier, 400, by Spring
   Security's firewall). Content type from `media.mime_type`, `nosniff`, Range requests and 304 work. Only registered
   while `app.media.public-base-url=/media/`. Also public: photos/videos of a PUBLISHED review of an ACTIVE author whose
-  event is not deleted, and the cover of an event that is not deleted. A Moderator sees PASSED files of a pending pin's review ("Ghim mới"). A Moderator queue adds its rule in
+  event is not deleted, and the cover of an event that is not deleted. A Moderator sees PASSED files of a pending pin's review ("Ghim mới"). A file of a post or review with an open report case is shown to an ACTIVE Moderator too (audience STAFF). A new Moderator queue adds its rule in
   `MediaAccess`.
 - `feature/moderation`: `MediaScanService` + `ImageModerator` + `MediaReader`. Photos first go to OpenAI Moderation
   `omni-moderation-latest` (free; `app.moderation.openai.api-key` or env `OPENAI_API_KEY`; without a key
@@ -759,10 +826,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - APIs (GET public): `GET /api/map` (categories with counts, every ACTIVE place with a position plus the viewer's own
   PENDING pins, review count and average, scam "!" flag, map centre = the representative point of the user's area,
   else Tokyo), `/api/map/events?days=15|30`, `/api/map/search?q=` (categories matching at a word start, then places; guests
-  get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.search`),
+  get Senpai ơi places only and `external: LOGIN`, signed-in people go through `PlaceService.searchJapan`; **Japan only**,
+  user decision: pins, category counts, search and "Địa điểm quanh đây" leave out places outside `AreaService.inJapan`, a
+  point outside it asks no map service, a review of such a place answers 400 `ReviewService.ONLY_JAPAN` and a pin
+  `AreaService.NOT_IN_JAPAN`; Write Post and Đặt câu hỏi still search Japan and Vietnam, so a post can link a place in Vietnam),
   `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
   PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
-  PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases`. Signed-in Users only: POST/DELETE
+  PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases` (no longer used by the page: the tab "Từ vựng và
+  mẫu câu" reads `GET /api/phrases?category=` of "Nhật ngữ" for the topics; "Mẫu câu (n)" / "Từ vựng (n)", "Đưa cho nhân
+  viên xem" dialog `#staff-dlg`, "Nghe", "Báo lỗi" through the report dialog with the phrase reasons. User decision: the
+  Map is for using phrases on the spot, so no flash cards, "Chưa thuộc" / "Đã thuộc" marks or study links there).
+  Signed-in Users only: POST/DELETE
   `/api/map/places/{id}/save`, POST/DELETE `/api/reviews/{id}/like` (not one's own; like_count recounted),
   POST `/api/reviews/{id}/report` (ContentReportService target REVIEW; over the threshold the review becomes HIDDEN).
 - Tools as in the prototype: one card (search "Tìm địa điểm" + "Danh mục" dropdown with "Tất cả danh mục" and
@@ -805,7 +879,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   in a pin name), `POST /api/map/pins` (part "pin" `{lat,lng,nameJa,nameEn,nameVi,categoryId,address,rating,content,
   confirmDuplicate}` + ≤ 5 "images"). ≥ 1 of nameJa/nameEn; the first review follows the review rules (+10 when
   published); duplicates without `confirmDuplicate` → 409; new accounts `pins_per_day` (2) in `user_daily_usage.pins`.
-  Saved as places source USER, status PENDING (+ place_history CREATED via PIN); only its author sees it; its first
+  A member at the top rank (`points` ≥ the highest `ranks.min_points`: "Senpai tin cậy", 300; user decision, the queue
+  stays small) needs no Moderator: the pin is ACTIVE at once, `reviewed_by` empty, APPROVED history via TOP_RANK, +15; only a
+  pin sent past the "Có thể trùng" warning still waits (`PinSaved.approved`, `PinCompose.noApprovalNeeded`).
+  Others: saved as places source USER, status PENDING (+ place_history CREATED via PIN); only its author sees it; its first
   review can be edited but not deleted while PENDING. UI: "Cắm ghim" → pick mode → panel "pin" with a draggable pin (a
   map click moves it), "Có phải là một trong các nơi này?" (OSM/Senpai ơi places within 60 m → write a review there
   instead, text carried over) and the "Có thể trùng" box ("Viết review cho nơi này" / "Vẫn gửi ghim mới").
@@ -893,8 +970,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.
-- The `guide` and `scholarship` starter features still map to tables that do not exist in the schema
-  (`guide`, `scholarship`); until rewritten, `GET /api/guides` and `/api/scholarships` answer 404 "Tính năng này sắp ra
-  mắt." without touching the database (entities and services kept, unused), and their pages show it as text.
-  Scholarships are not part of the agreed scope.
+- The `scholarship` starter feature still maps to a table that does not exist in the schema (`scholarship`);
+  `GET /api/scholarships` answers 404 "Tính năng này sắp ra mắt." without touching the database, and its page shows
+  it as text. Scholarships are not part of the agreed scope. (The guide feature, "Cẩm nang", is live: V7, V8, V11–V13,
+  `/guides`, `/guides/{id}`, `/moderator/guides`.)
 - Keep Vietnamese UI text as in the prototype. Code, identifiers and commit messages in English.

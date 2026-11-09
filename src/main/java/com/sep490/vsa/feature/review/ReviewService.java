@@ -70,6 +70,7 @@ public class ReviewService {
     static final String NO_PERMISSION = "Bạn không có quyền thực hiện thao tác này.";
     static final String PLACE_GONE = "Địa điểm này không còn trên Senpai ơi.";
     static final String ALREADY = "Bạn đã viết review cho địa điểm này rồi. Hãy sửa review của bạn.";
+    static final String ONLY_JAPAN = "Senpai ơi chỉ nhận review địa điểm ở Nhật Bản.";
     private static final Set<String> EDITABLE = Set.of("PUBLISHED", "PROCESSING", "REJECTED");
     private static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
 
@@ -166,6 +167,9 @@ public class ReviewService {
         filter.checkQrKeywords(MediaService.qrCodesOfPhotos(files));
 
         long target = placeId != null ? activePlace(placeId) : activePlace(places.save(picks, authorId).get(0));
+        if (repository.outsideJapan(target)) {           // the transaction rolls back a place added just now
+            throw ApiException.invalid(ONLY_JAPAN, Map.of("place", ONLY_JAPAN));
+        }
         if (repository.anyReviewOf(target, authorId)) {
             throw ApiException.conflict(ALREADY);
         }

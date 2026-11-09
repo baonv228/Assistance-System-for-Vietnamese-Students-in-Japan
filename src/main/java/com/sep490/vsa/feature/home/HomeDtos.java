@@ -26,11 +26,31 @@ public final class HomeDtos {
     public record GuestHome(Stats stats, List<Quote> quotes, Phrase phrase) {
     }
 
-    /** {@code placeId} opens the place on the Map ({@code /map?place=}). */
-    public record GuideNext(String title, String dueNote, String placeName, Long placeId) {
+    /**
+     * The guide "Việc tiếp theo" opens ({@code /guides/{guideId}}, its checklist tab when {@code checklist}).
+     * {@code placeName} / {@code placeId}: the guide's place while it is ACTIVE, opened on the Map
+     * ({@code /map?place=}). {@code tasksDone} / {@code tasksTotal} / {@code nextTask} (the first task not ticked) only
+     * for a checklist ("Hướng dẫn chuẩn bị"), else 0, 0 and null.
+     */
+    public record GuideNext(Long guideId, String title, String dueNote, String placeName, Long placeId,
+                            boolean checklist, int tasksDone, int tasksTotal, String nextTask) {
     }
 
+    /**
+     * "Việc tiếp theo": the published guides of one stage ({@code stageCode}, the user's or ARR), {@code done} of
+     * {@code total} finished by the user ({@code GuideProgressService}), and the guide to open next (null when every
+     * guide is done or the stage has none).
+     */
     public record GuideProgress(String stageCode, String stageTitle, int done, int total, GuideNext next) {
+    }
+
+    /**
+     * A guide of the user's stage shown in "Dành cho bạn". {@code excerpt}: the start of its summary as plain text
+     * (null without one); {@code percent} 0–100 of its checklist; {@code tasksDone} / {@code tasksTotal} /
+     * {@code nextTask} only for a checklist; {@code inProgress} = a checklist with some, not all, tasks ticked.
+     */
+    public record GuideCard(Long id, String title, String topicName, String excerpt, boolean checklist, int tasksDone,
+                            int tasksTotal, int percent, String nextTask, boolean inProgress) {
     }
 
     /** {@code daysUntil} is 0 when the event is happening today. */
@@ -71,10 +91,31 @@ public final class HomeDtos {
                            int readMinutes, String period) {
     }
 
-    /** {@code interests}: the topics "Dành cho bạn" learnt from what the user liked, saved, commented on or wrote. */
+    /**
+     * {@code interests}: the topics "Dành cho bạn" reads, those the user chose first, then those learnt from what the
+     * user liked, saved, commented on or wrote; {@code chosenInterests}: the chosen ones among them;
+     * {@code stageGuides}: up to 3 guides of the user's own stage not done yet, in progress first, never the one
+     * "Việc tiếp theo" shows (empty without a stage).
+     */
     public record MemberHome(String displayName, String stage, Long areaId, String areaName, int points, String rankName,
                              Phrase phrase, GuideProgress guide, List<EventItem> events, List<ReviewItem> reviews,
-                             Featured featured, List<FeedPost> forYou, List<String> interests) {
+                             Featured featured, List<FeedPost> forYou, List<String> interests,
+                             List<String> chosenInterests, List<GuideCard> stageGuides) {
+    }
+
+    /**
+     * A topic of "Chủ đề quan tâm": {@code chosen} by the Member, or {@code learnt} from what the Member did (never
+     * both: a suggestion to choose it).
+     */
+    public record InterestTopic(long id, String name, boolean chosen, boolean learnt) {
+    }
+
+    /** {@code /api/me/interests}: every topic a Member can choose, in the Blog's order, and how many at most. */
+    public record InterestSettings(int max, List<InterestTopic> topics) {
+    }
+
+    /** {@code PUT /api/me/interests}: the whole new choice, empty for none. */
+    public record UpdateInterestsRequest(List<Long> topicIds) {
     }
 
     /**
@@ -90,16 +131,18 @@ public final class HomeDtos {
     /**
      * Page "Dành cho bạn" ({@code /for-you}): one page of the whole personal feed in {@code scope} (ALL, or only the
      * posts that matched one reason: NEAR = area or prefecture, STAGE, INTEREST), the scopes this member can pick with
-     * how many posts each holds, and what the feed is based on (area, stage code, interests). {@code q} is the search
-     * text the posts and counts were narrowed by (null without one).
+     * how many posts each holds, and what the feed is based on (area, stage code, interests, the chosen ones among
+     * them as on the Home). {@code q} is the search text the posts and counts were narrowed by (null without one).
      */
     public record ForYouFeed(String scope, String q, String areaName, String stage, List<String> interests,
-                             List<ScopeCount> scopes, int page, boolean hasMore, List<FeedPost> items) {
+                             List<String> chosenInterests, List<ScopeCount> scopes, int page, boolean hasMore,
+                             List<FeedPost> items) {
     }
 
     /**
      * Why a post is in "Dành cho bạn": {@code code} AREA, PREFECTURE, STAGE or INTEREST, {@code label} the badge text,
-     * {@code detail} what matched (the linked place for AREA and PREFECTURE, the topic for STAGE and INTEREST).
+     * {@code detail} what matched (the linked place for AREA and PREFECTURE, the topic for STAGE and INTEREST: a chosen
+     * topic before a learnt one).
      */
     public record FeedReason(String code, String label, String detail) {
     }
