@@ -651,6 +651,27 @@ public class ChatService {
         return toMessage(repository.message(message.id()).orElseThrow(), viewer.id());
     }
 
+    /** Locks the conversation of a reported message, before the Moderator's decision locks the report case. */
+    public void lockForReport(long messageId) {
+        repository.message(messageId).ifPresent(m -> repository.lockConversation(m.conversationId()));
+    }
+
+    /** A Moderator removes a reported message: gone for both members like a recall, its files deleted at once. */
+    public void removeReported(long messageId) {
+        MessageRow message = repository.message(messageId).orElse(null);
+        if (message == null || message.recalled()) {
+            return;
+        }
+        Instant now = clock.instant();
+        repository.recall(messageId, now);
+        repository.removeReactions(messageId);
+        List<FileRow> files = repository.filesOf(messageId);
+        repository.markFilesDeleted(files.stream().map(FileRow::id).toList(), now);
+        deleteAfterCommit(files.stream().map(FileRow::storageKey).toList());
+        ConversationRow conversation = repository.lockConversation(message.conversationId()).orElseThrow();
+        announce(conversation.id(), "changed", messageId, message.senderId(), conversation.other(message.senderId()));
+    }
+
     /**
      * "Thả cảm xúc" ({@code emoji} one of {@link #REACTIONS}; null takes the viewer's reaction back): both members
      * accepted, nobody blocked, the other member an active Member, the message shown and not recalled. A new reaction

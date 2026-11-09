@@ -24,7 +24,9 @@ import java.util.Optional;
 @Service
 public class AreaService {
 
-    static final String NOT_IN_JAPAN = "Vị trí này không ở Nhật Bản. Hãy chọn một điểm ở Nhật.";
+    public static final String NOT_IN_JAPAN = "Vị trí này không ở Nhật Bản. Hãy chọn một điểm ở Nhật.";
+    /** The same box as {@link #inJapan}, for a places row with the alias {@code p}. */
+    public static final String PLACE_IN_JAPAN = "p.lat BETWEEN 20 AND 46 AND p.lng BETWEEN 122 AND 154";
     static final int SEARCH_LIMIT = 12;
 
     private static final String COLUMNS = """
@@ -112,7 +114,8 @@ public class AreaService {
                 WHERE p.id = ? AND p.lat BETWEEN 20 AND 46 AND p.lng BETWEEN 122 AND 154""", placeId);
     }
 
-    static boolean inJapan(double lat, double lng) {
+    /** A box around Japan: enough to tell Japan from Vietnam, the only other country places come from. */
+    public static boolean inJapan(double lat, double lng) {
         return lat >= 20 && lat <= 46 && lng >= 122 && lng <= 154;
     }
 

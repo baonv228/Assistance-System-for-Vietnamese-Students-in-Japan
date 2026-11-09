@@ -63,6 +63,7 @@ public final class CleanUrls {
         PAGES.put("/moderator/places", "/pages/moderator/places.html");
         PAGES.put("/moderator/merge", "/pages/moderator/merge.html");
         PAGES.put("/moderator/tags", "/pages/moderator/tags.html");
+        PAGES.put("/moderator/reports", "/pages/moderator/reports.html");
         PAGES.put("/tag-request", "/pages/tag-request.html");
         PAGES.put("/academic", "/pages/academic/index.html");
         PAGES.put("/academic/phrases", "/pages/academic/phrases.html");
@@ -79,6 +80,7 @@ public final class CleanUrls {
             "/blog", "/pages/blog-detail.html",
             "/qa", "/pages/qa-detail.html",
             "/events", "/pages/event-detail.html",
+            "/users", "/pages/user-profile.html",
             "/admin/users", "/pages/admin/user-detail.html");
 
     /** "Tin nhắn" with one conversation open (/messages/{id}): the same page as /messages. */

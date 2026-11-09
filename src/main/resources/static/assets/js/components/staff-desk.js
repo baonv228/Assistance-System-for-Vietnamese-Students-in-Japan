@@ -13,8 +13,7 @@ export const DESKS = {
         intro: "Kiểm duyệt nội dung cộng đồng, địa điểm, sự kiện và cẩm nang.",
         modules: [
             ["tags", "verified", "Duyệt tag định danh", "UC-M01, UC-M02", "/moderator/tags"],
-            ["reports", "flag", "Báo cáo nội dung", "UC-M03"],
-            ["appeals", "gavel", "Khiếu nại", "UC-M04"],
+            ["reports", "flag", "Báo cáo nội dung", "UC-M03, UC-M04", "/moderator/reports"],
             ["closed", "storefront", "Báo cáo đóng cửa", "UC-M05", "/moderator/closed"],
             ["pins", "add_location_alt", "Duyệt ghim mới", "UC-M06", "/moderator/pins"],
             ["events", "celebration", "Sự kiện", "UC-M07", "/moderator/events"],

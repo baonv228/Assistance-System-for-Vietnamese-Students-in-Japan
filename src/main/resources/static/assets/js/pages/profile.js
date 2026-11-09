@@ -6,14 +6,13 @@ import { mountInterestPicker } from "../components/interest-picker.js";
 import { logout, mountSiteHeader } from "../components/site-header.js";
 import { esc, ic, LOGO_SVG, STAGES, tagChips } from "../lib/ui.js";
 
-const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#me");
 
 /** Perks of each rank, keyed by the minimum points in table ranks. */
 const PERKS = {
     0: ["Viết review, blog", "Xin tag định danh"],
     100: ["Bài viết được cộng 5 điểm ưu tiên khi xếp hạng Bài nổi bật", "Huy hiệu trên hồ sơ"],
-    300: ["Bài viết được cộng 10 điểm ưu tiên khi xếp hạng Bài nổi bật", "Câu trả lời trong Hỏi đáp được hiện trước"]
+    300: ["Bài viết được cộng 10 điểm ưu tiên khi xếp hạng Bài nổi bật", "Câu trả lời trong Hỏi đáp được hiện trước", "Ghim địa điểm mới lên bản đồ ngay, không cần chờ duyệt"]
 };
 const PROVIDERS = { GOOGLE: "Google", FACEBOOK: "Facebook" };
 
@@ -122,7 +121,7 @@ function render(p) {
         </div>
 
         <div class="actions">
-            <a class="btn" href="${soon("public-profile")}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
+            <a class="btn" href="/users/${p.id}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
             <a class="btn" href="/saved">${ic("bookmarks")}Đã lưu (${p.savedCount})</a>
             ${p.role === "USER" ? `<a class="btn" href="/messages">${ic("chat")}Tin nhắn</a>` : ""}
             <a class="btn" href="/terms?doc=tos">${ic("gavel")}Điều khoản và chính sách</a>

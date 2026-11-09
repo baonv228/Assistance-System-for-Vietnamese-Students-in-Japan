@@ -8,12 +8,11 @@ import { avatar, esc, fullDate, googleDirectionsUrl, ic, loginUrl, osmUrl, place
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
 // pages/qa-detail.html (QA, Hỏi-Đáp). Each kind has its own endpoints; comment actions are shared.
 const QUESTION = document.body.dataset.kind === "QA";
-const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     list: QUESTION ? "/qa" : "/blog",
     listName: QUESTION ? "Hỏi-Đáp" : "Blog",
     topic: (id) => `${QUESTION ? "/qa" : "/blog"}?topics=${id}`,
-    profile: (id) => soon("public-profile", { id }),
+    profile: (id) => `/users/${id}`,
     message: (userId) => `/messages?to=${userId}`,
     edit: (id) => `${QUESTION ? "/qa" : "/blog"}/${id}/edit`,
     login: loginUrl                     // back to this post after signing in

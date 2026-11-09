@@ -127,6 +127,15 @@ public class PlaceService {
     // ---------------------------------------------------------------- search
 
     public PlaceSearch search(long userId, String query) {
+        return search(userId, query, false);
+    }
+
+    /** The Map's search: OpenStreetMap places in Japan only (posts and questions may still link places in Vietnam). */
+    public PlaceSearch searchJapan(long userId, String query) {
+        return search(userId, query, true);
+    }
+
+    private PlaceSearch search(long userId, String query, boolean japanOnly) {
         String q = query == null ? "" : query.strip();
         if (q.length() > QUERY_MAX) {
             q = q.substring(0, QUERY_MAX);
@@ -151,7 +160,7 @@ public class PlaceService {
         if (hits == null) {
             return new PlaceSearch(items, "BUSY");
         }
-        items.addAll(fromMap(hits, items));
+        items.addAll(fromMap(japanOnly ? hits.stream().filter(h -> "jp".equals(h.countryCode())).toList() : hits, items));
         return new PlaceSearch(items, "ON");
     }
 

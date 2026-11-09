@@ -29,7 +29,8 @@ public class PointHistoryService {
             "BEST_ANSWER_CHANGED", "Không còn là câu trả lời hay nhất",
             "PIN_APPROVED", "Ghim được duyệt",
             "CONTENT_DELETED", "Tự xóa nội dung, điểm được thu lại",
-            "CONTENT_REMOVED", "Nội dung bị Moderator gỡ");
+            "CONTENT_REMOVED", "Nội dung bị Moderator gỡ",
+            "CONTENT_RESTORED", "Moderator khôi phục nội dung");
 
     public record PointLine(long id, int delta, String reason, String reasonLabel, String title, String link,
                             Instant createdAt) {

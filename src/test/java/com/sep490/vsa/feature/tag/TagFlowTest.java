@@ -119,7 +119,10 @@ class TagFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "image/jpeg"))
                 .andExpect(header().string("Cache-Control", "no-store, private"));
-        mvc.perform(get("/api/moderator/tag-requests").session(session(mod, "MODERATOR")))
+        // The queue is oldest first and the shared test database keeps requests of earlier runs: ask for this user
+        String name = "Tag " + UUID.randomUUID();
+        jdbc.update("UPDATE users SET display_name = ? WHERE id = ?", name, user);
+        mvc.perform(get("/api/moderator/tag-requests").param("q", name).session(session(mod, "MODERATOR")))
                 .andExpect(jsonPath("$.data.items[?(@.id == " + id + ")].daysLeft").value(14));
 
         act(post("/api/moderator/tag-requests/" + id + "/approve"), "").andExpect(status().isOk());
