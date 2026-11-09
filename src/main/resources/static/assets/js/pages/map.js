@@ -52,7 +52,8 @@ const els = {
     pinBtn: $("#pin-btn"), pickHint: $("#pick-hint"), pickCancel: $("#pick-cancel"),
     confirmDlg: $("#confirm-dlg"), confirmText: $("#confirm-text"), confirmOk: $("#confirm-ok"),
     reportDlg: $("#report-dlg"), reportForm: $("#report-form"), reportReasons: $("#report-reasons"),
-    reportNote: $("#report-note"), reportError: $("#report-error")
+    reportNote: $("#report-note"), reportError: $("#report-error"), reportTitle: $("#report-title"),
+    reportIntro: $("#report-intro"), staffDlg: $("#staff-dlg"), staffJa: $("#staff-ja"), staffVi: $("#staff-vi")
 };
 
 const state = {
@@ -68,7 +69,10 @@ const state = {
     osm: null,                  // PlaceOption of an OpenStreetMap place not yet on Senpai ơi
     tab: "rv",
     reviews: { items: [], page: 0, total: 0, loading: false },
-    phrases: null,
+    phrases: null,              // PhraseCard[] of the place's category (the "Nhật ngữ" API, with the Member's marks)
+    phraseKind: "PHRASE",       // the part shown: PHRASE "Mẫu câu" or VOCAB "Từ vựng"
+    phraseReasons: null,        // the report reasons of phrases, read once when first needed
+    reportPhraseId: null,       // set while the report dialog is about a phrase, not a review
     cameFromList: false,
     me: null,                   // { lat, lng } from "Vị trí của tôi"
     suggestTicket: 0,
@@ -695,14 +699,42 @@ function reviewsHtml() {
     return rv.items.map(reviewHtml).join("") + more;
 }
 
+const PHRASE_KINDS = [["PHRASE", "Mẫu câu"], ["VOCAB", "Từ vựng"]];
+
+/**
+ * "Từ vựng và mẫu câu" of the place's category, for use on the spot (not for studying: no flash cards or marks here):
+ * one part at a time with its count, cards with their topic, "Đưa cho nhân viên xem" (phrases only), "Nghe", "Báo lỗi".
+ */
 function phrasesHtml() {
     if (state.phrases == null) return `<p class="note">Đang tải…</p>`;
     if (!state.phrases.length) return `<p class="note">Danh mục này chưa có từ vựng và mẫu câu.</p>`;
-    return state.phrases.map((p) => `<div class="phrase">
-            <span class="jp"><span lang="ja">${esc(p.japanese)}</span>
-                <button class="icon-btn" type="button" data-act="speak" data-text="${esc(p.japanese)}" aria-label="Nghe">${ic("volume_up")}</button></span>
-            <span class="ro">${esc(p.romaji)}</span><span>${esc(p.meaningVi)}</span>
-            <span class="note">${p.kind === "VOCAB" ? "Từ vựng" : "Mẫu câu"}</span></div>`).join("");
+    const count = (kind) => state.phrases.filter((p) => p.kind === kind).length;
+    const list = state.phrases.filter((p) => p.kind === state.phraseKind);
+    return `<div class="seg pkinds" role="group" aria-label="Loại">${PHRASE_KINDS.map(([kind, label]) =>
+            `<button type="button" data-pkind="${kind}" aria-pressed="${kind === state.phraseKind}" ${count(kind) ? "" : "disabled"}>${label} (${count(kind)})</button>`).join("")}</div>
+        ${list.map(phraseCard).join("")}`;
+}
+
+function phraseCard(p) {
+    const staffViewer = state.user && state.user.role !== "USER";
+    return `<article class="pcard" data-phrase="${p.id}">
+            ${p.topics.length ? `<div class="row">${p.topics.map((t) => `<span class="badge br">${esc(t.name)}</span>`).join("")}</div>` : ""}
+            <div class="pja" lang="ja">${esc(p.japanese)}</div>
+            ${p.romaji ? `<div class="note">${esc(p.romaji)}</div>` : ""}
+            <div>${esc(p.meaningVi)}</div>
+            <div class="row">
+                ${p.kind === "PHRASE" ? `<button class="btn sm pri" type="button" data-act="staff-phrase">${ic("front_hand")}Đưa cho nhân viên xem</button>` : ""}
+                <button class="btn sm" type="button" data-act="speak" data-text="${esc(p.japanese)}">${ic("volume_up")}Nghe</button>
+                ${staffViewer ? "" : `<button class="btn sm" type="button" data-act="report-phrase">${ic("flag")}Báo lỗi</button>`}
+            </div>
+        </article>`;
+}
+
+/** "Đưa cho nhân viên xem": the phrase as large as the screen allows, with its meaning. */
+function showStaff(phrase) {
+    els.staffJa.textContent = phrase.japanese;
+    els.staffVi.textContent = phrase.meaningVi;
+    els.staffDlg.showModal();
 }
 
 async function loadReviews(page) {
@@ -727,8 +759,11 @@ async function loadReviews(page) {
 async function loadPhrases() {
     const d = state.detail;
     try {
-        const list = await apiClient.mapPlacePhrases(d.id);
-        if (state.detail?.id === d.id) state.phrases = list;
+        const list = await apiClient.phrases({ category: d.categoryId });
+        if (state.detail?.id === d.id) {
+            state.phrases = list;
+            state.phraseKind = list.some((p) => p.kind === "PHRASE") ? "PHRASE" : "VOCAB";
+        }
     } catch (error) {
         state.phrases = [];
         toast(error.message, "error");
@@ -787,7 +822,7 @@ function back() {
 els.handle.addEventListener("click", () => els.panel.classList.toggle("full"));
 
 els.body.addEventListener("click", async (event) => {
-    const btn = event.target.closest("[data-act], [data-place], [data-osm], [data-tab]");
+    const btn = event.target.closest("[data-act], [data-place], [data-osm], [data-tab], [data-pkind]");
     if (!btn) return;
     if (btn.dataset.place) return openPlace(Number(btn.dataset.place), { fly: true });
     if (btn.dataset.osm) {
@@ -799,6 +834,15 @@ els.body.addEventListener("click", async (event) => {
         els.body.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === state.tab)));
         if (state.tab === "vc" && state.phrases == null) loadPhrases();
         return renderTab();
+    }
+    if (btn.dataset.pkind) {
+        state.phraseKind = btn.dataset.pkind;
+        return renderTab();
+    }
+    if (btn.dataset.act === "staff-phrase" || btn.dataset.act === "report-phrase") {
+        const id = Number(btn.closest("[data-phrase]").dataset.phrase);
+        const phrase = state.phrases.find((p) => p.id === id);
+        return btn.dataset.act === "staff-phrase" ? showStaff(phrase) : openPhraseReport(id);
     }
     switch (btn.dataset.act) {
         case "close-list":
@@ -891,14 +935,36 @@ async function toggleLike(reviewId) {
 function openReport(reviewId) {
     if (needLogin()) return;
     state.reportReviewId = reviewId;
+    state.reportPhraseId = null;
+    showReportDialog("Báo cáo review", "Moderator sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.",
+        state.detail.reportReasons);
+}
+
+/** "Báo lỗi" on a phrase: its own reasons (Sai tiếng Nhật, Sai nghĩa…), handled by the Japanese content editor. */
+async function openPhraseReport(phraseId) {
+    if (needLogin()) return;
+    try {
+        state.phraseReasons ??= (await apiClient.phraseOverview()).reportReasons;
+    } catch (error) {
+        return toast(error.message, "error");
+    }
+    state.reportPhraseId = phraseId;
+    showReportDialog("Báo lỗi mẫu câu",
+        "Biên tập viên nội dung tiếng Nhật sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.", state.phraseReasons);
+}
+
+function showReportDialog(title, note, reasons) {
+    els.reportTitle.textContent = title;
+    els.reportIntro.textContent = note;
     els.reportReasons.innerHTML = `<legend class="sr-only">Lý do</legend>`
-        + state.detail.reportReasons.map((r) => `<label><input type="radio" name="reason" value="${r.id}"><span>${esc(r.label)}</span></label>`).join("");
+        + reasons.map((r) => `<label><input type="radio" name="reason" value="${r.id}"><span>${esc(r.label)}</span></label>`).join("");
     els.reportNote.value = "";
     els.reportError.hidden = true;
     els.reportDlg.showModal();
 }
 
 els.reportDlg.querySelector("[data-close]").addEventListener("click", () => els.reportDlg.close());
+els.staffDlg.querySelector('[data-act="speak-staff"]').addEventListener("click", () => speak(els.staffJa.textContent));
 els.reportForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const reason = els.reportForm.querySelector('input[name="reason"]:checked');
@@ -907,8 +973,15 @@ els.reportForm.addEventListener("submit", async (event) => {
         els.reportError.hidden = false;
         return;
     }
+    const body = { reasonId: Number(reason.value), note: els.reportNote.value.trim() || null };
     try {
-        await apiClient.reportReview(state.reportReviewId, { reasonId: Number(reason.value), note: els.reportNote.value.trim() || null });
+        if (state.reportPhraseId != null) {
+            await apiClient.reportPhrase(state.reportPhraseId, body);
+            els.reportDlg.close();
+            toast("Cảm ơn bạn. Báo cáo đã được gửi.");
+            return;
+        }
+        await apiClient.reportReview(state.reportReviewId, body);
         els.reportDlg.close();
         toast("Đã gửi báo cáo cho Moderator.");
         loadReviews(0);

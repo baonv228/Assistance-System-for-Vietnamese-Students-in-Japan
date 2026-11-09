@@ -744,7 +744,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `AreaService.NOT_IN_JAPAN`; Write Post and Đặt câu hỏi still search Japan and Vietnam, so a post can link a place in Vietnam),
   `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
   PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
-  PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases`. Signed-in Users only: POST/DELETE
+  PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases` (no longer used by the page: the tab "Từ vựng và
+  mẫu câu" reads `GET /api/phrases?category=` of "Nhật ngữ" for the topics; "Mẫu câu (n)" / "Từ vựng (n)", "Đưa cho nhân
+  viên xem" dialog `#staff-dlg`, "Nghe", "Báo lỗi" through the report dialog with the phrase reasons. User decision: the
+  Map is for using phrases on the spot, so no flash cards, "Chưa thuộc" / "Đã thuộc" marks or study links there).
+  Signed-in Users only: POST/DELETE
   `/api/map/places/{id}/save`, POST/DELETE `/api/reviews/{id}/like` (not one's own; like_count recounted),
   POST `/api/reviews/{id}/report` (ContentReportService target REVIEW; over the threshold the review becomes HIDDEN).
 - Tools as in the prototype: one card (search "Tìm địa điểm" + "Danh mục" dropdown with "Tất cả danh mục" and
