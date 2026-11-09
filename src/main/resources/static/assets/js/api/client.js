@@ -74,6 +74,16 @@ async function request(path, options = {}, retried = false) {
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const apiClient = {
+    faqs: (params = {}) => request(`/faqs?${toQuery(params)}`),
+    faqTopics: (q = "") => request(`/faqs/topics?${toQuery({ q })}`),
+    faq: (id) => request(`/faqs/${id}`),
+    faqRelated: (q, limit = 3) => request(`/faqs/related?${toQuery({ q, limit })}`),
+    moderatorFaqs: (params = {}) => request(`/moderator/faqs?${toQuery(params)}`),
+    moderatorFaqTopics: () => request("/moderator/faqs/topics"),
+    faqSuggestions: (params = {}) => request(`/moderator/faqs/suggestions?${toQuery(params)}`),
+    moderatorFaq: (id) => request(`/moderator/faqs/${id}`),
+    saveFaq: (id, body) => id ? request(`/moderator/faqs/${id}`, { method: "PUT", body: JSON.stringify(body) }) : post("/moderator/faqs", body),
+    faqVisibility: (id, published) => request(`/moderator/faqs/${id}/visibility`, { method: "PUT", body: JSON.stringify({ published }) }),
     getGuides: (params = {}) => request(`/guides?${toQuery(params)}`),
     guideTopics: () => request("/guides/topics"),
     guideSubjects: () => request("/guides/subjects"),
@@ -112,6 +122,12 @@ export const apiClient = {
     // Homepage and "Tôi"
     guestHome: () => request("/home"),
     memberHome: () => request("/me/home"),
+    // "Dành cho bạn" (all of it): { scope, q, areaName, stage, interests, scopes: [{ code, count }], page, hasMore, items };
+    // scope ALL, NEAR, STAGE or INTEREST (left out or not available: ALL); q keeps the posts holding that text
+    forYou: ({ scope, page = 0, q } = {}) => request(`/me/for-you?${toQuery({ scope, page, q })}`),
+    // "Tìm kiếm" (Home, /search): { q, tooShort, total, places, posts, questions, guides, events, phrases, faqs }, each
+    // part { total, items } with its first 5 items
+    search: (q) => request(`/search?${toQuery({ q })}`),
     // "Review mới": { scope, areaName, prefectureName, scopes: [{ code, count }], page, hasMore, items }; scope AREA,
     // PREFECTURE or ALL (left out: the first one holding reviews)
     homeReviews: ({ scope, page = 0 } = {}) => request(`/home/reviews?${toQuery({ scope, page })}`),
@@ -261,6 +277,33 @@ export const apiClient = {
     answerQuestion: (id, body) => post(`/questions/${id}/answers`, body),
     chooseBestAnswer: (id, answerId) =>
         request(`/questions/${id}/best-answer`, { method: "PUT", body: JSON.stringify({ answerId }) }),
+
+    // "Nhật ngữ". overview: { parts: [{ kind, name, icon, count, learned, topics, categories }], member, reportReasons };
+    // phrases params: { topic, category, mine: learning|learned, q } → [PhraseCard]; marks answer
+    // { learning, learned }; flash: learned true ("Đã thuộc") / false ("Chưa thuộc")
+    phraseOverview: () => request("/phrases/overview"),
+    phrases: (params = {}) => request(`/phrases?${toQuery(params)}`),
+    phraseFlash: (id, learned) => post(`/phrases/${id}/flash`, { learned }),
+    phraseClearFlash: (id) => request(`/phrases/${id}/flash`, { method: "DELETE" }),
+    reportPhrase: (id, body) => post(`/phrases/${id}/report`, body),
+
+    // Academic Manager. phrase body: { categoryId, kind: PHRASE|VOCAB, japanese, romaji, meaningVi, topicIds,
+    // confirmDuplicate, reportCaseId } → { saved, duplicate, message }; topic body: { name, icon }
+    acadOverview: () => request("/academic/overview"),
+    acadOptions: () => request("/academic/options"),
+    acadTopics: () => request("/academic/topics"),
+    acadCreateTopic: (body) => post("/academic/topics", body),
+    acadUpdateTopic: (id, body) => request(`/academic/topics/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+    acadDeleteTopic: (id) => request(`/academic/topics/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    // params: { category, topic, kind, q, page } → { items, page, size, total }
+    acadPhrases: (params = {}) => request(`/academic/phrases?${toQuery(params)}`),
+    acadPhrase: (id) => request(`/academic/phrases/${id}`),
+    acadCreatePhrase: (body) => post("/academic/phrases", body),
+    acadUpdatePhrase: (id, body) => request(`/academic/phrases/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    acadDeletePhrase: (id) => request(`/academic/phrases/${id}`, { method: "DELETE" }),
+    // open reports on phrases → [{ caseId, priority, reportCount, createdAt, reasons, reporters, phrase }]
+    acadReports: () => request("/academic/reports"),
+    acadDismissReport: (caseId) => post(`/academic/reports/${caseId}/dismiss`),
 
     // Lễ hội và sự kiện. events: [EventCard] soonest first; event: { event, tip, album, albumCount, reviews, viewer,
     // reportReasons }

@@ -139,6 +139,12 @@ async function start() {
         .setView([overview.center.lat, overview.center.lng], overview.center.zoom);
     setBasemap(storedBasemap());
     map.zoomControl.setPosition("bottomright");
+    // The layers and "Vị trí của tôi" buttons sit right above the zoom buttons and the map credit, whose height
+    // changes with the map style and the screen width (the credit takes two lines on a phone)
+    const corner = map.getContainer().querySelector(".leaflet-bottom.leaflet-right");
+    if (corner && typeof ResizeObserver === "function") {
+        new ResizeObserver(() => els.app?.style.setProperty("--corner-h", `${corner.offsetHeight}px`)).observe(corner);
+    }
     cluster = L.markerClusterGroup({
         showCoverageOnHover: false,
         maxClusterRadius: 48,

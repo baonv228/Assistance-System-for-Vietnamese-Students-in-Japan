@@ -9,7 +9,7 @@ const main = document.querySelector("#me");
 
 /** Perks of each rank, keyed by the minimum points in table ranks. */
 const PERKS = {
-    0: ["Viết review, blog, câu luyện tập", "Xin tag định danh"],
+    0: ["Viết review, blog", "Xin tag định danh"],
     100: ["Bài viết được cộng 5 điểm ưu tiên khi xếp hạng Bài nổi bật", "Huy hiệu trên hồ sơ"],
     300: ["Bài viết được cộng 10 điểm ưu tiên khi xếp hạng Bài nổi bật", "Câu trả lời trong Hỏi đáp được hiện trước"]
 };
@@ -52,7 +52,7 @@ function render(p) {
                     <ul>${(PERKS[r.minPoints] || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
                 </div>`).join("")}
             </div>
-            <p class="note">Review +10 · Ghim được duyệt +15 · Câu luyện tập +2 · Câu được đánh dấu đúng +3 ·
+            <p class="note">Review +10 · Ghim được duyệt +15 ·
                 Câu trả lời hay nhất +5 · Bài bị gỡ −20 · Tự xóa bài thì điểm của bài đó được thu lại</p>
             <div class="row"><button class="btn sm" type="button" id="history-toggle" aria-expanded="false"
                 aria-controls="history">${ic("history")}Lịch sử điểm</button></div>
@@ -70,7 +70,7 @@ function render(p) {
             ? `<div class="info">Yêu cầu tag ${esc(p.pendingTag)} đang chờ duyệt. Ảnh minh chứng tự xóa sau 14 ngày nếu chưa được duyệt.</div>`
             : `<a class="btn" href="/tag-request">${ic("verified")}Xin tag định danh</a>`}
 
-        <div class="card">
+        <div class="card" id="area">
             <h3>${ic("person_pin_circle")} Khu vực và giai đoạn</h3>
             <p class="note">Không bắt buộc. Dùng để gợi ý việc cần làm, review và sự kiện gần bạn. Chỉ lưu khu vực, không lưu địa chỉ; chỉ mình bạn thấy.</p>
             <div class="field"><label for="me-stage">Giai đoạn</label>
@@ -102,7 +102,6 @@ function render(p) {
 
         <div class="actions">
             <a class="btn" href="${soon("public-profile")}">${ic("badge")}Xem hồ sơ công khai của tôi</a>
-            <a class="btn" href="${soon("notebook")}">${ic("bookmark")}Sổ tay tiếng Nhật</a>
             <a class="btn" href="/saved">${ic("bookmarks")}Đã lưu (${p.savedCount})</a>
             ${p.role === "USER" ? `<a class="btn" href="/messages">${ic("chat")}Tin nhắn</a>` : ""}
             <a class="btn" href="/terms?doc=tos">${ic("gavel")}Điều khoản và chính sách</a>
@@ -117,6 +116,8 @@ function render(p) {
     bindPassword(p);
     bindHistory();
     bindArea(p);
+    // From "Điều chỉnh" on the page "Dành cho bạn" (/profile#area): the card is drawn after loading, so scroll now
+    if (location.hash === "#area") document.querySelector("#area").scrollIntoView({ block: "start" });
 }
 
 /** The area picker (prefecture → area, quick search, map); its label follows the stage chosen above it. */

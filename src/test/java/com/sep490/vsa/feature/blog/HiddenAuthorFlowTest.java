@@ -304,7 +304,7 @@ class HiddenAuthorFlowTest {
                 }));
                 assertThat(postLocked.await(10, TimeUnit.SECONDS)).isTrue();
                 Future<Object> lock = pool.submit(() -> {
-                    adminUsers.updateUserStatus(x, "LOCKED", "thử", byAdmin);
+                    adminUsers.updateUserStatus(x, "LOCKED", "thử", null, byAdmin);
                     return "OK";
                 });
                 Thread.sleep(300);      // the Admin's request reaches its first lock meanwhile

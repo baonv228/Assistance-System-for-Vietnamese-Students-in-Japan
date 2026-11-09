@@ -94,7 +94,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   after signing in, and when already signed in, only for role USER and only for a path of this site (starts with one
   "/", no "://", backslash, space or control character, same origin, not /login, /register or /complete-signup); staff
   and anything else go to `homePath`. Google/Facebook sign-in does not carry `next`. The Member pages Spring Security
-  guards (`/profile`, `/saved`, `/notifications`, `/messages`, `/messages/**`) send a guest to `/login?next=<that page
+  guards (`/profile`, `/saved`, `/for-you`, `/notifications`, `/messages`, `/messages/**`) send a guest to `/login?next=<that page
   and query>` too (`SecurityConfig.loginThenBack`, GET only; staff pages stay plain `/login`), so a chat notification
   tapped after the session ended lands on the conversation. Sessions last 14 days without activity and the cookie
   survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env `SESSION_TIMEOUT`, "cần chốt").
@@ -141,8 +141,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`,
-  `/messages`, `/messages/{id}`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
+  `/search`, `/messages`, `/messages/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
   `static/pages/`; old `/pages/*.html` links (`?id=` included) answer 301 to them. Links in pages and JS use the clean
@@ -184,6 +184,21 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and never writes them, so it does not clash with the entities teammates will create.
 - App pages use `assets/css/tokens.css` + `site.css` and `components/site-header.js` (top nav on desktop,
   bottom tab bar on phones). Links to features not built yet go to `/coming-soon?f=<feature>`.
+  - Navigation (`TABS` in site-header.js: key, label, icon, href, on the phone tab bar, desktop priority): desktop
+    shows the 7 links (Hỏi-Đáp after Blog, Cẩm nang last; FAQ is a tab of Hỏi-Đáp, no link of its own); the ones that
+    do not fit beside the account buttons move into a
+    "Thêm" menu, lowest priority first (Nhật ngữ, Cẩm nang, Sự kiện…; `fitNav`, again on resize and once fonts load), and
+    "Thêm" is marked when the page shown is in it. Phones (≤ 860 px) get 5 equal tabs: Trang chủ, Bản đồ, Blog,
+    Hỏi-Đáp, "Thêm"; "Thêm" opens a bottom sheet (`<dialog id="more-sheet">`) with "Tôi" (or sign in / sign up), the
+    other features, then "Đã lưu", "Tin nhắn", "Thông báo" (staff: their own page). A new feature gets its `TABS` row.
+  - Layout rules learnt from the review: a grid that holds content (`.page`, `.desk-main`, `.desk`, the Map tools) uses
+    `minmax(0, 1fr)` columns, so a wide table scrolls inside its own wrapper instead of widening the whole page; check a
+    new or changed page at 320, 375, 768, 1024 and 1440 px: no sideways scroll of the page itself. `addSkipLink` (site-header.js, also
+    called by the staff shells) puts "Bỏ qua, đến nội dung chính" first in the Tab order. Every page head has the
+    favicon (`/assets/img/icon.svg`) and theme colour; the public pages have a description.
+  - Staff shells (`staff-desk.js`, `admin-layout.js`): header class `staff-top`, below 480 px only the flower of the
+    logo; on phones the side menu is one row that scrolls sideways and starts with the current module in view
+    (`showCurrentModule`). Rank badges next to names are `badge rank`; the rank cards on Tôi are `.ranks .rank`.
 - Personalized feed = the member Home, which leads with it: `GET /api/me/home` returns `forYou` ("Dành cho bạn", up to
   5 published POST blogs by others; posts the user already liked, saved or commented on only fill the list; then last
   30 days first, older ones fill; then linked to a place in the user's area ("Gần khu vực của bạn"), then in its
@@ -192,11 +207,44 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `interests`: up to 3 topics learnt from the last 90 days (like 1, save 2, published comment 2 once per post, own
   published post or question 3; at least 2 points; "Khác" and inactive topics left out; "cần chốt" constants in
   `HomeService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST, `label`, `detail` = the
-  linked place or the matching topic) and `reason` = the first label. Feed preferences = the user's area + stage
-  (`PUT /api/me/profile`); no table of their own.
-  Page (`home.js`): greeting, then "Dành cho bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests,
+  linked place or the matching topic), `reason` = the first label and `engaged` (already liked, saved or commented
+  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`); no table of their own.
+  Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
+  bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage form in place and the feed is redrawn after "Lưu", the reasons on every post, the
-  first post across the width), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
+  first post across the width, "Xem tất cả" → `/for-you`), then "Việc tiếp theo" and "Review mới quanh …", then events,
+  phrase and "Bài nổi bật". Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+- "Xem tất cả" = page `/for-you` (`pages/for-you.html`, `for-you.js`, `for-you.css`; guarded like `/saved`):
+  `GET /api/me/for-you?scope=&page=&q=` (`HomeService.forYouPage`, same ranking SQL as the Home card, so it starts with
+  the Home's 5 and goes on with every published post by others; 10 a page, pages kept within 0–199): `scope` ALL, NEAR
+  (area or prefecture), STAGE, INTEREST keeps only the posts with that reason, each scope offered only when the member
+  has an area / a stage / an interest (else ALL), each with its count; answer also has `q`, `areaName`, `stage`,
+  `interests`. `q` ("Tìm trong bài dành cho bạn", ≤ 100 characters else 400) keeps the posts whose title, content or
+  approved linked place name holds it (the Blog's rule: folded text, `utf8mb4_0900_ai_ci`, LIKE signs escaped), order,
+  reasons and scope counts unchanged, counted over the posts found; blank = no search; the Home card never searches.
+  The page: search box first (typing asks after 350 ms, Enter at once; the text marked in titles and excerpts with
+  `lib/search-text.js`; nothing found → "Tìm … trên toàn Senpai ơi" `/search?q=` or "xóa từ khóa"; `#search` focuses
+  it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card), scope buttons and text in
+  the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
+  drawn twice (likes may move the ranking between two pages).
+- "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,
+  `SearchRepository`, `SearchDtos`; page `/search?q=`, `pages/search.html`, `search.js`, `search.css`; public). The Home
+  (guest hero and member, under the greeting) has a plain GET form to it (an empty box is not sent). `GET /api/search?q=`
+  searches every part at once, each by its own feature so it shows exactly what that part's page shows for the same text
+  and hides what it hides: posts `BlogFeedService` (an author also finds their own PROCESSING post), questions
+  `QaService`, guides `GuideService.browse` (published), events `EventService.list` (now and coming first, soonest
+  first, then past, latest first), phrases `PhraseService.list`, FAQ `FaqService.list` (published), places
+  `SearchRepository` (ACTIVE Senpai ơi places by name vi/ja/en or address, or category at a word start as the Map;
+  names starting with the text first; review count and average of active accounts; no OpenStreetMap call). Each part
+  `{total, items}` with its first 5 (`SECTION_SIZE`); `tooShort` when the text has under 2 letters/digits
+  (`VietnameseText.squash`) and no Han/kana (nothing searched); ≤ 100 characters else 400. The page: live search
+  (300 ms, Enter at once, `?q=` in the address and the title), chips jumping to each part, the text marked, "Xem tất cả"
+  → `/blog?q=`, `/qa?q=`, `/guides?q=`, `/events?q=`, `/phrases?q=`, `/qa?tab=faq&q=`, places "Tìm … trên Bản đồ"
+  `/map?q=` (with OSM); items open `/map?place=`, `/blog/{id}`, `/qa/{id}`, `/guides/{id}`, `/events/{id}`,
+  `/phrases?q=<japanese>` (with "Nghe"), `/qa?tab=faq&id=`; Members also get "Chỉ tìm trong bài dành cho bạn"
+  (`/for-you?q=`); empty box → ideas ("Thẻ cư trú", "Ngân hàng"…); nothing found → tips, `/map?q=`, "Đặt câu hỏi"
+  (guests via sign-in). Tests: `SearchFlowTest`, `HomeFeedFlowTest` (search), `src/test/js/search-text.test.mjs`.
+  Not done: a search button in the header of every page (the prototype has one).
 - "Review mới quanh …" (Home card): 3 reviews by others, the user's area first, then its prefecture, then the rest,
   newest first in each; each `ReviewItem` has `placeId` (opens `/map?place={id}`, as does the place of "Việc tiếp theo"
   through `GuideNext.placeId`), `placeArea` and `near` (AREA / PREFECTURE / null). The title says "quanh <khu vực>" only
@@ -291,7 +339,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
     asks at once on events and otherwise every 4 s for the open conversation and ~16 s for the list, 15 s / 60 s while
     the stream is open, and sets it); "(n) " in front of the tab title; on every other page an in-app notice "Tin nhắn mới từ <tên>" / "<tên> muốn
     nhắn tin với bạn" with "Xem" from `GET /counts` `latest` (sessionStorage `asvsj.chat.seen.<userId>`). On phones the
-    header's "Tôi" button is hidden (the tab bar has it) to make room. "Nhắn tin" next to the author of a post or question
+    header's "Tôi" button is hidden (the "Thêm" sheet of the tab bar has it) to make room. "Nhắn tin" next to the author of a post or question
     (guests: to sign in with `next`) and on others' comments and answers (Members only, `blog-detail.js`); "Tin nhắn" on
     "Tôi". "Đăng xuất" first drops this browser's push subscription and forgets the chat key kept in it (shared
     computers): the next sign-in asks once for the "mật khẩu khôi phục".
@@ -517,7 +565,104 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.
-- Navbar has 8 tabs (Hỏi-Đáp after Blog); on phones the tab bar sizes each tab by its label so all fit at 320 px.
+- "Câu hỏi thường gặp" (FAQ, `feature/faq`, V16) is the second tab of `/qa` (user decision; it was the page `/faq`):
+  `/qa?tab=faq&q=&topic=&page=`, one entry `/qa?tab=faq&id=` (address read and written by `lib/qa-state.js`, Node test
+  `qa-state.test.mjs`; pages counted from 1). Old `/faq`, `/faq/` and `/pages/faq.html` answer 301 there, the old
+  0-based `page` turned 1-based (`CleanUrls.cleanAddress`). Entries are written by Moderators (`/moderator/faqs`, from
+  scratch or from a best answer, `faq_sources`), are not member content (no like, comment, report) and keep their own
+  tables and topics (`faq_topics`); they open in place (`faq-ui.js faqItem`). The tab: search box shared with the
+  community tab (the text is kept when switching), topic buttons with counts, 10 a page; a search holding no entry
+  word for word lists the related ones. The community tab shows up to 3 related entries above the questions of a
+  search (page 1 only), and "Đặt câu hỏi" (new questions only) offers up to 3 under the title while it is typed
+  (≥ 8 characters, 500 ms; they open in place, "Mở trong tab mới"). API (public): `GET /api/faqs` (`q` matches
+  question + answer as typed, accents and case ignored, `%`/`_` literal, like the Hỏi-Đáp search), `/api/faqs/topics`,
+  `/api/faqs/{id}`, `GET /api/faqs/related?q=&limit=` (1–5, default 3; `FaqService.related` + `FaqMatcher`: words of
+  the text that are not question words (`FaqMatcher.COMMON`, "cần chốt") score 2 in the question / 1 in the answer,
+  neighbouring word pairs 3 / 1; related from half of what the text can reach, at least 1, at most 4; Japanese runs
+  match inside longer ones; published entries only, newest 1000 read). Tests `FaqMatcherTest` (the V19 entries),
+  `FaqFlowTest` (own database `asvsj_faq_test_20261103`).
+- Navbar: see "Navigation" under Roles, homepage, profile (7 links on desktop with a "Thêm" menu for what does not
+  fit; 5 tabs on phones, the last opening the "Thêm" sheet).
+
+## Nhật ngữ (feature/phrase)
+- The prototype's "Học" tab, named "Nhật ngữ" in the navbar (key `learn`, icon `translate`; was "Mẫu câu & Từ vựng").
+  Page `/phrases` (`pages/phrases.html`, `assets/js/pages/phrases.js`, `assets/css/phrases.css`); the view is in the
+  address: none = "Chủ đề", `?by=category` = "Địa điểm", `?topic=pay&kind=VOCAB`, `?category=konbini&kind=PHRASE`,
+  `?view=learning|learned` (the Member's own lists, guests go to sign in), `&status=`, `?q=` (search). Old
+  `?view=favorites` / `?view=notebook` links open the start page.
+  Home's "Học thêm chủ đề này" opens the phrase's topic (`HomeDtos.Phrase.topicId`, else its category). Tables:
+  `phrases` (kind PHRASE "Mẫu câu" / VOCAB "Từ vựng", one place
+  category), `learning_topics`, `phrase_topic_links`, `user_phrase_marks` (`is_learning` "Chưa thuộc", `is_learned` "Đã
+  thuộc", never both, CHECK `ck_mark_card`, V17; the old `in_notebook` / `is_favorite` column was dropped in V18).
+  Entries are written by the
+  Academic Manager (sample data in `dev/sample-data.sql`: six topics; "Lịch sự cơ bản" was dropped by the team and
+  `DevDataSeeder.dropPoliteTopic` removes it from databases that loaded it before).
+- Removed (user decisions): practice sentences ("Câu luyện tập": no Member form, no Academic Manager pages, no API;
+  V18 drops `practice_sentences` and the PRACTICE target of `ck_scan_target`, `ck_case_target`, `ck_appeal_target`,
+  after deleting the practice rows that only development databases held, points taken back), the
+  "Sổ tay" review deck (no review schedule, levels or suggestions: a flash card answer is simply kept) and "Yêu thích" /
+  "Đã lưu" (no heart, no list, no API; "Nhật ngữ đã lưu" left Tôi; the Academic Manager's library has no "Yêu thích"
+  count).
+- API (`PhraseController`, `PhraseService`, `PhraseRepository`, `PhraseDtos`; GETs public): `GET /api/phrases/overview`
+  (`parts`: Mẫu câu and Từ vựng, each with its topics, most entries first, and categories, each with `count` and the
+  Member's `learned`; `member`; ACADEMIC_REPORT reasons), `GET
+  /api/phrases?topic=&category=&mine=learning|learned&q=` (cards by category then id, at most 200: category,
+  topics, `learning`, `learned`; `q` matches Japanese, romaji, meaning, category and topic names, accents and case
+  ignored; an unknown `mine` → 400). Members only (role USER, ACTIVE; staff MSG18, guests 401): POST
+  `/api/phrases/{id}/flash` `{learned}` (the flash card answer, the last one counts), DELETE `/api/phrases/{id}/flash`
+  ("Bỏ đánh dấu"; each answers the phrase's marks), POST `/api/phrases/{id}/report` `{reasonId, note}`. The kind of a
+  set is filtered in the page, so the list takes no `kind`. Where each part of the page is drawn: the map at the top of
+  `phrases.js` (and of `academic.js` for the Academic Manager's pages).
+- Reports: `ContentReportService` takes PHRASE targets with the ACADEMIC_REPORT reasons (`academicReasons()`: Sai tiếng
+  Nhật, Sai nghĩa, Xúc phạm, Spam) and opens their case for handler ACADEMIC_MANAGER. A phrase is never hidden by
+  reports.
+- Page: "Đưa cho nhân viên xem" (full-screen dialog; phrases only, not on "Từ vựng" cards: user decision), "Nghe" (browser
+  `speechSynthesis`, ja-JP, rate 0.85) and "Bỏ đánh dấu" on each card with a "Chưa thuộc" / "Đã
+  thuộc" badge, progress bars per topic/category (Members, by "Đã thuộc"). "Luyện thẻ ghi nhớ" = flash cards over the
+  list on screen (everyone may flip; only a Member's answers are kept): flip, then "Chưa thuộc" / "Đã thuộc"; at the
+  end "Luyện lại N thẻ chưa thuộc". No automated tests for "Nhật ngữ" (removed, user decision).
+- Start page layout (user decisions): a "Luyện tập" button under the search; then two main sections,
+  "Chủ đề" and "Địa điểm" (big buttons, `?by=category`), each split into "Từ vựng" then "Mẫu câu" (`overview.parts[]`
+  {kind, name, icon, count, learned, topics, categories}, each counted over that kind only; a topic or category without
+  an entry of that kind is not under it). No "Tất cả từ vựng / mẫu câu" card. A topic or category set
+  (`?topic=pay&kind=VOCAB`) shows one kind at a time, with "Từ vựng (n) / Mẫu câu (m)" when it holds both; without
+  `kind` (links from Home, notifications) it opens the kind it has entries in, Mẫu câu first. Search covers both,
+  results under "Từ vựng" and "Mẫu câu".
+- "Luyện tập": a dialog over the library (`GET /api/phrases` without filters, read again each time, so at most
+  `LIST_MAX` 200 entries): "Luyện theo" "Tất cả / Chủ đề / Địa điểm" with a list of the topics or places that hold
+  entries (count in brackets; the first one picked by default), kind "Cả hai / Từ vựng / Mẫu câu", for Members the mark
+  "Tất cả / Chưa thuộc / Đã thuộc / Chưa luyện" (every count follows the choices above it), "Xáo trộn thứ tự thẻ" (on),
+  then the flash cards. The choices stay while the page is open. Closing it redraws the start page's numbers.
+- The "Chưa thuộc" / "Đã thuộc" lists (both kinds, "Tất cả / Từ vựng / Mẫu câu" filter) have no button on the start page;
+  the end of a flash card round links to "Chưa thuộc". Every set has, for Members, the filter "Tất cả / Chưa thuộc / Đã
+  thuộc / Chưa luyện" (`&status=learning|learned|new`, client side; "Chưa luyện" = no flash card answer; not in the
+  lists "Chưa thuộc" / "Đã thuộc"); flash cards take the filtered list. Report toast: "Cảm ơn bạn. Báo cáo đã được
+  gửi." (UC 8 AF5).
+- Academic Manager side (spec `docs/use-cases/dac-ta-uc-hoc-tieng-nhat-va-su-kien.md` UC 9–14, "Japanese Content Editor",
+  shown in the UI as "Biên tập viên nội dung tiếng Nhật" (short "BTV tiếng Nhật"; was "Người quản lý học thuật") =
+  role ACADEMIC_MANAGER). `AcademicController` (`/api/academic/**`, role-guarded), `AcademicService`,
+  `AcademicRepository`, `AcademicDtos`; pages `/academic` (Tổng quan), `/academic/phrases`, `/academic/topics`,
+  `/academic/phrase-reports` (`pages/academic/*.html` with `<body data-view>`, one script `assets/js/pages/academic.js`,
+  `assets/css/academic.css`, shell `components/staff-desk.js`). Every change goes to the activity log; READ COMMITTED;
+  the phrase row is locked before its report case (same order as a Member's report).
+  - Tổng quan: open reports, library counts by kind, categories without entries (link to add one), topics under 3
+    entries, the manager's last 5 actions.
+  - Chủ đề học (UC 9–11): name ≤ 60, not empty, unique by `VietnameseText.squash` ("Chủ đề học này đã có."), icon from
+    `AcademicService.ICONS` (default `label`), id "t" + base-36 time; names checked with every topic row locked. Delete
+    removes the links only (phrases and marks stay). Unchanged save = no log.
+  - Thư viện mẫu câu (UC 12–14): filters category, topic, kind, search (Japanese/romaji/meaning), 20 a page newest first,
+    with their open reports (column "Báo cáo"). Fields (all errors at once in `fields`): category, kind
+    PHRASE/VOCAB, Japanese with kana/kanji ≤ 200, romaji optional ≤ 200 (stored "" when empty, "cần chốt"), meaning ≤ 300,
+    topics that exist. Same Japanese in the same category (byte for byte) answers `saved:false` + `duplicate` until
+    `confirmDuplicate` (UC 12 AF5). After adding, the category stays for the next entry. Edit replaces the topics; with
+    `reportCaseId` ("Sửa mẫu câu này") the phrase's open reports close as CORRECTED. Delete is soft (`deleted_at`;
+    restore "cần chốt") and closes the open reports of the phrase (REMOVE).
+  - Báo cáo mẫu câu (UC 13 AF1/AF2): open PHRASE cases, urgent first, reasons counted, reporters with notes; "Sửa mẫu câu
+    này" → `/academic/phrases?edit=&case=`, "Không sai, bỏ qua" → KEEP. False reports are not counted yet (the
+    Moderator queue will add that rule).
+- Header: the nav is compact between 861 and 1320 px, icons hide below 1100 px, and the logo's name hides between 861
+  and 960 px and below 361 px, so the header never scrolls sideways. A staff account's link to its own pages
+  (`.desk-link`) shows only its icon below 1500 px.
 
 ## Places from OpenStreetMap (feature/place)
 - Why not Google Maps: Vietnam is a Google Maps Platform prohibited territory (every Places request from a
@@ -740,6 +885,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   pages catch up. Pages keep polling as a slower safety net. Measured on the dev PC: a message reaches the other page in
   under 0.1 s locally; through the free Pinggy tunnel every request still costs 0.3–1.5 s (the relay), so a deployed
   server with its own https address is much faster than the tunnel.
+- Transfer (application.properties): `server.compression` gzips HTML, CSS, JS, JSON, SVG and the manifest above 1 KB
+  (map.js 89 → 24 KB, messages.js 117 → 32 KB, site.css 26 → 6 KB; photos, videos and the SSE stream are left alone).
+  `spring.web.resources.cache.cachecontrol.no-cache=true`: files in static/ are kept by the browser and checked again
+  with Last-Modified (304) on every use, instead of Spring Security's "no-store" that made every page download every
+  file again; API answers keep "no-store" and /media its own header (`StaticCacheFlowTest`).
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.

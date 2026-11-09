@@ -1,0 +1,153 @@
+/* =========================================================
+   ASVSJ - Admin: tổng quan, chi tiết tài khoản, cấu hình
+   Bổ sung cho admin-desk.css; chỉ dùng biến màu của tokens.css.
+   ========================================================= */
+
+/* Thanh chọn khoảng thời gian */
+.admin-period {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+}
+.admin-period .btn.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-text); }
+.admin-period-custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.admin-period-custom .field { min-width: 150px; }
+.admin-input {
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    width: 100%;
+}
+.admin-input:focus { outline: none; border-color: var(--brand); background: var(--surface); box-shadow: var(--focus); }
+.admin-input[aria-invalid="true"] { border-color: var(--crit); }
+.field-error { color: var(--crit); font-size: 13px; margin: 0; }
+
+/* Lưới hai cột: biểu đồ bên trái, ô số bên phải */
+.admin-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 16px; align-items: start; }
+.admin-panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    gap: 12px;
+    align-content: start;
+}
+.admin-panel h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.admin-stat-sub { font-size: 12.5px; color: var(--muted); }
+
+/* Biểu đồ cột: mỗi ngày một cột, cuộn ngang khi quá nhiều ngày */
+.admin-chart { overflow-x: auto; padding-bottom: 4px; }
+.admin-chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 180px; min-width: 100%; width: max-content; }
+.admin-bar { display: grid; flex: 1; grid-template-rows: 16px 1fr 18px; justify-items: center; width: 34px; height: 100%; }
+.admin-bar-value { font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.admin-bar-track { display: flex; justify-content: space-around; align-items: flex-end; width: 50%; min-width: max-content; height: 100%; }
+.admin-bar-fill { width: 100%; min-height: 2px; background: var(--brand); border-radius: 6px 6px 0 0; }
+.admin-bar-fill.zero { background: var(--line); }
+.admin-bar-day { font-size: 11.5px; color: var(--muted); }
+
+/* Thanh hạn mức dịch vụ */
+.admin-quota-list { display: grid; gap: 14px; }
+.admin-quota-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; }
+.admin-quota-head b { color: var(--ink); }
+.admin-quota-bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.admin-quota-fill { height: 100%; background: var(--ok); border-radius: 999px; }
+.admin-quota.hot .admin-quota-fill { background: var(--crit); }
+.admin-quota.hot .admin-quota-head b { color: var(--crit); }
+.admin-quota-warn { color: var(--crit); font-size: 12.5px; font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+
+/* Cấu hình hiện tại (chỉ đọc) và nhân sự */
+.admin-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; margin: 0; }
+.admin-kv div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+.admin-kv dt { color: var(--muted); }
+.admin-kv dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.admin-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Tag định danh (chỉ đọc) */
+.admin-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.admin-tag {
+    --tag-color: var(--brand);
+    white-space: nowrap;
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--tag-color);
+    color: var(--tag-color);
+    background: var(--surface);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+/* Danh sách tài khoản: tên không bị bóp hẹp thành nhiều dòng, nhãn "Bạn" nằm cạnh tên */
+.admin-table .user-meta .name { white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.admin-table td .admin-tags { max-width: 240px; }
+
+/* Trang chi tiết tài khoản */
+.admin-detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.admin-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+.admin-dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 14px; }
+.admin-dl dt { color: var(--muted); }
+.admin-dl dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.admin-role-box { display: grid; gap: 10px; }
+.admin-role-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.admin-role-row .select { flex: 1 1 200px; }
+.admin-inline-msg { font-size: 14px; padding: 10px 12px; border-radius: 10px; background: var(--ai-soft); color: var(--ink); }
+.admin-inline-msg.error { background: var(--crit-soft); color: var(--crit); }
+.admin-log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.admin-log-list li { display: grid; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.admin-log-list li:last-child { border-bottom: none; padding-bottom: 0; }
+
+/* Thẻ tham số cấu hình */
+.admin-param-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.admin-param { display: grid; gap: 6px; align-content: start; }
+.admin-param label { font-weight: 600; font-size: 14px; }
+.admin-input:disabled { opacity: .6; cursor: not-allowed; background: var(--surface-2); }
+.admin-panel fieldset + fieldset { margin-top: 12px !important; padding-top: 16px; border-top: 1px solid var(--line); }
+.admin-param .note { margin: 0; }
+.admin-savebar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+/* Từ khóa cấm: huy hiệu đỏ có nút xóa */
+.admin-kw-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.admin-kw-form .field { flex: 1 1 260px; }
+.admin-kw-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-kw {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px 2px 12px;
+    border-radius: 999px;
+    background: var(--crit-soft);
+    color: var(--crit);
+    font-size: 14px;
+    font-weight: 600;
+}
+.admin-kw-text, .admin-kw-x {
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    border-radius: 999px;
+}
+.admin-kw-text { padding: 4px 6px; }
+.admin-kw-x { padding: 2px; display: inline-flex; }
+.admin-kw-text:focus-visible, .admin-kw-x:focus-visible { outline: none; box-shadow: var(--focus); }
+.admin-kw-edit { display: inline-flex; gap: 4px; align-items: center; padding: 2px 0; }
+.admin-kw-edit .admin-input { height: 32px; width: 200px; }
+
+@media (max-width: 860px) {
+    .admin-split { grid-template-columns: minmax(0, 1fr); }
+    .admin-dl { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+    .admin-dl dd { margin-bottom: 8px; }
+}

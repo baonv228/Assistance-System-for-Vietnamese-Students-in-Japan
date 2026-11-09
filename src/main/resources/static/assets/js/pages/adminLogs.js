@@ -25,12 +25,13 @@ async function main() {
         </div>
 
         <div class="admin-filter-bar">
-            <select id="logActionFilter" class="admin-filter-select" style="min-width: 260px;">
+            <select id="logActionFilter" class="admin-filter-select" style="min-width: min(260px, 100%);" aria-label="Lọc theo loại hành động">
                 <option value="">Tất cả loại hành động</option>
                 <option value="USER_ROLE_CHANGE">Đổi vai trò người dùng (USER_ROLE_CHANGE)</option>
                 <option value="USER_STATUS_CHANGE">Đổi trạng thái tài khoản (USER_STATUS_CHANGE)</option>
                 <option value="SETTING_UPDATE">Cập nhật tham số cấu hình (SETTING_UPDATE)</option>
                 <option value="KEYWORD_ADD">Thêm từ khóa cấm (KEYWORD_ADD)</option>
+                <option value="KEYWORD_UPDATE">Sửa từ khóa cấm (KEYWORD_UPDATE)</option>
                 <option value="KEYWORD_DELETE">Xóa từ khóa cấm (KEYWORD_DELETE)</option>
             </select>
 
@@ -214,6 +215,7 @@ function formatAction(action) {
         case "USER_STATUS_CHANGE": return "Đổi trạng thái";
         case "SETTING_UPDATE": return "Sửa cấu hình";
         case "KEYWORD_ADD": return "Thêm từ cấm";
+        case "KEYWORD_UPDATE": return "Sửa từ cấm";
         case "KEYWORD_DELETE": return "Xóa từ cấm";
         default: return action;
     }
@@ -225,6 +227,7 @@ function getActionBadgeClass(action) {
         case "USER_STATUS_CHANGE": return "warn";
         case "SETTING_UPDATE": return "lan";
         case "KEYWORD_ADD": return "ok";
+        case "KEYWORD_UPDATE": return "lan";
         case "KEYWORD_DELETE": return "crit";
         default: return "";
     }

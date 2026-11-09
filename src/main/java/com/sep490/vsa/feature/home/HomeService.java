@@ -1,11 +1,14 @@
 package com.sep490.vsa.feature.home;
 
+import com.sep490.vsa.common.exception.ApiException;
+import com.sep490.vsa.common.text.VietnameseText;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.home.HomeDtos.EventItem;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
 import com.sep490.vsa.feature.home.HomeDtos.FeedReason;
+import com.sep490.vsa.feature.home.HomeDtos.ForYouFeed;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
 import com.sep490.vsa.feature.home.HomeDtos.GuideNext;
 import com.sep490.vsa.feature.home.HomeDtos.GuideProgress;
@@ -13,6 +16,7 @@ import com.sep490.vsa.feature.home.HomeDtos.MemberHome;
 import com.sep490.vsa.feature.home.HomeDtos.Phrase;
 import com.sep490.vsa.feature.home.HomeDtos.Quote;
 import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
+import com.sep490.vsa.feature.home.HomeDtos.ScopeCount;
 import com.sep490.vsa.feature.home.HomeDtos.Stats;
 import com.sep490.vsa.feature.home.HomeDtos.Tag;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -45,6 +49,18 @@ public class HomeService {
     /** "Dành cho bạn": up to 5 posts, those of the last 30 days first, older ones fill the rest. */
     private static final int FOR_YOU_SIZE = 5;
     private static final int FOR_YOU_DAYS = 30;
+    /**
+     * Page "Dành cho bạn" ("Xem tất cả"): the same ranking 10 posts at a time, at most 200 pages deep, like "Review mới"
+     * ("cần chốt").
+     */
+    static final int FOR_YOU_PAGE_SIZE = 10;
+    static final int FOR_YOU_MAX_PAGE = 199;
+    /** "Tìm trong bài dành cho bạn": as long as the Blog's search text. */
+    static final int FOR_YOU_KEYWORD_MAX = 100;
+
+    /** The parts of the page "Dành cho bạn": every post, or only those that matched one kind of reason. */
+    enum ForYouScope { ALL, NEAR, STAGE, INTEREST }
+
     /**
      * "Chủ đề bạn quan tâm" ("cần chốt"): topics of what the user did in the last 90 days, weighted like 1, save 2,
      * comment 2 (once per post), own post or question 3; the 3 heaviest with at least 2 points, so one like is not enough.
@@ -101,21 +117,78 @@ public class HomeService {
     }
 
     public MemberHome member(Long userId) {
-        var me = jdbc.queryForMap("""
-                SELECT u.display_name, u.stage, u.area_id, a.display_name AS area_name, a.prefecture_code, u.points
-                FROM users u LEFT JOIN areas a ON a.id = u.area_id WHERE u.id = ?""", userId);
-        String stage = (String) me.get("stage");
-        Long areaId = me.get("area_id") == null ? null : ((Number) me.get("area_id")).longValue();
-        Area area = areaId == null ? null : new Area(areaId, (String) me.get("prefecture_code"));
-        int points = ((Number) me.get("points")).intValue();
+        Me me = me(userId);
         String rankName = jdbc.query("SELECT name FROM ranks WHERE min_points <= ? ORDER BY min_points DESC LIMIT 1",
-                (rs, i) -> rs.getString(1), points).stream().findFirst().orElse("Người mới");
+                (rs, i) -> rs.getString(1), me.points()).stream().findFirst().orElse("Người mới");
 
         List<Topic> interests = interests(userId);
-        return new MemberHome((String) me.get("display_name"), stage, areaId, (String) me.get("area_name"), points,
-                rankName,
-                phraseOfToday(), guide(userId, stage == null ? "ARR" : stage), events(), reviews(userId, area),
-                featured(), forYou(userId, area, stage, interests), interests.stream().map(Topic::name).toList());
+        Ranking forYou = ranking(userId, me, interests, null);
+        return new MemberHome(me.displayName(), me.stage(), me.area() == null ? null : me.area().id(), me.areaName(),
+                me.points(), rankName,
+                phraseOfToday(), guide(userId, me.stage() == null ? "ARR" : me.stage()), events(),
+                reviews(userId, me.area()), featured(), posts(forYou, ForYouScope.ALL, FOR_YOU_SIZE, 0),
+                interests.stream().map(Topic::name).toList());
+    }
+
+    /**
+     * Page "Dành cho bạn" ("Xem tất cả" on the member Home): the whole personal feed, ranked exactly like the Home's
+     * five posts ({@link #ranking}), so it starts with them and goes on with every other published post by others.
+     * {@code scope} NEAR, STAGE or INTEREST keeps only the posts that matched that reason, in the same order; a scope
+     * this member cannot use (no area, no stage, no interest yet), an unknown one or none is ALL. {@code page} is kept
+     * within 0–{@value #FOR_YOU_MAX_PAGE}. {@code q} ("Tìm trong bài dành cho bạn") keeps only the posts whose title,
+     * content or linked place holds it, as the Blog's search (accents and case ignored, at most
+     * {@value #FOR_YOU_KEYWORD_MAX} characters, else 400); the order, the reasons and the scope counts stay those of
+     * the feed, counted over the posts found.
+     */
+    public ForYouFeed forYouPage(Long userId, String scope, int page, String q) {
+        String text = q == null ? "" : q.strip();
+        if (text.length() > FOR_YOU_KEYWORD_MAX) {
+            throw ApiException.badRequest("Từ khóa tìm kiếm tối đa " + FOR_YOU_KEYWORD_MAX + " ký tự.");
+        }
+        String keyword = VietnameseText.fold(text);
+        Me me = me(userId);
+        List<Topic> interests = interests(userId);
+        Ranking ranking = ranking(userId, me, interests, keyword.isEmpty() ? null : keyword);
+        Map<String, Object> counts = named.queryForMap("""
+                SELECT COUNT(*) AS total, COALESCE(SUM(f.near > 0), 0) AS near,
+                       COALESCE(SUM(f.stage_topic IS NOT NULL), 0) AS stage,
+                       COALESCE(SUM(f.interest_topic IS NOT NULL), 0) AS interest
+                FROM (%s) f""".formatted(ranking.select()), ranking.params());
+        List<ScopeCount> scopes = new ArrayList<>();
+        scopes.add(new ScopeCount(ForYouScope.ALL.name(), ((Number) counts.get("total")).longValue()));
+        if (me.area() != null) {
+            scopes.add(new ScopeCount(ForYouScope.NEAR.name(), ((Number) counts.get("near")).longValue()));
+        }
+        if (!stageTopics(me.stage()).isEmpty()) {
+            scopes.add(new ScopeCount(ForYouScope.STAGE.name(), ((Number) counts.get("stage")).longValue()));
+        }
+        if (!interests.isEmpty()) {
+            scopes.add(new ScopeCount(ForYouScope.INTEREST.name(), ((Number) counts.get("interest")).longValue()));
+        }
+        String chosen = scopes.stream().map(ScopeCount::code).filter(code -> code.equals(scope)).findFirst()
+                .orElse(ForYouScope.ALL.name());
+
+        int shownPage = Math.min(Math.max(0, page), FOR_YOU_MAX_PAGE);
+        List<FeedPost> rows = posts(ranking, ForYouScope.valueOf(chosen), FOR_YOU_PAGE_SIZE + 1,
+                shownPage * FOR_YOU_PAGE_SIZE);
+        boolean hasMore = rows.size() > FOR_YOU_PAGE_SIZE && shownPage < FOR_YOU_MAX_PAGE;
+        return new ForYouFeed(chosen, keyword.isEmpty() ? null : text, me.areaName(), me.stage(),
+                interests.stream().map(Topic::name).toList(), scopes,
+                shownPage, hasMore, rows.size() > FOR_YOU_PAGE_SIZE ? rows.subList(0, FOR_YOU_PAGE_SIZE) : rows);
+    }
+
+    /** What the member Home and "Dành cho bạn" read about the user. */
+    private record Me(String displayName, String stage, Area area, String areaName, int points) {
+    }
+
+    private Me me(Long userId) {
+        var row = jdbc.queryForMap("""
+                SELECT u.display_name, u.stage, u.area_id, a.display_name AS area_name, a.prefecture_code, u.points
+                FROM users u LEFT JOIN areas a ON a.id = u.area_id WHERE u.id = ?""", userId);
+        Long areaId = row.get("area_id") == null ? null : ((Number) row.get("area_id")).longValue();
+        return new Me((String) row.get("display_name"), (String) row.get("stage"),
+                areaId == null ? null : new Area(areaId, (String) row.get("prefecture_code")),
+                (String) row.get("area_name"), ((Number) row.get("points")).intValue());
     }
 
     /** The user's area and its prefecture (null for an area without one). */
@@ -123,6 +196,10 @@ public class HomeService {
     }
 
     private record Topic(long id, String name) {
+    }
+
+    private static List<String> stageTopics(String stage) {
+        return stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
     }
 
     /**
@@ -157,18 +234,28 @@ public class HomeService {
     }
 
     /**
-     * Published posts (not questions) by other people for "Dành cho bạn", never those of a locked or deleted account
-     * ({@link ActiveAuthors}). Posts the user already liked, saved or commented on only fill the list, then posts of
-     * the last 30 days come first and older ones fill the rest; within each group: linked to a place in the user's
-     * area, then in the same prefecture, then a topic that suits the user's stage, then one of their interests, then
-     * likes + 2 × comments, then newest. Each post says which of these reasons matched and what matched.
+     * The personal feed's candidates as one SELECT (read as {@code f} by the caller) with its parameters: every
+     * published post (not question) by other people, never those of a locked or deleted account
+     * ({@link ActiveAuthors}), each with what it matched: {@code near} (2 = a linked place in the user's area, 1 = in
+     * the same prefecture), {@code stage_topic}, {@code interest_topic}, plus {@code recent} and {@code engaged}.
      */
-    private List<FeedPost> forYou(Long userId, Area area, String stage, List<Topic> interests) {
-        List<String> stageTopics = stage == null ? List.of() : STAGE_TOPICS.getOrDefault(stage, List.of());
+    private record Ranking(String select, MapSqlParameterSource params) {
+    }
+
+    /**
+     * How "Dành cho bạn" ranks (see {@link #posts}): posts the user already liked, saved or commented on only fill the
+     * list, then posts of the last 30 days come first and older ones fill the rest; within each group: linked to a
+     * place in the user's area, then in the same prefecture, then a topic that suits the user's stage, then one of
+     * their interests, then likes + 2 × comments, then newest. Each post says which of these reasons matched and what
+     * matched. {@code keyword} (already {@link VietnameseText#fold folded}, null for none) keeps only the posts whose
+     * title, content or the name of an approved linked place holds it, the Blog's search rule.
+     */
+    private Ranking ranking(Long userId, Me me, List<Topic> interests, String keyword) {
+        Area area = me.area();
+        List<String> stageTopics = stageTopics(me.stage());
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("userId", userId)
-                .addValue("since", Timestamp.from(clock.instant().minus(Duration.ofDays(FOR_YOU_DAYS))))
-                .addValue("limit", FOR_YOU_SIZE);
+                .addValue("since", Timestamp.from(clock.instant().minus(Duration.ofDays(FOR_YOU_DAYS))));
         // 2 = a linked place in the user's area, 1 = in the same prefecture, 0 = elsewhere or no place; and that
         // place's name (a merged place counts as the place it was merged into)
         String near = "0";
@@ -204,24 +291,58 @@ public class HomeService {
                     (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
                      WHERE btl.blog_id = b.id AND t.id IN (:interestIds) ORDER BY FIELD(t.id, :interestIds) LIMIT 1)""";
         }
+        // As BlogFeedRepository: MySQL's accent- and case-insensitive collation on the columns, the text folded here
+        String search = "";
+        if (keyword != null) {
+            params.addValue("kw", "%" + escapeLike(keyword) + "%");
+            search = """
+                     AND (b.title COLLATE utf8mb4_0900_ai_ci LIKE :kw OR b.content COLLATE utf8mb4_0900_ai_ci LIKE :kw
+                          OR EXISTS (SELECT 1 FROM blog_place_links kbl JOIN places kp ON kp.id = kbl.place_id
+                                     WHERE kbl.blog_id = b.id AND kp.status = 'ACTIVE'
+                                       AND (kp.name_vi COLLATE utf8mb4_0900_ai_ci LIKE :kw
+                                            OR kp.name_ja COLLATE utf8mb4_0900_ai_ci LIKE :kw
+                                            OR kp.name_en COLLATE utf8mb4_0900_ai_ci LIKE :kw)))""";
+        }
+        String select = """
+                SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
+                       b.comment_count, b.created_at, b.created_at >= :since AS recent,
+                       (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                        WHERE btl.blog_id = b.id AND t.is_active ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)
+                         AS topic_name,
+                       %s AS near, %s AS near_place, %s AS stage_topic, %s AS interest_topic,
+                       (EXISTS (SELECT 1 FROM blog_likes l WHERE l.blog_id = b.id AND l.user_id = :userId)
+                        OR EXISTS (SELECT 1 FROM saved_blogs s WHERE s.blog_id = b.id AND s.user_id = :userId)
+                        OR EXISTS (SELECT 1 FROM comments c WHERE c.blog_id = b.id AND c.author_id = :userId))
+                         AS engaged
+                FROM blogs b JOIN users u ON u.id = b.author_id
+                WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> :userId AND %s %s"""
+                .formatted(near, nearPlace, stageTopic, interestTopic, ActiveAuthors.of("b"), search);
+        return new Ranking(select, params);
+    }
+
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    /**
+     * {@code limit} posts of the ranked feed from {@code offset} on, all of them ({@code ALL}) or only those that
+     * matched one reason. The order ends with the post id, so a page always follows the one before it.
+     */
+    private List<FeedPost> posts(Ranking ranking, ForYouScope scope, int limit, int offset) {
+        String only = switch (scope) {
+            case ALL -> "";
+            case NEAR -> "WHERE f.near > 0";
+            case STAGE -> "WHERE f.stage_topic IS NOT NULL";
+            case INTEREST -> "WHERE f.interest_topic IS NOT NULL";
+        };
+        MapSqlParameterSource params = new MapSqlParameterSource(ranking.params().getValues())
+                .addValue("limit", limit)
+                .addValue("offset", offset);
         return named.query("""
-                SELECT * FROM (
-                    SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
-                           b.comment_count, b.created_at, b.created_at >= :since AS recent,
-                           (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
-                            WHERE btl.blog_id = b.id AND t.is_active ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)
-                             AS topic_name,
-                           %s AS near, %s AS near_place, %s AS stage_topic, %s AS interest_topic,
-                           (EXISTS (SELECT 1 FROM blog_likes l WHERE l.blog_id = b.id AND l.user_id = :userId)
-                            OR EXISTS (SELECT 1 FROM saved_blogs s WHERE s.blog_id = b.id AND s.user_id = :userId)
-                            OR EXISTS (SELECT 1 FROM comments c WHERE c.blog_id = b.id AND c.author_id = :userId))
-                             AS engaged
-                    FROM blogs b JOIN users u ON u.id = b.author_id
-                    WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST' AND b.author_id <> :userId AND %s
-                ) f
+                SELECT * FROM (%s) f %s
                 ORDER BY engaged, recent DESC, near DESC, stage_topic IS NOT NULL DESC, interest_topic IS NOT NULL DESC,
                          like_count + 2 * comment_count DESC, created_at DESC, id DESC
-                LIMIT :limit""".formatted(near, nearPlace, stageTopic, interestTopic, ActiveAuthors.of("b")),
+                LIMIT :limit OFFSET :offset""".formatted(ranking.select(), only),
                 params,
                 (rs, i) -> {
                     List<FeedReason> reasons = new ArrayList<>();
@@ -241,7 +362,8 @@ public class HomeService {
                             excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
                             rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
                             rs.getTimestamp("created_at").toInstant(),
-                            reasons.isEmpty() ? null : reasons.get(0).label(), List.copyOf(reasons));
+                            reasons.isEmpty() ? null : reasons.get(0).label(), List.copyOf(reasons),
+                            rs.getBoolean("engaged"));
                 });
     }
 
@@ -339,11 +461,13 @@ public class HomeService {
         }
         long offset = LocalDate.now(clock.withZone(JAPAN)).toEpochDay() % total;
         return jdbc.query("""
-                SELECT ph.japanese, ph.romaji, ph.meaning_vi, c.name_vi, c.icon FROM phrases ph
+                SELECT ph.japanese, ph.romaji, ph.meaning_vi, c.id, c.name_vi, c.icon,
+                       (SELECT MIN(l.topic_id) FROM phrase_topic_links l WHERE l.phrase_id = ph.id)
+                FROM phrases ph
                 JOIN place_categories c ON c.id = ph.category_id
                 WHERE ph.kind = 'PHRASE' AND ph.deleted_at IS NULL ORDER BY ph.id LIMIT 1 OFFSET ?""",
                 (rs, i) -> new Phrase(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5)), offset).stream().findFirst().orElse(null);
+                        rs.getString(5), rs.getString(6), rs.getString(7)), offset).stream().findFirst().orElse(null);
     }
 
     /** Approved, not revoked identity tags whose tag type is still active (like the Blog's tags). */

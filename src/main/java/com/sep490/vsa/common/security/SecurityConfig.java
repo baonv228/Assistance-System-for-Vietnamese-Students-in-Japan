@@ -49,6 +49,7 @@ public class SecurityConfig {
     /** Member pages a guest is sent away from: after signing in they come back here (?next=, followed by login.js). */
     private static final RequestMatcher MEMBER_PAGES = new OrRequestMatcher(
             new AntPathRequestMatcher("/profile"), new AntPathRequestMatcher("/saved"),
+            new AntPathRequestMatcher("/for-you"),
             new AntPathRequestMatcher("/notifications"), new AntPathRequestMatcher("/messages"),
             new AntPathRequestMatcher("/messages/**"));
 
@@ -115,9 +116,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         // Pages of each role: the clean address and the file it forwards to (see CleanUrls)
                         .requestMatchers("/moderator", "/moderator/**", "/pages/moderator/**").hasRole("MODERATOR")
-                        .requestMatchers("/academic", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
+                        .requestMatchers("/academic", "/academic/**", "/pages/academic/**").hasRole("ACADEMIC_MANAGER")
                         .requestMatchers("/admin", "/admin/**", "/pages/admin/**").hasRole("ADMIN")
                         .requestMatchers("/profile", "/pages/profile.html", "/saved", "/pages/saved.html",
+                                "/for-you", "/pages/for-you.html",
                                 "/notifications", "/pages/notifications.html",
                                 "/messages", "/messages/**", "/pages/messages.html").authenticated()
                         .anyRequest().permitAll())

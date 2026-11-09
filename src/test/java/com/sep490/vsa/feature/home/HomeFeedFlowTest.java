@@ -2,13 +2,16 @@ package com.sep490.vsa.feature.home;
 
 import com.jayway.jsonpath.JsonPath;
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.home.HomeDtos.Featured;
 import com.sep490.vsa.feature.home.HomeDtos.FeedPost;
 import com.sep490.vsa.feature.home.HomeDtos.FeedReason;
+import com.sep490.vsa.feature.home.HomeDtos.ForYouFeed;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
 import com.sep490.vsa.feature.home.HomeDtos.Quote;
 import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
+import com.sep490.vsa.feature.home.HomeDtos.ScopeCount;
 import com.sep490.vsa.feature.home.HomeDtos.Stats;
 import com.sep490.vsa.feature.home.HomeDtos.Tag;
 import jakarta.servlet.http.Cookie;
@@ -20,6 +23,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -41,6 +46,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -413,6 +421,288 @@ class HomeFeedFlowTest {
         mvc.perform(get("/api/me/home")).andExpect(status().isUnauthorized());
     }
 
+    // ---------------------------------------------------------------- page "Dành cho bạn" (/for-you)
+
+    @Test
+    void pageListsTheWholeFeedInHomeOrderTenAtATime() throws Exception {
+        setProfile(viewer, area, null);
+        Instant now = Instant.now();
+        // 23 posts in the viewer's area: they lead the feed, most liked first
+        List<Long> near = new ArrayList<>();
+        for (int i = 0; i < 23; i++) {
+            near.add(blog(author, "POST", "PUBLISHED", now.minusSeconds(60L * i), 100 - i, 0, true, null));
+        }
+
+        String first = page(viewer, null, 0);
+        assertThat((String) JsonPath.read(first, "$.data.scope")).isEqualTo("ALL");
+        assertThat((Integer) JsonPath.read(first, "$.data.page")).isZero();
+        assertThat((Boolean) JsonPath.read(first, "$.data.hasMore")).isTrue();
+        List<Long> page0 = ids(JsonPath.read(first, "$.data.items"));
+        // The Home's five are the page's first five: one ranking
+        assertThat(page0).hasSize(HomeService.FOR_YOU_PAGE_SIZE).isEqualTo(near.subList(0, 10))
+                .startsWith(ids(forYou(viewer)).toArray(Long[]::new));
+        String second = page(viewer, "ALL", 1);
+        assertThat(ids(JsonPath.read(second, "$.data.items"))).isEqualTo(near.subList(10, 20));
+        List<Long> page2 = ids(JsonPath.read(page(viewer, null, 2), "$.data.items"));
+        assertThat(page2).startsWith(near.subList(20, 23).toArray(Long[]::new));
+        List<Long> three = new ArrayList<>(page0);
+        three.addAll(ids(JsonPath.read(second, "$.data.items")));
+        three.addAll(page2);
+        assertThat(three).doesNotHaveDuplicates();
+
+        // "Tất cả" counts every post by others a member may read (the shared test database holds thousands)
+        Long readable = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM blogs b WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST'
+                AND b.author_id <> ? AND %s""".formatted(ActiveAuthors.of("b")),
+                Long.class, viewer);
+        assertThat(count(first, "ALL")).isEqualTo(readable);
+        assertThat(count(first, "NEAR")).isEqualTo(23);
+        assertThat(scopeCodes(first)).containsExactly("ALL", "NEAR");      // no stage, no interest yet
+
+        // "Gần bạn": only these 23, the last page says there is no more
+        String nearLast = page(viewer, "NEAR", 2);
+        assertThat((String) JsonPath.read(nearLast, "$.data.scope")).isEqualTo("NEAR");
+        assertThat(ids(JsonPath.read(nearLast, "$.data.items"))).isEqualTo(near.subList(20, 23));
+        assertThat((Boolean) JsonPath.read(nearLast, "$.data.hasMore")).isFalse();
+        assertThat(ids(everything(viewer, "NEAR"))).isEqualTo(near);
+        Map<String, Object> top = JsonPath.read(first, "$.data.items[0]");
+        assertThat(top).containsEntry("reason", NEAR).containsEntry("engaged", false)
+                .containsEntry("title", "Feed " + word).containsEntry("likeCount", 100);
+        assertThat(top.get("reasons")).isEqualTo(List.of(
+                Map.of("code", "AREA", "label", NEAR, "detail", "Feed place " + word)));
+        assertThat((String) JsonPath.read(first, "$.data.areaName")).isEqualTo("Feed test – " + word);
+    }
+
+    @Test
+    void scopesKeepOnlyThePostsThatMatchedThatReason() throws Exception {
+        // Seen from ten years ahead only this test's posts are recent, so they lead every scope of the shared database
+        Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
+        HomeService home = new HomeService(jdbc, future, featuredPosts);
+        Instant day = future.instant().minus(Duration.ofDays(1));
+        setProfile(viewer, area, "PRE");
+        // Saving a "Việc làm thêm" post makes it an interest (2 points), and that post one the viewer already read
+        long saved = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Việc làm thêm");
+        save(viewer, saved, day);
+        long nearOnly = blog(author, "POST", "PUBLISHED", day, 0, 0, true, null);
+        long stageOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Visa và cư trú");
+        long both = blog(author, "POST", "PUBLISHED", day, 0, 0, false, "Nhà ở");          // suits PRE
+        topic(both, "Việc làm thêm");                                                    // and the interest
+        long interestOnly = blog(author, "POST", "PUBLISHED", day, HUGE, 0, false, "Việc làm thêm");
+        long plain = blog(author, "POST", "PUBLISHED", day, 2 * HUGE, 0, false, null);
+
+        ForYouFeed all = home.forYouPage(viewer, null, 0, null);
+        assertThat(all.scope()).isEqualTo("ALL");
+        assertThat(all.scopes()).extracting(ScopeCount::code).containsExactly("ALL", "NEAR", "STAGE", "INTEREST");
+        assertThat(all.stage()).isEqualTo("PRE");
+        assertThat(all.interests()).containsExactly("Việc làm thêm");
+        // The Home's order: area, stage (+ interest), stage, interest, then the rest
+        assertThat(all.items()).extracting(FeedPost::id).startsWith(nearOnly, both, stageOnly, interestOnly, plain);
+
+        ForYouFeed near = home.forYouPage(viewer, "NEAR", 0, null);
+        assertThat(near.scope()).isEqualTo("NEAR");
+        assertThat(near.items()).extracting(FeedPost::id).containsExactly(nearOnly);
+        assertThat(scopeCount(near, "NEAR")).isEqualTo(1);
+        assertThat(near.hasMore()).isFalse();
+
+        ForYouFeed stage = home.forYouPage(viewer, "STAGE", 0, null);
+        assertThat(stage.items()).extracting(FeedPost::id).startsWith(both, stageOnly)
+                .doesNotContain(nearOnly, interestOnly, plain, saved);
+        assertThat(stage.items()).allSatisfy(post ->
+                assertThat(post.reasons()).extracting(FeedReason::code).contains("STAGE"));
+        assertThat(scopeCount(stage, "STAGE")).isEqualTo(postsWithTopics(viewer, HomeService.STAGE_TOPICS.get("PRE")));
+
+        ForYouFeed interest = home.forYouPage(viewer, "INTEREST", 0, null);
+        assertThat(interest.items()).extracting(FeedPost::id).startsWith(both, interestOnly)
+                .doesNotContain(nearOnly, stageOnly, plain);
+        assertThat(interest.items()).allSatisfy(post ->
+                assertThat(post.reasons()).extracting(FeedReason::code).contains("INTEREST"));
+        assertThat(scopeCount(interest, "INTEREST")).isEqualTo(postsWithTopics(viewer, List.of("Việc làm thêm")));
+        // Every scope gives the same numbers
+        assertThat(interest.scopes()).isEqualTo(all.scopes());
+        assertThat(all.items()).filteredOn(FeedPost::engaged).isEmpty();             // the saved post is last
+    }
+
+    @Test
+    void unknownOrUnavailableScopesAreAllAndPagesStayInRange() throws Exception {
+        blog(author, "POST", "PUBLISHED", Instant.now(), 0, 0, true, null);
+        // A new member without area, stage or interest: "Tất cả" only
+        for (String scope : new String[]{"NEAR", "STAGE", "INTEREST", "near", "bogus", ""}) {
+            String body = page(viewer, scope, 0);
+            assertThat((String) JsonPath.read(body, "$.data.scope")).as(scope).isEqualTo("ALL");
+            assertThat(scopeCodes(body)).containsExactly("ALL");
+        }
+        String body = page(viewer, null, 0);
+        assertThat((Object) JsonPath.read(body, "$.data.areaName")).isNull();
+        assertThat((Object) JsonPath.read(body, "$.data.stage")).isNull();
+        assertThat((List<?>) JsonPath.read(body, "$.data.interests")).isEmpty();
+        assertThat((List<Map<String, Object>>) JsonPath.read(body, "$.data.items"))
+                .allSatisfy(item -> assertThat(item.get("reason")).isNull());
+
+        assertThat((Integer) JsonPath.read(page(viewer, null, -5), "$.data.page")).isZero();
+        String deep = page(viewer, null, 100_000);
+        assertThat((Integer) JsonPath.read(deep, "$.data.page")).isEqualTo(HomeService.FOR_YOU_MAX_PAGE);
+        assertThat((Boolean) JsonPath.read(deep, "$.data.hasMore")).isFalse();
+        mvc.perform(get("/api/me/for-you").param("page", "abc").session(session(viewer)))
+                .andExpect(status().isBadRequest());
+
+        // Area and stage chosen: their scopes appear, "Chủ đề quan tâm" still needs an interest
+        setProfile(viewer, area, "ARR");
+        body = page(viewer, "INTEREST", 0);
+        assertThat((String) JsonPath.read(body, "$.data.scope")).isEqualTo("ALL");
+        assertThat(scopeCodes(body)).containsExactly("ALL", "NEAR", "STAGE");
+        assertThat((String) JsonPath.read(page(viewer, "STAGE", 0), "$.data.scope")).isEqualTo("STAGE");
+    }
+
+    @Test
+    void pageLeavesOutWhatHomeLeavesOut() throws Exception {
+        setProfile(viewer, area, null);
+        Instant now = Instant.now();
+        long deleted = user("DELETED");
+        long locked = user("LOCKED");
+        // Never listed nor counted, although linked to the area and liked a lot
+        List<Long> hidden = List.of(
+                blog(author, "QA", "PUBLISHED", now, HUGE, 0, true, null),
+                blog(author, "POST", "PROCESSING", now, HUGE, 0, true, null),
+                blog(author, "POST", "HIDDEN", now, HUGE, 0, true, null),
+                blog(author, "POST", "REMOVED", now, HUGE, 0, true, null),
+                blog(author, "POST", "REJECTED", now, HUGE, 0, true, null),
+                blog(viewer, "POST", "PUBLISHED", now, HUGE, 0, true, null),
+                blog(deleted, "POST", "PUBLISHED", now, HUGE, 0, true, null),
+                blog(locked, "POST", "PUBLISHED", now, HUGE, 0, true, null));
+        long shown = blog(author, "POST", "PUBLISHED", now.minusSeconds(60), 0, 0, true, null);
+
+        assertThat(ids(everything(viewer, "NEAR"))).containsExactly(shown);
+        String first = page(viewer, null, 0);
+        assertThat(count(first, "NEAR")).isEqualTo(1);
+        // Recent, in the area and liked a lot: they would lead "Tất cả"
+        assertThat(ids(JsonPath.read(first, "$.data.items"))).startsWith(shown).doesNotContainAnyElementsOf(hidden);
+
+        // Nothing was deleted: unlocked, the account's post is listed again
+        jdbc.update("UPDATE users SET status = 'ACTIVE' WHERE id = ?", locked);
+        assertThat(ids(everything(viewer, "NEAR"))).containsExactly(hidden.get(7), shown);
+    }
+
+    @Test
+    void postsAlreadyLikedSavedOrCommentedOnComeLastOnThePage() throws Exception {
+        setProfile(viewer, area, null);
+        Instant now = Instant.now();
+        long liked = blog(author, "POST", "PUBLISHED", now, 3 * HUGE, 0, true, null);
+        like(viewer, liked, now);
+        long commented = blog(author, "POST", "PUBLISHED", now, 2 * HUGE, 0, true, null);
+        comment(viewer, commented, "PUBLISHED", now);
+        long fresh = blog(author, "POST", "PUBLISHED", now.minus(Duration.ofDays(60)), 0, 0, true, null);
+
+        List<Map<String, Object>> near = everything(viewer, "NEAR");
+        assertThat(ids(near)).containsExactly(fresh, liked, commented);
+        assertThat(near).extracting(item -> item.get("engaged")).containsExactly(false, true, true);
+    }
+
+    // ---------------------------------------------------------------- "Tìm trong bài dành cho bạn" (?q=)
+
+    @Test
+    void searchKeepsThePostsHoldingTheTextInFeedOrderWithTheirReasonsAndCounts() throws Exception {
+        setProfile(viewer, area, "ARR");
+        Instant now = Instant.now();
+        String text = "z" + word;
+        // In the title (area + a topic that suits ARR), in the content, and one without the text
+        long inTitle = titled(author, "Chợ đêm Ueno " + text, "Đi dạo buổi tối.", now.minusSeconds(3600), true, "Nhà ở");
+        long inContent = titled(author, "Một bài khác", "Đi CHỢ ĐÊM UENO " + text.toUpperCase() + " rất vui.",
+                now.minusSeconds(7200), false, null);
+        titled(author, "Chợ sáng Ueno", "Không có chữ đó.", now, true, "Nhà ở");
+        // Never in the feed, whatever they hold: the viewer's own post, a question, a locked account's post, a hidden one
+        titled(viewer, "Chợ đêm Ueno " + text, "Của tôi", now, true, null);
+        long question = titled(author, "Chợ đêm Ueno " + text + "?", "Hỏi", now, true, null);
+        jdbc.update("UPDATE blogs SET blog_type = 'QA' WHERE id = ?", question);
+        titled(user("LOCKED"), "Chợ đêm Ueno " + text, "Khóa", now, true, null);
+        long hidden = titled(author, "Chợ đêm Ueno " + text, "Ẩn", now, true, null);
+        jdbc.update("UPDATE blogs SET status = 'HIDDEN' WHERE id = ?", hidden);
+
+        // Accents, case and the spaces around the text do not matter
+        for (String q : List.of("cho dem ueno " + text, "  CHỢ ĐÊM Ueno " + text.toUpperCase() + " ")) {
+            String body = search(viewer, null, q);
+            assertThat((String) JsonPath.read(body, "$.data.q")).as(q).isEqualTo(q.strip());
+            List<Map<String, Object>> items = JsonPath.read(body, "$.data.items");
+            assertThat(ids(items)).as(q).containsExactly(inTitle, inContent);
+            assertThat(items.get(0).get("reasons")).isEqualTo(List.of(
+                    Map.of("code", "AREA", "label", NEAR, "detail", "Feed place " + word),
+                    Map.of("code", "STAGE", "label", FITS, "detail", "Nhà ở")));
+            assertThat(items.get(1).get("reasons")).isEqualTo(List.of());
+            // Every scope is counted over the posts found
+            assertThat(count(body, "ALL")).isEqualTo(2);
+            assertThat(count(body, "NEAR")).isEqualTo(1);
+            assertThat(count(body, "STAGE")).isEqualTo(1);
+            assertThat((Boolean) JsonPath.read(body, "$.data.hasMore")).isFalse();
+        }
+        // A scope and a text together
+        String near = search(viewer, "NEAR", text);
+        assertThat((String) JsonPath.read(near, "$.data.scope")).isEqualTo("NEAR");
+        assertThat(ids(JsonPath.read(near, "$.data.items"))).containsExactly(inTitle);
+        // The name of a linked approved place counts too
+        long linked = titled(author, "Không nhắc tên", "Không nhắc tên.", now.minusSeconds(60), true, null);
+        assertThat(ids(JsonPath.read(search(viewer, null, "feed PLACE " + word), "$.data.items")))
+                .contains(linked, inTitle).doesNotContain(inContent);
+    }
+
+    @Test
+    void searchTreatsLikeSignsAsTextAndBlankAsNoSearch() throws Exception {
+        setProfile(viewer, area, null);
+        long post = titled(author, "Giảm 50% ở Ueno " + word, "Nội dung.", Instant.now(), true, null);
+        assertThat(ids(JsonPath.read(search(viewer, null, "50% ở ueno " + word), "$.data.items"))).containsExactly(post);
+        for (String q : List.of("%" + word, "_" + word, "Ueno_" + word)) {
+            String body = search(viewer, null, q);
+            assertThat((List<?>) JsonPath.read(body, "$.data.items")).as(q).isEmpty();
+            assertThat(count(body, "ALL")).as(q).isZero();
+        }
+        // Blank = the whole feed, and no text is echoed
+        String all = page(viewer, null, 0);
+        for (String q : List.of("", "   ")) {
+            String body = search(viewer, null, q);
+            assertThat((Object) JsonPath.read(body, "$.data.q")).as(q).isNull();
+            assertThat(count(body, "ALL")).as(q).isEqualTo(count(all, "ALL"));
+        }
+        // As long as the Blog's search text
+        search(viewer, null, "x".repeat(HomeService.FOR_YOU_KEYWORD_MAX));
+        String tooLong = mvc.perform(get("/api/me/for-you").session(session(viewer))
+                        .param("q", "x".repeat(HomeService.FOR_YOU_KEYWORD_MAX + 1)))
+                .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat((String) JsonPath.read(tooLong, "$.message")).isEqualTo("Từ khóa tìm kiếm tối đa 100 ký tự.");
+    }
+
+    @Test
+    void searchPagesTenAtATimeAndTheHomeIsNeverNarrowed() throws Exception {
+        setProfile(viewer, area, null);
+        Instant now = Instant.now();
+        List<Long> found = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            found.add(titled(author, "Tìm " + word + " số " + i, "Nội dung.", now.minusSeconds(60L * i), true, null));
+        }
+        String first = search(viewer, null, word);
+        assertThat((Boolean) JsonPath.read(first, "$.data.hasMore")).isTrue();
+        assertThat(ids(JsonPath.read(first, "$.data.items"))).isEqualTo(found.subList(0, 10));
+        String second = mvc.perform(get("/api/me/for-you").session(session(viewer)).param("q", word).param("page", "1"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(ids(JsonPath.read(second, "$.data.items"))).isEqualTo(found.subList(10, 12));
+        assertThat((Boolean) JsonPath.read(second, "$.data.hasMore")).isFalse();
+        assertThat(count(second, "ALL")).isEqualTo(12);
+        // The Home's "Dành cho bạn" has no search: it still leads with these posts in the area
+        assertThat(ids(forYou(viewer))).isEqualTo(found.subList(0, 5));
+    }
+
+    @Test
+    void forYouPageNeedsSignInAndHasACleanAddress() throws Exception {
+        mvc.perform(get("/api/me/for-you")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/for-you")).andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?next=%2Ffor-you"));
+        mvc.perform(get("/for-you?scope=NEAR")).andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?next=%2Ffor-you%3Fscope%3DNEAR"));
+        mvc.perform(get("/for-you").session(session(viewer)))
+                .andExpect(status().isOk())
+                .andExpect(forwardedUrl("/pages/for-you.html"));
+        mvc.perform(get("/pages/for-you.html").session(session(viewer)))
+                .andExpect(status().isMovedPermanently())
+                .andExpect(redirectedUrlPattern("/for-you*"));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private long user(String status) {
@@ -447,6 +737,23 @@ class HomeFeedFlowTest {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 authorId, type, title, "Dòng đầu\n" + "nội dung dài ".repeat(30), status, likes, comments,
                 Timestamp.from(createdAt));
+        long id = jdbc.queryForObject("SELECT MAX(id) FROM blogs WHERE author_id = ? AND title = ?", Long.class,
+                authorId, title);
+        if (inArea) {
+            jdbc.update("INSERT INTO blog_place_links (blog_id, place_id) VALUES (?, ?)", id, place);
+        }
+        if (topicName != null) {
+            topic(id, topicName);
+        }
+        return id;
+    }
+
+    /** A published post with its own title and content (not counted, not liked), as the search tests need. */
+    private long titled(long authorId, String title, String content, Instant createdAt, boolean inArea,
+                        String topicName) {
+        jdbc.update("""
+                INSERT INTO blogs (author_id, blog_type, title, content, status, created_at)
+                VALUES (?, 'POST', ?, ?, 'PUBLISHED', ?)""", authorId, title, content, Timestamp.from(createdAt));
         long id = jdbc.queryForObject("SELECT MAX(id) FROM blogs WHERE author_id = ? AND title = ?", Long.class,
                 authorId, title);
         if (inArea) {
@@ -493,6 +800,68 @@ class HomeFeedFlowTest {
 
     private List<Map<String, Object>> forYou(long userId) throws Exception {
         return JsonPath.read(home(userId), "$.data.forYou");
+    }
+
+    /** One page of /api/me/for-you; {@code scope} null leaves the parameter out. */
+    private String page(long userId, String scope, int page) throws Exception {
+        var request = get("/api/me/for-you").session(session(userId)).param("page", String.valueOf(page));
+        if (scope != null) {
+            request.param("scope", scope);
+        }
+        return mvc.perform(request)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    /** The first page of /api/me/for-you narrowed by {@code q}; {@code scope} null leaves it out. */
+    private String search(long userId, String scope, String q) throws Exception {
+        var request = get("/api/me/for-you").session(session(userId)).param("q", q);
+        if (scope != null) {
+            request.param("scope", scope);
+        }
+        return mvc.perform(request)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    /** Every post of one scope of the page "Dành cho bạn", page after page, as "Xem thêm bài viết" reads them. */
+    private List<Map<String, Object>> everything(long userId, String scope) throws Exception {
+        List<Map<String, Object>> all = new ArrayList<>();
+        for (int p = 0; ; p++) {
+            String body = page(userId, scope, p);
+            assertThat((String) JsonPath.read(body, "$.data.scope")).isEqualTo(scope);
+            List<Map<String, Object>> items = JsonPath.read(body, "$.data.items");
+            assertThat(items).hasSizeLessThanOrEqualTo(HomeService.FOR_YOU_PAGE_SIZE);
+            all.addAll(items);
+            if (!(Boolean) JsonPath.read(body, "$.data.hasMore")) {
+                assertThat((long) all.size()).isEqualTo(count(body, scope));
+                return all;
+            }
+            assertThat(items).hasSize(HomeService.FOR_YOU_PAGE_SIZE);
+        }
+    }
+
+    private static long scopeCount(ForYouFeed feed, String code) {
+        return feed.scopes().stream().filter(s -> s.code().equals(code)).findFirst().orElseThrow().count();
+    }
+
+    /** Published posts by others of active accounts with one of these active topics, counted apart from the service. */
+    private long postsWithTopics(long userId, List<String> topicNames) {
+        Long n = new NamedParameterJdbcTemplate(jdbc).queryForObject("""
+                SELECT COUNT(*) FROM blogs b WHERE b.status = 'PUBLISHED' AND b.blog_type = 'POST'
+                AND b.author_id <> :userId AND %s AND EXISTS (
+                    SELECT 1 FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
+                    WHERE btl.blog_id = b.id AND t.is_active AND t.name IN (:names))""".formatted(ActiveAuthors.of("b")),
+                new MapSqlParameterSource("userId", userId).addValue("names", topicNames), Long.class);
+        return n == null ? 0 : n;
+    }
+
+    private static long count(String body, String scope) {
+        List<Number> counts = JsonPath.read(body, "$.data.scopes[?(@.code == '" + scope + "')].count");
+        assertThat(counts).hasSize(1);
+        return counts.get(0).longValue();
+    }
+
+    private static List<String> scopeCodes(String body) {
+        return JsonPath.read(body, "$.data.scopes[*].code");
     }
 
     private void putProfile(long userId, String json) throws Exception {

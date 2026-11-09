@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Moderator – Senpai ơi</title>
+    <link rel="icon" href="/assets/img/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#C2456E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
@@ -16,7 +18,7 @@
 <body class="app" data-role="MODERATOR">
 <template id="guide-content"><div class="guide-page">
 <a id="dashboard" href="/moderator" hidden>← Dashboard Moderator</a>
-<header class="page-heading"><h1>Cẩm nang sinh viên</h1><p>Hướng dẫn theo chủ đề dành cho sinh viên Việt Nam tại Nhật Bản.</p><button class="btn pri" id="create" hidden>Tạo cẩm nang</button></header>
+<header class="page-heading"><h1>Cẩm nang</h1><p>Hướng dẫn theo chủ đề dành cho sinh viên Việt Nam tại Nhật Bản.</p><button class="btn pri" id="create" hidden>Tạo cẩm nang</button></header>
 <p id="message" role="status" aria-live="polite"></p>
 <section id="listing"><form id="filters" class="guide-filters card"><label>Tìm kiếm<input name="q" maxlength="200" placeholder="Tiêu đề hoặc mô tả"></label><label>Giai đoạn<select name="category"><option value="">Tất cả giai đoạn</option></select></label><label>Chủ đề<select name="topicCode"><option value="">Tất cả chủ đề</option></select></label><label>Trạng thái<select name="status"><option value="ALL">Tất cả</option><option value="DRAFT">Nháp</option><option value="PUBLISHED">Công khai</option></select></label><button class="btn">Tìm kiếm</button></form><p id="count"></p><div id="guide-list" class="list"></div><nav id="guide-pager" class="guide-actions" aria-label="Phân trang cẩm nang" hidden></nav></section>
 <section id="editor" class="guide-editor card" hidden>

@@ -52,6 +52,8 @@
 
 /* "Địa điểm" */
 .mod-head { align-items: flex-start; gap: 12px; }
+/* the title and its note keep at least 280 px: on a phone the button moves under them instead of squeezing them */
+.mod-head > .grow { flex: 1 1 280px; min-width: 0; }
 .mod-head h2 { margin: 0; }
 .mod-filters .searchbox { flex: 1 1 240px; }
 .mod-pager { justify-content: space-between; align-items: center; margin-top: 10px; }

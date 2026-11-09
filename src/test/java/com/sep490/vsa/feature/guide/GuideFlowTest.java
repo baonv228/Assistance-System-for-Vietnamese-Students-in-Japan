@@ -165,6 +165,42 @@ class GuideFlowTest {
         return new MockMultipartFile("images", "photo.png", "image/png", bytes.toByteArray());
     }
 
+    @Test
+    void coverAndSectionPhotosKeepTheirAssociationsWhenReorderedAndReplaced() throws Exception {
+        var moderator = session("MODERATOR");
+        var request = new GuideRequest("Section images " + UUID.randomUUID(), "Summary", "PRE",
+                List.of(new GuideRequest.Section("First", "First content", null, null, 1),
+                        new GuideRequest.Section("Second", "Second content", null, null, 2)),
+                "LIVING", null, "PUBLISHED", 0, false);
+        var createdResponse = mvc.perform(multipart("/api/moderator/guides")
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(request)))
+                        .file(photo()).file(photo()).file(photo()).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isCreated()).andReturn().getResponse();
+        var created = json.readTree(createdResponse.getContentAsByteArray()).get("data");
+        long id = created.get("id").asLong();
+        long firstMedia = created.get("sections").get(0).get("mediaId").asLong();
+        long secondMedia = created.get("sections").get(1).get("mediaId").asLong();
+        assertThat(created.get("coverImageUrl").asText()).isNotEqualTo(created.get("sections").get(0).get("imageUrl").asText());
+        var update = new GuideRequest(request.title(), "Summary", "PRE",
+                List.of(new GuideRequest.Section("Second", "Second content", null, null, null, secondMedia),
+                        new GuideRequest.Section("First", "Changed first content", null, null, 0)),
+                "LIVING", null, "PUBLISHED", null, false);
+        mvc.perform(multipart("/api/moderator/guides/" + id)
+                        .file(new MockMultipartFile("guide", "guide.json", "application/json", json.writeValueAsBytes(update)))
+                        .file(photo()).with(r -> { r.setMethod("PUT"); return r; }).session(moderator)
+                        .cookie(new Cookie("XSRF-TOKEN", "token")).header("X-XSRF-TOKEN", "token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.coverImageUrl").value(created.get("coverImageUrl").asText()))
+                .andExpect(jsonPath("$.data.sections[0].heading").value("Second"))
+                .andExpect(jsonPath("$.data.sections[0].mediaId").value(secondMedia))
+                .andExpect(jsonPath("$.data.sections[0].imageUrl").value(created.get("sections").get(1).get("imageUrl").asText()));
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM media WHERE id=?", Boolean.class, firstMedia)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NULL FROM media WHERE id=?", Boolean.class, secondMedia)).isTrue();
+        mvc.perform(get("/api/guides/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sections[1].content").value("Changed first content"));
+    }
+
     private AppUserPrincipal principal(MockHttpSession session) {
         return (AppUserPrincipal) ((SecurityContextImpl) session.getAttribute("SPRING_SECURITY_CONTEXT")).getAuthentication().getPrincipal();
     }

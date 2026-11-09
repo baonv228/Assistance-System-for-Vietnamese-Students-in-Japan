@@ -12,7 +12,9 @@ public final class HomeDtos {
     public record Tag(String name, String color) {
     }
 
-    public record Phrase(String japanese, String romaji, String meaningVi, String categoryName, String categoryIcon) {
+    /** {@code topicId}: one learning topic of the phrase (null when it has none), for "Học thêm chủ đề này". */
+    public record Phrase(String japanese, String romaji, String meaningVi, String categoryId, String categoryName,
+                         String categoryIcon, String topicId) {
     }
 
     public record Stats(long placesWithReviews, long reviews, long phrases) {
@@ -77,10 +79,22 @@ public final class HomeDtos {
 
     /**
      * A post chosen for the user; {@code reason} is the first badge text ("Gần khu vực của bạn"…) or null, {@code reasons}
-     * every reason that matched, in ranking order.
+     * every reason that matched, in ranking order; {@code engaged} when the user already liked, saved or commented on
+     * it (such posts come last).
      */
     public record FeedPost(Long id, String title, String excerpt, String authorName, String topicName, int likeCount,
-                           int commentCount, Instant createdAt, String reason, List<FeedReason> reasons) {
+                           int commentCount, Instant createdAt, String reason, List<FeedReason> reasons,
+                           boolean engaged) {
+    }
+
+    /**
+     * Page "Dành cho bạn" ({@code /for-you}): one page of the whole personal feed in {@code scope} (ALL, or only the
+     * posts that matched one reason: NEAR = area or prefecture, STAGE, INTEREST), the scopes this member can pick with
+     * how many posts each holds, and what the feed is based on (area, stage code, interests). {@code q} is the search
+     * text the posts and counts were narrowed by (null without one).
+     */
+    public record ForYouFeed(String scope, String q, String areaName, String stage, List<String> interests,
+                             List<ScopeCount> scopes, int page, boolean hasMore, List<FeedPost> items) {
     }
 
     /**

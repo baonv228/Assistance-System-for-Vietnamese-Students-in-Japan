@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đặt câu hỏi – Senpai ơi</title>
+    <link rel="icon" href="/assets/img/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#C2456E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
@@ -13,6 +15,7 @@
     <link rel="stylesheet" href="/assets/css/blog.css">
     <link rel="stylesheet" href="/assets/css/blog-detail.css">
     <link rel="stylesheet" href="/assets/css/blog-write.css">
+    <link rel="stylesheet" href="/assets/css/qa.css">
 </head>
 <body class="app" data-kind="QA">
 <!-- Hỏi-Đáp → "Đặt câu hỏi" (SRS 6.3). Same form and script as pages/blog-write.html, kind QA. -->
@@ -43,6 +46,10 @@
                     <span class="note counter" id="title-count" aria-live="polite">0/150</span>
                 </div>
             </div>
+
+            <!-- "Câu hỏi thường gặp" that look like the question being typed (new questions only, blog-write.js) -->
+            <section class="qa-faq-suggest" id="faq-suggest" aria-labelledby="faq-suggest-title" hidden></section>
+            <p class="sr-only" id="faq-suggest-status" role="status"></p>
 
             <fieldset class="field topics" data-field="topicIds" aria-describedby="topics-hint topicIds-error">
                 <legend>Chủ đề <span class="req" aria-hidden="true">*</span> <span class="note" id="topics-count">(0/3)</span></legend>

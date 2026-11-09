@@ -2,12 +2,14 @@
 import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountSiteHeader } from "../components/site-header.js";
+import { postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
 import {
     areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
 } from "../lib/ui.js";
 
-const soon = (feature) => `/coming-soon?f=${feature}`;
 const main = document.querySelector("#home");
+/** Every post of "Dành cho bạn", ranked the same way ("Xem tất cả"). */
+const FOR_YOU_PAGE = "/for-you";
 
 // ---------------------------------------------------------------- guest
 
@@ -21,6 +23,7 @@ function renderGuest(data) {
                     <h1>Ở Nhật, bạn không đi một mình.</h1>
                     <p>Các senpai đã đánh dấu sẵn chỗ ăn rẻ, ga tàu, văn phòng quận. Mở bản đồ là thấy nơi nào đã có
                         người Việt review, kèm câu tiếng Nhật để dùng ngay tại đó.</p>
+                    ${searchForm()}
                     <div class="row">
                         <a class="btn pri" href="/map">${ic("map")}Xem bản đồ Nippori</a>
                         <a class="btn" href="/register">${ic("person_add")}Đăng ký miễn phí</a>
@@ -45,7 +48,7 @@ function renderGuest(data) {
             </div>` : ""}
             <div class="feat">
                 ${feature("location_on", "Bản đồ có review", "Nơi nào đã có review sẽ nở hoa trên bản đồ.", "/map")}
-                ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", soon("learn"))}
+                ${feature("school", "Học tiếng Nhật theo chủ đề", "Thanh toán, hỏi đường, khám bệnh… học đúng câu mình sắp dùng.", "/phrases")}
                 ${feature("contact_support", "Hỏi senpai", "Đặt câu hỏi, Mentor trả lời, bạn chọn câu hay nhất.", "/qa")}
                 ${feature("celebration", "Lễ hội gần bạn", "Sự kiện đang và sắp diễn ra hiện ngay trên bản đồ.", "/events")}
             </div>
@@ -57,6 +60,7 @@ function renderGuest(data) {
             </p>
         </div>`;
     bindSpeak();
+    bindSearch();
 }
 
 const feature = (icon, title, text, href) =>
@@ -77,6 +81,7 @@ async function renderMember(notice = "") {
                 <h2>${greeting(home)}</h2>
                 <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}<a class="link" href="/profile#points">${home.points} điểm · ${esc(home.rankName)}</a></p>
             </div></div>
+            ${searchForm()}
             ${forYouSection(home, notice)}
             <div class="homegrid">
                 <div class="card">
@@ -109,13 +114,15 @@ async function renderMember(notice = "") {
             </div>
         </div>`;
     bindSpeak();
+    bindSearch();
     bindForYou(home);
 }
 
 /**
  * "Dành cho bạn": what the suggestions are based on (area, stage, topics learnt from the user's likes, saves, comments
- * and posts) with "Điều chỉnh" to change area and stage in place, then the posts chosen and ranked by the server, each
- * with the reasons it was chosen. Open at once while area or stage is missing, until "Để sau".
+ * and posts) with "Điều chỉnh" to change area and stage in place, then the first 5 posts chosen and ranked by the
+ * server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed (/for-you). Open at once while area or
+ * stage is missing, until "Để sau".
  */
 function forYouSection(home, notice) {
     const posts = home.forYou || [];
@@ -124,7 +131,8 @@ function forYouSection(home, notice) {
     return `<section class="spot" id="foryou" aria-labelledby="foryou-title">
         <div class="spot-head">
             <h2 class="grow" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2>
-            <a class="btn sm" href="/blog" aria-label="Xem thêm bài viết trên Blog">Xem thêm${ic("arrow_forward")}</a>
+            ${lead ? `<a class="btn sm spot-find" href="${FOR_YOU_PAGE}#search" title="Tìm trong bài dành cho bạn">${ic("search")}<span class="sr-only">Tìm trong bài dành cho bạn</span></a>
+            <a class="btn sm" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("arrow_forward")}</a>` : ""}
         </div>
         <p class="spot-sub">Bài viết Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
         <div class="spot-basis">
@@ -141,16 +149,16 @@ function forYouSection(home, notice) {
         ${profileForm(home, open)}
         ${lead ? `<div class="spot-posts">
             <article class="spot-lead">${reasonChips(lead)}
-                <a class="feedtitle" href="/blog/${encodeURIComponent(lead.id)}">${esc(lead.title)}</a>
+                <a class="feedtitle" href="${postUrl(lead)}">${esc(lead.title)}</a>
                 ${lead.excerpt ? `<p class="spot-excerpt">${esc(lead.excerpt)}</p>` : ""}
                 ${postMeta(lead)}
             </article>
             ${rest.map((p) => `<article class="spot-item">${reasonChips(p)}
-                <a class="feedtitle" href="/blog/${encodeURIComponent(p.id)}">${esc(p.title)}</a>
+                <a class="feedtitle" href="${postUrl(p)}">${esc(p.title)}</a>
                 ${postMeta(p)}
             </article>`).join("")}
         </div>
-        <a class="btn sm spot-more" href="/blog">Xem thêm bài viết${ic("arrow_forward")}</a>`
+        <a class="btn sm spot-more" href="${FOR_YOU_PAGE}">Xem tất cả bài viết dành cho bạn${ic("arrow_forward")}</a>`
         : '<p class="spot-empty">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
     </section>`;
 }
@@ -158,20 +166,6 @@ function forYouSection(home, notice) {
 /** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
 const chip = (icon, text, what, extra = "") =>
     `<span class="spot-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
-
-/** Why the server chose the post, in its ranking order: the place near the user, the stage topic, the interest. */
-const REASON_STYLE = {
-    AREA: ["location_on", ""], PREFECTURE: ["map", ""], STAGE: ["flag", "stage"], INTEREST: ["interests", "interest"]
-};
-const reasonChips = (post) => (post.reasons?.length ? `<div class="whys">${post.reasons.map((r) => {
-    const [icon, style] = REASON_STYLE[r.code] || ["auto_awesome", ""];
-    return `<span class="why ${style}">${ic(icon)}<span>${esc(r.label)}${r.detail ? ` · <b>${esc(r.detail)}</b>` : ""}</span></span>`;
-}).join("")}</div>` : "");
-
-const postMeta = (p) => `<span class="row spot-meta">${p.topicName ? `<span class="badge">${esc(p.topicName)}</span>` : ""}
-    <span class="note">${esc(p.authorName)} · ${esc(timeAgo(p.createdAt))} ·
-        <span aria-label="${p.likeCount} lượt thích">${ic("favorite")}${p.likeCount}</span>
-        <span aria-label="${p.commentCount} bình luận">${ic("chat_bubble")}${p.commentCount}</span></span></span>`;
 
 /** The place's panel on the Map. */
 const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;
@@ -318,6 +312,30 @@ function bindForYou(home) {
 
 // ---------------------------------------------------------------- shared
 
+/**
+ * "Tìm trên Senpai ơi" (the prototype's "Tìm kiếm chung"): a plain GET form to the page /search, which searches places,
+ * posts, questions, guides, events, phrases and FAQ entries at once. "Dành cho bạn" has its own search (/for-you).
+ */
+const searchForm = () => `<form class="site-search home-search" role="search" action="/search" method="get" data-search>
+        ${ic("search")}
+        <label class="sr-only" for="home-q">Tìm trên Senpai ơi</label>
+        <input id="home-q" name="q" type="search" maxlength="100" autocomplete="off" enterkeyhint="search"
+               placeholder="Tìm địa điểm, bài viết, sự kiện…">
+        <button class="btn pri sm" type="submit">Tìm</button>
+    </form>`;
+
+/** An empty box is not sent: the focus stays in it. */
+function bindSearch() {
+    const form = main.querySelector("[data-search]");
+    form?.addEventListener("submit", (event) => {
+        const input = form.querySelector("input");
+        if (!input.value.trim()) {
+            event.preventDefault();
+            input.focus();
+        }
+    });
+}
+
 function phraseCard(phrase) {
     if (!phrase) {
         return "";
@@ -330,10 +348,15 @@ function phraseCard(phrase) {
         <div>${esc(phrase.meaningVi)}</div>
         <div class="row">
             <button class="btn sm" type="button" data-speak="${esc(phrase.japanese)}">${ic("volume_up")}Nghe</button>
-            <a class="btn sm" href="${soon("learn")}">${ic("school")}Học thêm chủ đề này</a>
+            <a class="btn sm" href="${phraseLink(phrase)}">${ic("school")}Học thêm chủ đề này</a>
         </div>
     </div>`;
 }
+
+/** "Học thêm chủ đề này": the phrase's topic on "Nhật ngữ", else its place category. */
+const phraseLink = (phrase) => (phrase.topicId
+    ? `/phrases?topic=${encodeURIComponent(phrase.topicId)}`
+    : `/phrases?category=${encodeURIComponent(phrase.categoryId)}`);
 
 /** Reads the Japanese phrase aloud with the browser's built-in voice (free, no API). */
 function bindSpeak() {

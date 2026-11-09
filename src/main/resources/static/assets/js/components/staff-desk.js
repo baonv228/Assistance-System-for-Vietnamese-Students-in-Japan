@@ -2,7 +2,7 @@
 // role's modules. A module with an `href` is built and links to its page; the others are marked "Đang phát triển".
 // Usage: const user = await mountStaffDesk("MODERATOR", "events");  → fills <body>, returns the user and the main box.
 import { currentUser } from "../api/client.js";
-import { logout } from "./site-header.js";
+import { addSkipLink, logout } from "./site-header.js";
 import { esc, ic, LOGO_SVG } from "../lib/ui.js";
 
 /** Modules from the use case specification: [key, icon, name, use cases, href of the built page]. */
@@ -19,21 +19,21 @@ export const DESKS = {
             ["pins", "add_location_alt", "Duyệt ghim mới", "UC-M06", "/moderator/pins"],
             ["events", "celebration", "Sự kiện", "UC-M07", "/moderator/events"],
             ["guide", "menu_book", "Cẩm nang", "UC-M08", "/moderator/guides"],
+            ["faq-suggestions", "tips_and_updates", "Đề xuất FAQ", "Câu trả lời tiêu biểu", "/moderator/faq-suggestions"],
+            ["faq", "quiz", "Quản lý FAQ", "Tạo, chỉnh sửa, ẩn/hiện", "/moderator/faqs"],
             ["topics", "sell", "Chủ đề blog", "UC-M09"],
             ["places", "location_on", "Địa điểm", "UC-M10 – UC-M13", "/moderator/places"],
             ["merge", "merge", "Gộp trùng lặp", "UC-M14", "/moderator/merge"]
         ]
     },
     ACADEMIC_MANAGER: {
-        title: "Trang Người quản lý học thuật",
+        title: "Trang Biên tập viên nội dung tiếng Nhật",
         home: "/academic",
-        intro: "Quản lý mẫu câu tiếng Nhật và kiểm tra câu luyện tập của người dùng.",
+        intro: "Quản lý mẫu câu, từ vựng tiếng Nhật và xử lý báo lỗi của người dùng.",
         modules: [
-            ["phrases", "translate", "Thư viện mẫu câu", "UC-A01"],
-            ["learn-topics", "category", "Chủ đề học", "UC-A02"],
-            ["phrase-reports", "report", "Báo cáo mẫu câu", "UC-A03"],
-            ["practice-reports", "rule", "Báo cáo câu luyện tập", "UC-A04"],
-            ["practice", "spellcheck", "Duyệt câu luyện tập", "UC-A05"]
+            ["phrases", "translate", "Thư viện mẫu câu", "UC 12 – 14", "/academic/phrases"],
+            ["learn-topics", "category", "Chủ đề học", "UC 9 – 11", "/academic/topics"],
+            ["phrase-reports", "report", "Báo cáo mẫu câu", "UC 13 AF1, AF2", "/academic/phrase-reports"]
         ]
     },
     ADMIN: {
@@ -71,8 +71,8 @@ export async function mountStaffDesk(role, active = "overview") {
         ? `<a href="${href}" ${key === active ? 'aria-current="page"' : ""}>${ic(icon)}${esc(name)}</a>`
         : `<a href="#" data-soon title="Đang phát triển">${ic(icon)}${esc(name)}</a>`;
     document.body.innerHTML = `
-        <header class="site-top">
-            <a class="logo" href="/">${LOGO_SVG}Senpai ơi</a>
+        <header class="site-top staff-top">
+            <a class="logo" href="/" aria-label="Senpai ơi">${LOGO_SVG}<span class="logo-txt">Senpai ơi</span></a>
             <span class="badge br">${esc(user.roleLabel)}</span>
             <span class="grow"></span>
             <div class="site-account">
@@ -92,5 +92,17 @@ export async function mountStaffDesk(role, active = "overview") {
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>`;
     document.querySelector("[data-logout]").addEventListener("click", logout);
     document.querySelectorAll("[data-soon]").forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
+    showCurrentModule(document.querySelector(".desk-side"));
+    addSkipLink();
     return { user, main: document.querySelector("#desk-main") };
+}
+
+/**
+ * On a phone the side menu is one row that scrolls sideways: it starts with this page's module in view. Only the row
+ * scrolls, never the page.
+ */
+export function showCurrentModule(side) {
+    const current = side?.querySelector('[aria-current="page"]');
+    if (!current || side.scrollWidth <= side.clientWidth) return;
+    side.scrollLeft = current.offsetLeft - side.offsetLeft - (side.clientWidth - current.offsetWidth) / 2;
 }

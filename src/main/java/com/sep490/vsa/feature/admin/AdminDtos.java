@@ -28,8 +28,13 @@ public final class AdminDtos {
             List<ActivityLogItem> recentLogs
     ) {}
 
+    /** Một tag định danh đang được cấp cho người dùng (chỉ đọc với Admin). */
+    public record TagChip(Long id, String name, String color) {}
+
     /**
-     * Thông tin tóm tắt người dùng trong danh sách quản lý người dùng
+     * Thông tin tóm tắt người dùng trong danh sách quản lý người dùng.
+     * {@code accountAgeDays} là số ngày trọn vẹn kể từ lúc đăng ký, {@code newAccount} là true khi tuổi đó nhỏ hơn
+     * {@code new_account_days}; {@code reportMutedUntil} chỉ có giá trị khi người dùng đang bị khóa quyền báo cáo.
      */
     public record UserItem(
             Long id,
@@ -42,22 +47,38 @@ public final class AdminDtos {
             int points,
             int falseReportCount,
             Instant createdAt,
-            Instant lastLoginAt
-    ) {}
+            Instant lastLoginAt,
+            long accountAgeDays,
+            boolean newAccount,
+            Instant reportMutedUntil,
+            List<TagChip> tags
+    ) {
+
+        /** Cùng bản ghi nhưng kèm danh sách tag (tag được đọc theo lô sau khi đã có các dòng người dùng). */
+        public UserItem withTags(List<TagChip> newTags) {
+            return new UserItem(id, email, displayName, avatarUrl, role, roleLabel, status, points, falseReportCount,
+                    createdAt, lastLoginAt, accountAgeDays, newAccount, reportMutedUntil, newTags);
+        }
+    }
 
     /**
-     * Yêu cầu cập nhật vai trò người dùng (USER, MODERATOR, ACADEMIC_MANAGER, ADMIN)
+     * Yêu cầu cập nhật vai trò người dùng (USER, MODERATOR, ACADEMIC_MANAGER, ADMIN).
+     * {@code expectedRole} (không bắt buộc) là vai trò trang đang hiển thị: khác vai trò hiện tại nghĩa là một Admin
+     * khác vừa đổi tài khoản này.
      */
     public record UpdateUserRoleRequest(
-            String role
+            String role,
+            String expectedRole
     ) {}
 
     /**
-     * Yêu cầu cập nhật trạng thái người dùng (ACTIVE, LOCKED) kèm lý do
+     * Yêu cầu cập nhật trạng thái người dùng (ACTIVE, LOCKED) kèm lý do.
+     * {@code expectedStatus} (không bắt buộc) hoạt động như {@code expectedRole}.
      */
     public record UpdateUserStatusRequest(
             String status,
-            String reason
+            String reason,
+            String expectedStatus
     ) {}
 
     /**

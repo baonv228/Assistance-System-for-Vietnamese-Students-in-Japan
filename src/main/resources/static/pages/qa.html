@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hỏi-Đáp – Senpai ơi</title>
+    <meta name="description" content="Hỏi-Đáp cho du học sinh Việt tại Nhật: đặt câu hỏi, nhận câu trả lời từ các senpai đi trước và xem các câu hỏi thường gặp.">
+    <link rel="icon" href="/assets/img/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#C2456E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap">
@@ -14,22 +17,28 @@
     <link rel="stylesheet" href="/assets/css/qa.css">
 </head>
 <body class="app">
-<!-- Hỏi-Đáp: questions of the community and their answers. Questions are opened on qa-detail.html and asked
-     on qa-ask.html. Filters live in the URL (?q=&topics=&status=&sort=&page=). -->
+<!-- Hỏi-Đáp, two tabs: questions of the community and their answers (opened on qa-detail.html, asked on qa-ask.html),
+     and "Câu hỏi thường gặp" (FAQ entries written by Moderators, opened in place). What is shown lives in the URL,
+     see assets/js/lib/qa-state.js (?q=&topics=&status=&sort=&page= or ?tab=faq&q=&topic=&page= / ?tab=faq&id=). -->
 <main class="page blogpage qapage" id="qa">
     <div class="blog-head">
         <div>
             <h2>Hỏi-Đáp</h2>
-            <p class="note">Hỏi điều bạn chưa rõ, các senpai đã trải qua sẽ trả lời. Tìm trước, biết đâu đã có lời giải.</p>
+            <p class="note" id="lead">Hỏi điều bạn chưa rõ, các senpai đã trải qua sẽ trả lời. Tìm trước, biết đâu đã có lời giải.</p>
         </div>
         <div class="row">
             <a class="btn pri" id="ask" href="#"><span class="ic" aria-hidden="true">contact_support</span>Đặt câu hỏi</a>
         </div>
     </div>
 
+    <nav class="qa-tabs" id="tabs" aria-label="Mục trong Hỏi-Đáp">
+        <a href="/qa" data-tab="community" aria-current="page"><span class="ic" aria-hidden="true">forum</span>Cộng đồng hỏi</a>
+        <a href="/qa?tab=faq" data-tab="faq"><span class="ic" aria-hidden="true">quiz</span>Câu hỏi thường gặp</a>
+    </nav>
+
     <form class="blog-search" id="search" role="search">
         <span class="ic" aria-hidden="true">search</span>
-        <label class="sr-only" for="q">Tìm câu hỏi</label>
+        <label class="sr-only" for="q" id="q-label">Tìm câu hỏi</label>
         <input id="q" name="q" type="search" maxlength="100" autocomplete="off"
                placeholder="Tìm câu hỏi theo nội dung hoặc địa điểm">
         <span class="note count" id="q-count" aria-live="polite"></span>
@@ -54,11 +63,13 @@
         </div>
     </div>
     <div class="row chips" id="chips" hidden></div>
+    <div class="qa-faq-topics" id="faq-topics" role="group" aria-label="Chủ đề câu hỏi thường gặp" hidden></div>
 
     <div class="blog-layout">
         <section class="blog-main" aria-labelledby="list-title">
             <h3 class="sr-only" id="list-title">Danh sách câu hỏi</h3>
             <p class="note" id="summary" aria-live="polite"></p>
+            <section class="card qa-faq-box" id="faq-hits" aria-labelledby="faq-hits-title" hidden></section>
             <div class="post-list" id="list" aria-live="polite"></div>
             <nav class="pager" id="pager" aria-label="Phân trang" hidden></nav>
         </section>
