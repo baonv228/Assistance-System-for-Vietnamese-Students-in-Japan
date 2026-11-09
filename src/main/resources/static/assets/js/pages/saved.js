@@ -1,4 +1,4 @@
-// "Đã lưu" (UC Browse Favorites): saved places, posts and questions of the signed-in Member, newest saved first.
+// "Đã lưu" (UC Browse Favorites): saved places, posts, questions and guides of the signed-in Member, newest saved first.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { esc, fullDate, ic, loginUrl, timeAgo } from "../lib/ui.js";
@@ -8,13 +8,21 @@ const ROUTES = {
     place: (id) => `/map?place=${id}`,
     POST: (id) => `/blog/${id}`,
     QA: (id) => `/qa/${id}`,
+    GUIDE: (id) => `/guides/${id}`,
     login: loginUrl                                // back to "Đã lưu" after signing in
 };
 const SECTIONS = [
-    { key: "places", title: "Địa điểm", icon: "location_on", empty: "Chưa lưu địa điểm nào." },
-    { key: "posts", title: "Bài viết", icon: "article", empty: "Chưa lưu bài nào." },
-    { key: "questions", title: "Câu hỏi", icon: "contact_support", empty: "Chưa lưu câu hỏi nào." }
+    { key: "places", title: "Địa điểm", icon: "location_on", empty: "Chưa lưu địa điểm nào.", list: "place-grid", card: placeCard },
+    { key: "posts", title: "Bài viết", icon: "article", empty: "Chưa lưu bài nào.", list: "post-list", card: blogCard },
+    { key: "questions", title: "Câu hỏi", icon: "contact_support", empty: "Chưa lưu câu hỏi nào.", list: "post-list", card: blogCard },
+    { key: "guides", title: "Cẩm nang", icon: "menu_book", empty: "Chưa lưu cẩm nang nào.", list: "post-list", card: guideCard }
 ];
+// "Bỏ lưu" on a card, by its data-type: the save API of that kind, the list the item leaves and the message.
+const UNSAVE = {
+    POST: { key: "posts", call: (id) => apiClient.saveBlog(id, false), message: "Đã bỏ lưu bài viết." },
+    QA: { key: "questions", call: (id) => apiClient.saveQuestion(id, false), message: "Đã bỏ lưu câu hỏi." },
+    GUIDE: { key: "guides", call: (id) => apiClient.saveGuide(id, false), message: "Đã bỏ lưu cẩm nang." }
+};
 
 const summary = document.querySelector("#summary");
 const content = document.querySelector("#content");
@@ -37,8 +45,8 @@ function render() {
     content.innerHTML = SECTIONS.map((s) => `
         <section class="saved-section" id="sec-${s.key}" aria-labelledby="h-${s.key}">
             <h3 id="h-${s.key}">${ic(s.icon)}${s.title} <span class="note" data-count="${s.key}"></span></h3>
-            <div class="${s.key === "places" ? "place-grid" : "post-list"}" data-list="${s.key}">
-                ${data[s.key].map(s.key === "places" ? placeCard : blogCard).join("")}
+            <div class="${s.list}" data-list="${s.key}">
+                ${data[s.key].map(s.card).join("")}
             </div>
             <p class="note" data-empty="${s.key}">${s.empty}</p>
         </section>`).join("");
@@ -74,6 +82,22 @@ function blogCard(b) {
         </article>`;
 }
 
+/** A saved guide: stage (and topic when it differs), title, summary, when it was saved. */
+function guideCard(g) {
+    const topic = g.topicName && g.topicName !== g.stageName ? `<span class="badge">${esc(g.topicName)}</span>` : "";
+    return `
+        <article class="card post" data-id="${g.id}" data-type="GUIDE">
+            <div class="row meta">${g.stageName ? `<span class="badge br">${esc(g.stageName)}</span>` : ""}${topic}</div>
+            <h3><a class="stretch" href="${ROUTES.GUIDE(g.id)}">${esc(g.title)}</a></h3>
+            ${g.summary ? `<p class="note excerpt">${esc(g.summary)}</p>` : ""}
+            <div class="row foot">
+                ${g.savedAt ? `<span class="note">Đã lưu: <time datetime="${esc(g.savedAt)}" title="${esc(fullDate(g.savedAt))}">${timeAgo(g.savedAt)}</time></span>` : ""}
+                <span class="grow"></span>
+                <button class="btn sm" type="button" data-unsave>${ic("bookmark_remove")}Bỏ lưu</button>
+            </div>
+        </article>`;
+}
+
 async function onClick(event) {
     const button = event.target.closest("[data-unsave]");
     if (!button) {
@@ -81,14 +105,13 @@ async function onClick(event) {
     }
     const card = button.closest("[data-id]");
     const id = Number(card.dataset.id);
-    const type = card.dataset.type;
+    const unsave = UNSAVE[card.dataset.type];
     button.disabled = true;
     try {
-        await (type === "QA" ? apiClient.saveQuestion(id, false) : apiClient.saveBlog(id, false));
-        const key = type === "QA" ? "questions" : "posts";
-        data[key] = data[key].filter((b) => b.id !== id);
+        await unsave.call(id);
+        data[unsave.key] = data[unsave.key].filter((item) => item.id !== id);
         card.remove();
-        updateCounts(type === "QA" ? "Đã bỏ lưu câu hỏi." : "Đã bỏ lưu bài viết.");
+        updateCounts(unsave.message);
     } catch (error) {
         button.disabled = false;
         summary.textContent = error.message;

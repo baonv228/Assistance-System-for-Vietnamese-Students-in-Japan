@@ -11,11 +11,10 @@ import { faqItem } from "../lib/faq-ui.js";
 import { communityHref, faqHref, qaQuery, Q_MAX, readQaState } from "../lib/qa-state.js";
 import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
-const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     detail: (id) => `/qa/${id}`,
     ask: "/qa/ask",
-    profile: (id) => soon("public-profile", { id }),
+    profile: (id) => `/users/${id}`,
     login: loginUrl
 };
 

@@ -6,12 +6,11 @@ import { mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Where links go. Public Profile is still a placeholder; change it when it exists. Places open on openstreetmap.org.
-const soon = (feature, params = {}) => `/coming-soon?${new URLSearchParams({ f: feature, ...params })}`;
 const ROUTES = {
     detail: (id) => `/blog/${id}`,
     write: "/blog/new",
     qa: "/qa",
-    profile: (id) => soon("public-profile", { id }),
+    profile: (id) => `/users/${id}`,
     login: loginUrl
 };
 

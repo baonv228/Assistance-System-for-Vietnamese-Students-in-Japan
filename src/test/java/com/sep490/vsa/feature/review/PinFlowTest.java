@@ -157,6 +157,47 @@ class PinFlowTest {
                 .andExpect(jsonPath("$.data.closed").value(false));      // only a Moderator sets the label
     }
 
+    @Test
+    void aTopRankMembersPinGoesOnTheMapAtOnce() throws Exception {
+        jdbc.update("UPDATE users SET points = 299 WHERE id = ?", author);
+        mvc.perform(get("/api/map/pins/compose").session(session(author)))
+                .andExpect(jsonPath("$.data.noApprovalNeeded").value(false));
+        jdbc.update("UPDATE users SET points = 300 WHERE id = ?", author);
+        mvc.perform(get("/api/map/pins/compose").session(session(author)))
+                .andExpect(jsonPath("$.data.noApprovalNeeded").value(true));
+
+        String body = send(author, pin("Tin cậy " + word, false)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Ghim đã lên bản đồ. +15 điểm."))
+                .andExpect(jsonPath("$.data.approved").value(true))
+                .andReturn().getResponse().getContentAsString();
+        long placeId = Long.parseLong(body.replaceAll(".*\"placeId\":(\\d+).*", "$1"));
+        assertThat(jdbc.queryForObject("SELECT status FROM places WHERE id = ?", String.class, placeId)).isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForObject("SELECT reviewed_by FROM places WHERE id = ?", Long.class, placeId)).isNull();
+        assertThat(points(author)).isEqualTo(300 + 10 + 15);      // the first review and the approved pin
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM place_history WHERE place_id = ? AND action = 'APPROVED'",
+                Integer.class, placeId)).isEqualTo(1);
+        // Everyone sees it; not in the Moderator's queue
+        mvc.perform(get("/api/map/places/" + placeId).session(session(user(30)))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        // Past the "Có thể trùng" warning a Moderator still looks, even for the top rank
+        String second = send(author, pin("Tin cậy " + word, true)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approved").value(false))
+                .andExpect(jsonPath("$.message").value("Đã gửi ghim kèm review. Chờ Moderator duyệt."))
+                .andReturn().getResponse().getContentAsString();
+        long waiting = Long.parseLong(second.replaceAll(".*\"placeId\":(\\d+).*", "$1"));
+        assertThat(jdbc.queryForObject("SELECT status FROM places WHERE id = ?", String.class, waiting)).isEqualTo("PENDING");
+    }
+
+    @Test
+    void aPinOutsideJapanIsRefused() throws Exception {
+        lat = 21.0278;
+        lng = 105.8342;
+        send(author, pin("Hanoi " + UUID.randomUUID(), false))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(com.sep490.vsa.feature.area.AreaService.NOT_IN_JAPAN));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private String pin(String nameEn, boolean confirm) {

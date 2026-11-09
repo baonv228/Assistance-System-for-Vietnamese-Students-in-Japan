@@ -95,6 +95,8 @@ class SavedFlowTest {
                 .andExpect(jsonPath("$.data.places", empty()))
                 .andExpect(jsonPath("$.data.posts", empty()))
                 .andExpect(jsonPath("$.data.questions", empty()))
+                .andExpect(jsonPath("$.data.guides", empty()))
+                .andExpect(jsonPath("$.data.counts.guides").value(0))
                 .andExpect(jsonPath("$.data.counts.total").value(0));
         mvc.perform(get("/api/me/profile").session(session(member, "USER")))
                 .andExpect(jsonPath("$.data.savedCount").value(0));

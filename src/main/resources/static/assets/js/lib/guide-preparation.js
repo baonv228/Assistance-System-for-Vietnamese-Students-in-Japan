@@ -2,6 +2,12 @@ import { apiClient } from "../api/client.js";
 import { loginUrl } from "./ui.js";
 function el(tag, className, text) { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text ?? ""; return node; }
 
+/**
+ * Splits the guide shown in `target` into the tabs "Xem chi tiết" / "Hướng dẫn chuẩn bị". Interactive (the guide page):
+ * the checklist is loaded and ticked through the API, and its first load and each saved tick fire a bubbling
+ * "guide-progress" event on the panel whose detail has the shape of the viewer's progress ({ checklist, tasksDone, tasksTotal, percent, done,
+ * nextTask }). Returns { select(preparation) }, which opens a tab and moves the focus to it.
+ */
 export function preparationTabs(target, guide, interactive = false) {
  const details = el("div"), panel = el("div", "guide-preparation-panel"), tabs = el("div", "guide-detail-tabs");
  details.id = "guide-details-panel"; panel.id = "guide-preparation-panel";
@@ -27,11 +33,17 @@ export function preparationTabs(target, guide, interactive = false) {
  }
  async function load() {
   panel.replaceChildren(el("p", "note", "Đang tải tiến độ chuẩn bị…"));
-  try { draw(await apiClient.guidePreparation(guide.id)); }
+  try { const progress = await apiClient.guidePreparation(guide.id); draw(progress); announce(progress); }
   catch (error) {
    panel.replaceChildren(el("p", "alert error", error.message));
    const retry = el("button", "btn", "Tải lại danh sách"); retry.type = "button"; retry.addEventListener("click", load); panel.append(retry);
   }
+ }
+ /** Tells the page where the reader stands (after the checklist is loaded and after each saved tick). */
+ function announce(progress) {
+  panel.dispatchEvent(new CustomEvent("guide-progress", { bubbles: true, detail: {
+   checklist: progress.total > 0, tasksDone: progress.completed, tasksTotal: progress.total, percent: progress.percent,
+   done: progress.total > 0 && progress.completed === progress.total, nextTask: progress.tasks.find(item => !item.completed)?.title ?? null } }));
  }
  function draw(progress) {
   panel.replaceChildren(el("h2", null, "Hướng dẫn chuẩn bị"), el("p", "note", guide.title));
@@ -57,6 +69,7 @@ export function preparationTabs(target, guide, interactive = false) {
     try {
      const updated = await apiClient.checkGuideTask(guide.id, task.id, checked); draw(updated);
      [...panel.querySelectorAll("input[data-task-id]")].find(control => control.dataset.taskId === String(task.id))?.focus();
+     announce(updated);
     } catch (failure) {
      input.checked = !!task.completed; error.textContent = failure.message + " Tiến độ chưa được thay đổi. Hãy thử lại hoặc tải lại trang."; error.hidden = false;
      list.querySelectorAll("input").forEach(control => control.disabled = false);
@@ -68,4 +81,5 @@ export function preparationTabs(target, guide, interactive = false) {
  }
  const openPreparation = interactive && new URLSearchParams(location.search).get("tab") === "preparation";
  select(openPreparation);
+ return { select(preparation) { select(preparation); controls[preparation ? 1 : 0].focus(); } };
 }

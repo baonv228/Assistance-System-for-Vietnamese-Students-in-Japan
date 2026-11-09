@@ -1,0 +1,22 @@
+/* Public profile (pages/user-profile.html). Post and question cards use .post from blog.css. */
+.user-head { display: grid; gap: 14px; }
+.user-top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.user-top .avatar { flex: none; width: 72px; height: 72px; font-size: 28px; }
+.user-who { display: grid; gap: 6px; flex: 1; min-width: 180px; }
+.user-who h2 { margin: 0; overflow-wrap: anywhere; }
+.user-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.user-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin: 0; }
+.user-stats div { padding: 10px; border-radius: 10px; background: var(--brand-soft); text-align: center; }
+.user-stats dt { font-size: 13px; color: var(--muted); }
+.user-stats dd { margin: 0 0 2px; font-size: 20px; font-weight: 700; }
+.user-stats div { display: flex; flex-direction: column-reverse; }
+.user-tabs { display: flex; gap: 6px; overflow-x: auto; }
+.user-tabs button { flex: none; padding: 8px 16px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.user-tabs button[aria-selected="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-text); }
+.user-list { display: grid; gap: 10px; }
+.user-review { display: grid; gap: 6px; padding: 14px; }
+.user-review h3 { margin: 0; overflow-wrap: anywhere; }
+.user-review .stars { color: var(--lantern-text); letter-spacing: 1px; }
+.user-review p { margin: 0; overflow-wrap: anywhere; }
+.user-more { justify-self: center; }

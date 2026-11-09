@@ -48,16 +48,17 @@ public class PinController {
     public ApiResponse<PinSaved> create(@RequestPart("pin") PinRequest request,
                                         @RequestPart(value = "images", required = false) List<MultipartFile> images,
                                         @AuthenticationPrincipal AppUserPrincipal me) {
-        return ApiResponse.ok(message(), service.create(me, request, images));
+        return saved(service.create(me, request, images));
     }
 
     @PostMapping(value = "/api/map/pins", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<PinSaved> createJson(@RequestBody PinRequest request,
                                             @AuthenticationPrincipal AppUserPrincipal me) {
-        return ApiResponse.ok(message(), service.create(me, request, List.of()));
+        return saved(service.create(me, request, List.of()));
     }
 
-    private static String message() {
-        return "Đã gửi ghim kèm review. Chờ Moderator duyệt.";
+    private static ApiResponse<PinSaved> saved(PinSaved pin) {
+        return ApiResponse.ok(pin.approved() ? "Ghim đã lên bản đồ. +15 điểm."
+                : "Đã gửi ghim kèm review. Chờ Moderator duyệt.", pin);
     }
 }

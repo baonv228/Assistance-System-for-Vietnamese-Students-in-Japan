@@ -135,6 +135,15 @@ public class DevDataSeeder implements CommandLineRunner {
         if (changed > 0) {
             log.info("Moved {} sample places from made-up Google ids to OpenStreetMap / team places", changed);
         }
+        // The sample school became the real FPT Japan Academy (address point of 東日暮里4-3-5 from the Geolonia
+        // address data, CC BY 4.0); databases loaded before keep its reviews and links, only the place row changes
+        int school = jdbc.update("""
+                UPDATE places SET name_vi = 'FPT Japan Academy', name_en = 'FPT Japan Academy',
+                       address = '4-3-5 Higashi-Nippori, Arakawa-ku, Tokyo 116-0014', lat = 35.726824, lng = 139.782398
+                WHERE name_vi = 'Trường Nhật ngữ FPT' AND source = 'TEAM'""");
+        if (school > 0) {
+            log.info("Sample school updated to the real FPT Japan Academy");
+        }
     }
 
     private boolean createIfMissing(Account a) {

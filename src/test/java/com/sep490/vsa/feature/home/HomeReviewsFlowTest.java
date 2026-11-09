@@ -141,7 +141,9 @@ class HomeReviewsFlowTest {
                 VALUES ('ARR', ?, ?, -1000000000, TRUE)""", "Đăng ký " + word, inArea);
         try {
             GuideNext next = home.member(viewer).guide().next();
-            assertThat(next).isEqualTo(new GuideNext("Đăng ký " + word, null, "Văn phòng " + word, inArea));
+            long guideId = jdbc.queryForObject("SELECT id FROM guide_items WHERE title = ?", Long.class, "Đăng ký " + word);
+            assertThat(next).isEqualTo(new GuideNext(guideId, "Đăng ký " + word, null, "Văn phòng " + word, inArea,
+                    false, 0, 0, null));
         } finally {
             jdbc.update("DELETE FROM guide_items WHERE title = ?", "Đăng ký " + word);
         }

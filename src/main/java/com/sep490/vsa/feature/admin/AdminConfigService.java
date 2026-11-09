@@ -79,12 +79,14 @@ public class AdminConfigService {
                 "Ngưỡng ẩn nội dung", "Báo cáo & Kiểm duyệt",
                 "Khi số báo cáo vượt quá ngưỡng này, bài viết/bình luận bị tự động ẩn và chuyển mức Khẩn chờ kiểm duyệt",
                 1, 100));
-        SETTING_METADATA.put("false_report_max", SettingMeta.notApplied(
+        SETTING_METADATA.put("false_report_max", SettingMeta.applied(
                 "Số lần báo cáo sai tối đa", "Báo cáo & Kiểm duyệt",
-                "Số lần báo cáo sai sự thật tối đa trước khi người dùng bị tạm khóa quyền gửi báo cáo"));
-        SETTING_METADATA.put("mute_days", SettingMeta.notApplied(
+                "Số lần báo cáo sai sự thật tối đa trước khi người dùng bị tạm khóa quyền gửi báo cáo",
+                1, 100));
+        SETTING_METADATA.put("mute_days", SettingMeta.applied(
                 "Số ngày tạm cấm báo cáo", "Báo cáo & Kiểm duyệt",
-                "Thời gian tài khoản bị cấm gửi báo cáo sau khi vượt quá số lần báo cáo sai quy định"));
+                "Thời gian tài khoản bị cấm gửi báo cáo sau khi vượt quá số lần báo cáo sai quy định",
+                1, 365));
         SETTING_METADATA.put("closed_report_threshold", SettingMeta.applied(
                 "Ngưỡng xác nhận đóng cửa", "Báo cáo & Kiểm duyệt",
                 "Số lượng người dùng báo cáo một địa điểm đã đóng cửa để địa điểm đó chuyển cho Moderator xem xét",
@@ -156,9 +158,10 @@ public class AdminConfigService {
                 "Lưu minh chứng tag (ngày)", "Quản trị & Bảo mật",
                 "Số ngày một yêu cầu tag chưa được duyệt thì hết hạn và ảnh minh chứng bị xóa",
                 1, 60));
-        SETTING_METADATA.put("removed_keep_days", SettingMeta.notApplied(
+        SETTING_METADATA.put("removed_keep_days", SettingMeta.applied(
                 "Lưu dữ liệu đã xóa (ngày)", "Quản trị & Bảo mật",
-                "Thời gian lưu giữ dữ liệu bị xóa mềm trước khi loại bỏ vĩnh viễn"));
+                "Thời gian lưu giữ dữ liệu bị xóa mềm trước khi loại bỏ vĩnh viễn",
+                1, 365));
 
         // Nhóm: Đề xuất & Bản đồ
         SETTING_METADATA.put("featured_top_n", SettingMeta.applied(

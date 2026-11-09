@@ -21,7 +21,7 @@ public final class ProfileDtos {
     public record DailyUsage(int posts, int maxPosts, int pins, int maxPins, int videos, int maxVideos) {
     }
 
-    /** @param savedCount places, posts and questions listed on "Đã lưu" (/saved) */
+    /** @param savedCount places, posts, questions and guides listed on "Đã lưu" (/saved) */
     public record ProfileResponse(
             Long id,
             String email,
