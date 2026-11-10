@@ -568,9 +568,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   message, never a 500). Videos are stored without their metadata, like photos without EXIF: the `udta`, `meta` and
   `uuid` boxes of the file, of `moov` and of each track become zero-filled `free` boxes of the same size
   (`Mp4Duration.stripMetadata`: no location such as iPhone ISO6709 / `©xyz`, no phone model; offsets unchanged, so the
-  video plays as before). Files are stored by `LocalMediaStorage` in
-  `app.media.local-dir` (default `uploads/`, git-ignored); implement `MediaStorage` for
-  Cloudflare R2 later. Deleting a post (UC-13) also deletes its files.
+  video plays as before). Files are stored through `MediaStorage`, chosen by `app.media.storage` (env `MEDIA_STORAGE`):
+  `local` (default, always in tests: `src/test/resources/config`) = `LocalMediaStorage` in `app.media.local-dir`
+  (default `uploads/`, git-ignored); `r2` = `R2MediaStorage`, a **private** Cloudflare R2 bucket over its S3 API, signed
+  with `AwsSigV4` (JDK only, no AWS SDK; checked against the AWS examples in `AwsSigV4Test`), settings
+  `app.media.r2.account-id|bucket|access-key-id|secret-access-key` (env `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`; a missing one stops the start). Never give the bucket a public address: files still go out
+  only through `MediaController` (`resource` = one HEAD; the bytes are fetched while the answer is written, a Range
+  request asks R2 from its start only). One bucket per environment, since the clean-up jobs delete what their own
+  database no longer needs. `app.media.r2.import-from=uploads` (`R2MediaImport`) copies an old folder into the bucket
+  once at the start (keys unchanged, files already there skipped, local files kept). `DevDataSeeder` puts the V19 guide
+  images through `MediaStorage` too. Deleting a post (UC-13) also deletes its files.
 - `/media/<storage_key>` is `MediaController`, checked per file by `MediaAccess` (the folder is never published): to
   anyone only when the file is not deleted, its scan PASSED and it is attached to at least one PUBLISHED post or
   question of an ACTIVE author, or to at least one PUBLISHED review (`review_media`) of an ACTIVE place by an ACTIVE

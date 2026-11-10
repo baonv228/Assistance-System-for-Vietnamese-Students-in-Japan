@@ -7,9 +7,9 @@ import org.springframework.core.io.Resource;
  * Where uploaded photos and videos are kept. The database only stores the key ({@code media.storage_key});
  * the public URL is {@code app.media.public-base-url} + key.
  * <p>
- * {@link LocalMediaStorage} writes to a folder on the server, which is enough for development and a small
- * single-server deployment. Cloudflare R2 (free tier) can replace it later by adding another implementation
- * of this interface; nothing else needs to change.
+ * {@link LocalMediaStorage} ({@code app.media.storage=local}, the default) writes to a folder on the server;
+ * {@link R2MediaStorage} ({@code app.media.storage=r2}) keeps the files in a private Cloudflare R2 bucket. Either
+ * way the files reach people only through {@link MediaController}.
  */
 public interface MediaStorage {
 
