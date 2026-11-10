@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpRange;
@@ -18,6 +19,8 @@ import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -142,6 +145,21 @@ class R2MediaStorageTest {
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("R2_ACCOUNT_ID");
     }
 
+    @Test
+    void importCopiesAnOldFolderOnce(@TempDir Path folder) throws IOException {
+        String chatKey = "chat/2026/10/4c162e55-98e1-4f20-ab75-2a3005422281.bin";
+        write(folder, KEY, bytes(100));
+        write(folder, chatKey, bytes(200));
+        write(folder, "notes.txt", bytes(5));                   // not a media key: left alone
+        storage.put(chatKey, bytes(200));
+        R2MediaImport importer = new R2MediaImport(storage, folder.toString());
+
+        assertThat(importer.importFolder()).isEqualTo(1);
+        assertThat(objects).containsOnlyKeys("/" + BUCKET + "/" + KEY, "/" + BUCKET + "/" + chatKey);
+        assertThat(importer.importFolder()).isZero();           // running it again uploads nothing
+        assertThat(Files.exists(folder.resolve(KEY))).isTrue(); // local files are kept
+    }
+
     private void handle(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getRawPath();
@@ -215,6 +233,12 @@ class R2MediaStorageTest {
             exchange.getResponseBody().write(body);
         }
         exchange.close();
+    }
+
+    private static void write(Path folder, String key, byte[] bytes) throws IOException {
+        Path file = folder.resolve(key);
+        Files.createDirectories(file.getParent());
+        Files.write(file, bytes);
     }
 
     private static byte[] bytes(int size) {

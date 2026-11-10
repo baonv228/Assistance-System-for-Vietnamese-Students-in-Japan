@@ -1,12 +1,12 @@
 package com.sep490.vsa.common.seed;
 
+import com.sep490.vsa.feature.media.MediaStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,8 +16,6 @@ import javax.sql.DataSource;
 import java.util.List;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Test accounts and sample content for LOCAL DEVELOPMENT ONLY (profile "local", the default on developer
@@ -50,14 +48,14 @@ public class DevDataSeeder implements CommandLineRunner {
     private final JdbcTemplate jdbc;
     private final DataSource dataSource;
     private final PasswordEncoder passwordEncoder;
+    private final MediaStorage mediaStorage;
 
-    @Value("${app.media.local-dir:uploads}")
-    private String mediaDirectory;
-
-    public DevDataSeeder(JdbcTemplate jdbc, DataSource dataSource, PasswordEncoder passwordEncoder) {
+    public DevDataSeeder(JdbcTemplate jdbc, DataSource dataSource, PasswordEncoder passwordEncoder,
+                         MediaStorage mediaStorage) {
         this.jdbc = jdbc;
         this.dataSource = dataSource;
         this.passwordEncoder = passwordEncoder;
+        this.mediaStorage = mediaStorage;
     }
 
     @Override
@@ -84,9 +82,11 @@ public class DevDataSeeder implements CommandLineRunner {
         restoreGuideSeedImages();
     }
 
-    /** V19 carries database rows; Git carries the referenced test images. Never overwrite local files. */
+    /**
+     * V19 carries database rows; Git carries the referenced test images. They are put into the media storage (the
+     * local folder or R2) when it does not have them yet; a stored file is never overwritten.
+     */
     private void restoreGuideSeedImages() {
-        Path root = Path.of(mediaDirectory).toAbsolutePath().normalize();
         try {
             var resolver = new PathMatchingResourcePatternResolver();
             for (String key : jdbc.queryForList("""
@@ -94,13 +94,10 @@ public class DevDataSeeder implements CommandLineRunner {
                     WHERE owner_id = (SELECT id FROM users WHERE email = 'seed-content@local.invalid')
                       AND deleted_at IS NULL AND storage_key LIKE 'guide/%'
                     """, String.class)) {
-                Path target = root.resolve(key).normalize();
-                if (!target.startsWith(root) || Files.exists(target)) continue;
                 var resource = resolver.getResource("classpath:dev/guide-media/" + key);
-                if (!resource.exists()) continue;
-                Files.createDirectories(target.getParent());
+                if (!resource.exists() || mediaStorage.resource(key) != null) continue;
                 try (var input = resource.getInputStream()) {
-                    Files.copy(input, target);
+                    mediaStorage.put(key, input.readAllBytes());
                 }
             }
         } catch (IOException e) {
