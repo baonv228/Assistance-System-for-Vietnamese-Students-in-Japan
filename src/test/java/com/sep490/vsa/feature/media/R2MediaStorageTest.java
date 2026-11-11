@@ -48,6 +48,8 @@ class R2MediaStorageTest {
     private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
     private final List<String> calls = new CopyOnWriteArrayList<>();
     private volatile int forcedStatus;
+    private volatile int dropNext;
+    private volatile int failuresLeft;
     private HttpServer server;
     private R2MediaStorage storage;
 
@@ -129,6 +131,35 @@ class R2MediaStorageTest {
     }
 
     @Test
+    void aDroppedConnectionIsTriedAgain() throws IOException {
+        byte[] photo = bytes(2000);
+        storage.put(KEY, photo);
+        dropNext = 2;                                           // the next two requests lose their connection
+
+        Resource file = storage.resource(KEY);
+
+        assertThat(file).isNotNull();
+        assertThat(file.contentLength()).isEqualTo(2000);
+        assertThat(dropNext).isZero();
+    }
+
+    @Test
+    void serverErrorsAreTriedAgainThenGiveUp() {
+        byte[] photo = bytes(2000);
+        storage.put(KEY, photo);
+        failuresLeft = 2;                                       // 503, 503, then the real answer
+        assertThat(storage.get(KEY)).isEqualTo(photo);
+        assertThat(failuresLeft).isZero();
+
+        failuresLeft = 50;                                      // never recovers: three tries, then the error
+        calls.clear();
+        assertThatThrownBy(() -> storage.get(KEY)).isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("HTTP 503");
+        assertThat(calls).hasSize(3);
+        assertThat(storage.resource(KEY)).isNull();             // the page answers 404
+    }
+
+    @Test
     void refusesKeysNotMadeByMediaService() {
         assertThatThrownBy(() -> storage.put("../secret.txt", bytes(1))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> storage.get("blog/x.jpg")).isInstanceOf(IllegalArgumentException.class);
@@ -166,6 +197,16 @@ class R2MediaStorageTest {
         byte[] body = exchange.getRequestBody().readAllBytes();
         String range = exchange.getRequestHeaders().getFirst("Range");
         calls.add(range == null ? method : method + " " + range);
+        if (dropNext > 0) {                                     // closes the connection without an answer
+            dropNext--;
+            exchange.close();
+            return;
+        }
+        if (failuresLeft > 0) {
+            failuresLeft--;
+            reply(exchange, 503, "<Error><Code>ServiceUnavailable</Code></Error>".getBytes(), "HEAD".equals(method));
+            return;
+        }
         if (!signatureValid(exchange, method, path, body)) {
             reply(exchange, 403, "<Error><Code>SignatureDoesNotMatch</Code></Error>".getBytes(), "HEAD".equals(method));
             return;
