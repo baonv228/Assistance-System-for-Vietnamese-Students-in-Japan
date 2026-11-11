@@ -160,6 +160,16 @@ class R2MediaStorageTest {
     }
 
     @Test
+    void missingFileAndRefusalsAreNotRepeated() {
+        assertThat(storage.resource(KEY)).isNull();
+        assertThat(calls).containsExactly("HEAD");              // 404: one request only
+        forcedStatus = 403;
+        calls.clear();
+        assertThatThrownBy(() -> storage.get(KEY)).hasMessageContaining("HTTP 403");
+        assertThat(calls).containsExactly("GET");
+    }
+
+    @Test
     void refusesKeysNotMadeByMediaService() {
         assertThatThrownBy(() -> storage.put("../secret.txt", bytes(1))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> storage.get("blog/x.jpg")).isInstanceOf(IllegalArgumentException.class);
