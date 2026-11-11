@@ -47,6 +47,9 @@ public class R2MediaStorage implements MediaStorage {
     private static final DateTimeFormatter AMZ_DATE = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
     private static final Duration SMALL_WAIT = Duration.ofSeconds(15);
     private static final Duration TRANSFER_WAIT = Duration.ofMinutes(2);
+    /** Tries per request (the first one included) and the pause before the second (twice that before the third). */
+    private static final int ATTEMPTS = 3;
+    private static final long RETRY_PAUSE_MS = 300;
 
     private final URI endpoint;
     private final String bucket;
@@ -177,16 +180,47 @@ public class R2MediaStorage implements MediaStorage {
         return defaultPort ? uri.getHost() : uri.getHost() + ":" + port;
     }
 
+    /**
+     * Sends the request, trying up to {@link #ATTEMPTS} times when the connection fails or R2 answers 500/502/503/504:
+     * a dropped connection (a stale pooled one, a network blip) used to become a 404 and a broken picture on the page
+     * until it was reloaded. Every request here is repeatable (GET, HEAD, PUT of the same bytes, DELETE) and signed with
+     * a date valid for 15 minutes, so the same request is sent again.
+     */
     private <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler, String key) {
-        try {
-            return client.send(request, handler);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Could not reach Cloudflare R2 for media file " + key, e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new UncheckedIOException("Interrupted while calling Cloudflare R2 for media file " + key,
-                    new IOException(e));
+        IOException last = null;
+        for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
+            try {
+                HttpResponse<T> answer = client.send(request, handler);
+                if (!isServerError(answer.statusCode()) || attempt == ATTEMPTS) {
+                    return answer;
+                }
+                if (answer.body() instanceof InputStream stream) {
+                    stream.close();
+                }
+                last = new IOException("HTTP " + answer.statusCode());
+            } catch (IOException e) {
+                last = e;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new UncheckedIOException("Interrupted while calling Cloudflare R2 for media file " + key,
+                        new IOException(e));
+            }
+            if (attempt < ATTEMPTS) {
+                log.warn("R2 {} {} failed ({}), trying again ({}/{})", request.method(), key, last, attempt + 1, ATTEMPTS);
+                try {
+                    Thread.sleep(RETRY_PAUSE_MS * attempt);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new UncheckedIOException("Interrupted while calling Cloudflare R2 for media file " + key,
+                            new IOException(e));
+                }
+            }
         }
+        throw new UncheckedIOException("Could not reach Cloudflare R2 for media file " + key + ": " + last, last);
+    }
+
+    private static boolean isServerError(int status) {
+        return status == 500 || status == 502 || status == 503 || status == 504;
     }
 
     private static UncheckedIOException failure(String action, String key, int status, String body) {
