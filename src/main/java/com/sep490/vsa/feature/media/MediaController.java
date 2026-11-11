@@ -27,8 +27,9 @@ import java.util.Optional;
  * </ul>
  * The content type is the one stored with the file ({@code media.mime_type}), with {@code X-Content-Type-Options:
  * nosniff}. The file is streamed from {@link MediaStorage#resource}; Spring answers Range requests (video seeking) and
- * If-Modified-Since. With another base URL (Cloudflare R2 later) the files live elsewhere, this controller is not
- * created, and that store needs its own way to keep files private (e.g. signed URLs).
+ * If-Modified-Since. With {@code app.media.storage=r2} the bytes come from the private R2 bucket through this same
+ * controller (a Range request downloads only from its start). With another base URL the files would live elsewhere,
+ * this controller is not created, and that store needs its own way to keep files private (e.g. signed URLs).
  */
 @Controller
 @ConditionalOnProperty(name = "app.media.public-base-url", havingValue = "/media/", matchIfMissing = true)

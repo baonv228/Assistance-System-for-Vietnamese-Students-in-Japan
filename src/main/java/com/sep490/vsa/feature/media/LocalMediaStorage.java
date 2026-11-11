@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.media;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -16,9 +17,11 @@ import java.util.regex.Pattern;
 /**
  * Keeps media files in a folder on the server ({@code app.media.local-dir}, default {@code uploads/} next to
  * where the app runs; git-ignored). {@link MediaController} serves them at {@code /media/**}, one checked file at a
- * time ({@link MediaAccess}); the folder itself is never published.
+ * time ({@link MediaAccess}); the folder itself is never published. Used while {@code app.media.storage} is
+ * {@code local} (the default, always in tests); {@code r2} keeps the files in Cloudflare R2 ({@link R2MediaStorage}).
  */
 @Component
+@ConditionalOnProperty(name = "app.media.storage", havingValue = "local", matchIfMissing = true)
 public class LocalMediaStorage implements MediaStorage {
 
     /** Keys are made by {@link MediaService}: folder/yyyy/MM/uuid.ext. Anything else is refused. */

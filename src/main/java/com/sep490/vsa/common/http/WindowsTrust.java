@@ -35,7 +35,23 @@ public final class WindowsTrust {
 
     /** The certificates are read once, the first time a factory is made. */
     private static final class Holder {
-        static final SSLSocketFactory SSL = windowsAwareSsl();
+        static final SSLContext CONTEXT = windowsAwareContext();
+        static final SSLSocketFactory SSL = CONTEXT == null ? null : CONTEXT.getSocketFactory();
+    }
+
+    /**
+     * The same trust for {@link java.net.http.HttpClient} (Cloudflare R2): on Windows Java's certificates plus the
+     * Windows store, elsewhere Java's default context.
+     */
+    public static SSLContext sslContext() {
+        if (Holder.CONTEXT != null) {
+            return Holder.CONTEXT;
+        }
+        try {
+            return SSLContext.getDefault();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("No default TLS context", e);
+        }
     }
 
     /** A request factory with these timeouts that trusts Java's certificates and, on Windows, the Windows store. */
@@ -60,6 +76,11 @@ public final class WindowsTrust {
      * company proxies put their root). Elsewhere, or if the store cannot be read: null, Java's default is used.
      */
     static SSLSocketFactory windowsAwareSsl() {
+        SSLContext context = windowsAwareContext();
+        return context == null ? null : context.getSocketFactory();
+    }
+
+    private static SSLContext windowsAwareContext() {
         if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) {
             return null;
         }
@@ -91,7 +112,7 @@ public final class WindowsTrust {
             };
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[]{both}, null);
-            return context.getSocketFactory();
+            return context;
         } catch (GeneralSecurityException | IOException e) {
             log.warn("Could not read the Windows certificate store, using Java's certificates only: {}", e.getMessage());
             return null;
