@@ -6,6 +6,7 @@ import com.sep490.vsa.feature.blog.BlogFeedRepository;
 import com.sep490.vsa.feature.saved.SavedDtos.Counts;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedBlog;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedGuide;
+import com.sep490.vsa.feature.saved.SavedDtos.SavedPhrase;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedPlace;
 import com.sep490.vsa.feature.saved.SavedDtos.SavedResponse;
 import org.springframework.http.HttpStatus;
@@ -16,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** "Đã lưu" (UC Browse Favorites): the places, posts, questions and guides a Member saved. */
+/** "Đã lưu" (UC Browse Favorites): the places, posts, questions, guides and phrases ("Nhật ngữ") a Member saved. */
 @Service
 public class SavedService {
 
@@ -44,9 +45,11 @@ public class SavedService {
         posts = withTopics(posts, topics);
         questions = withTopics(questions, topics);
         List<SavedGuide> guides = repository.guides(userId);
+        List<SavedPhrase> phrases = repository.phrases(userId);
 
-        return new SavedResponse(places, posts, questions, guides, new Counts(places.size(), posts.size(),
-                questions.size(), guides.size(), places.size() + posts.size() + questions.size() + guides.size()));
+        return new SavedResponse(places, posts, questions, guides, phrases, new Counts(places.size(), posts.size(),
+                questions.size(), guides.size(), phrases.size(),
+                places.size() + posts.size() + questions.size() + guides.size() + phrases.size()));
     }
 
     /** Only signed-in Users (Members) have saved items, like the save action itself; staff roles get MSG18. */

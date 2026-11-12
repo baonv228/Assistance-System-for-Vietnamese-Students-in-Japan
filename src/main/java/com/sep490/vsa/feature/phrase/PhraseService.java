@@ -7,6 +7,7 @@ import com.sep490.vsa.feature.phrase.PhraseDtos.Overview;
 import com.sep490.vsa.feature.phrase.PhraseDtos.Part;
 import com.sep490.vsa.feature.phrase.PhraseDtos.PhraseCard;
 import com.sep490.vsa.feature.phrase.PhraseDtos.ReportRequest;
+import com.sep490.vsa.feature.phrase.PhraseDtos.SaveState;
 import com.sep490.vsa.feature.phrase.PhraseRepository.Filter;
 import com.sep490.vsa.feature.report.ContentReportService;
 import com.sep490.vsa.feature.report.ContentReportService.Target;
@@ -23,7 +24,8 @@ import java.util.Map;
  * "Nhật ngữ" (the prototype's "Học" tab): Japanese phrases and words written by the Academic Manager, each tied to one
  * place category and to learning topics. Everyone can browse, search, listen, flip flash cards and show a phrase to
  * staff; signed-in Members (role USER) also keep their flash card answers ("Chưa thuộc" / "Đã thuộc", the last answer
- * counts) and report a wrong entry (reasons ACADEMIC_REPORT, handled by the Academic Manager). A phrase is never
+ * counts), save entries ("Lưu", listed in "Đã lưu") and report a wrong entry (reasons ACADEMIC_REPORT, handled by the
+ * Academic Manager). A phrase is never
  * hidden by reports; the Academic Manager corrects it.
  */
 @Service
@@ -63,12 +65,12 @@ public class PhraseService {
             return new Part(kind, e.getValue()[0], e.getValue()[1], totals[0], totals[1],
                     repository.topics(viewer, kind), repository.categories(viewer, kind));
         }).toList();
-        return new Overview(parts, member, reports.academicReasons());
+        return new Overview(parts, member, reports.academicReasons(), member ? repository.savedCount(viewer) : 0);
     }
 
     /**
-     * Phrases of one topic, one category or one of the viewer's own lists ({@code mine} = learning or
-     * learned; needs a signed-in Member), or a search over all of them.
+     * Phrases of one topic, one category or one of the viewer's own lists ({@code mine} = learning, learned or
+     * saved; needs a signed-in Member), or a search over all of them.
      */
     @Transactional(readOnly = true)
     public List<PhraseCard> list(AppUserPrincipal me, String topic, String category, String mine, String q) {
@@ -101,6 +103,16 @@ public class PhraseService {
         long userId = lock(me, phraseId);
         repository.clearFlash(userId, phraseId);
         return marks(userId, phraseId);
+    }
+
+    /**
+     * "Lưu" / "Bỏ lưu" (listed in "Đã lưu" and the "Đã lưu" list of /phrases). The phrase is read FOR SHARE, so it
+     * cannot be deleted meanwhile; a deleted phrase answers 404.
+     */
+    public SaveState save(AppUserPrincipal me, long phraseId, boolean on) {
+        long userId = lock(me, phraseId);
+        repository.setSaved(userId, phraseId, on);
+        return new SaveState(on);
     }
 
     private long lock(AppUserPrincipal me, long phraseId) {

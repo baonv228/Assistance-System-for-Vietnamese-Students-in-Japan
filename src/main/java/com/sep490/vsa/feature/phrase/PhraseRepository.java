@@ -16,8 +16,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Plain SQL over {@code phrases}, {@code learning_topics}, {@code phrase_topic_links} and {@code user_phrase_marks}.
- * Phrases are written by the Academic Manager; Members keep their flash card answers ("Chưa thuộc" / "Đã thuộc").
+ * Plain SQL over {@code phrases}, {@code learning_topics}, {@code phrase_topic_links}, {@code user_phrase_marks} and
+ * {@code saved_phrases}. Phrases are written by the Academic Manager; Members keep their flash card answers ("Chưa
+ * thuộc" / "Đã thuộc") and save entries ("Lưu", listed in "Đã lưu").
  * <p>
  * A guest is read as viewer id -1, so the marks joins find nothing.
  */
@@ -27,10 +28,11 @@ public class PhraseRepository {
     /** At most this many phrases in one answer (a search over everything); the library holds a few hundred at most. */
     private static final int LIST_MAX = 200;
 
-    /** The Member's own lists: "Chưa thuộc", "Đã thuộc". */
+    /** The Member's own lists: "Chưa thuộc", "Đã thuộc", "Đã lưu" (alias sv = the viewer's saved_phrases row). */
     static final Map<String, String> MINE = Map.of(
             "learning", "m.is_learning",
-            "learned", "m.is_learned");
+            "learned", "m.is_learned",
+            "saved", "sv.user_id IS NOT NULL");
 
     private static final String SHOWN_PHRASE = "ph.deleted_at IS NULL";
 
@@ -94,8 +96,17 @@ public class PhraseRepository {
 
     // ---------------------------------------------------------------- lists
 
+    /** How many entries the Member saved that are still shown (the "Đã lưu" button of the start page). */
+    public int savedCount(long viewerId) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM saved_phrases sv JOIN phrases ph ON ph.id = sv.phrase_id
+                WHERE sv.user_id = ? AND ph.deleted_at IS NULL""", Integer.class, viewerId);
+        return n == null ? 0 : n;
+    }
+
     /**
-     * Phrases matching the filter, by category (the Map's order) then as written, with their topics. The search text
+     * Phrases matching the filter, by category (the Map's order) then as written, with their topics; the "Đã lưu" list
+     * newest saved first. The search text
      * is matched accent- and case-insensitively against the Japanese, romaji, meaning, the category name and the topic
      * names.
      */
@@ -122,25 +133,29 @@ public class PhraseRepository {
         }
         List<Row> rows = named.query("""
                 SELECT ph.id, ph.kind, ph.japanese, ph.romaji, ph.meaning_vi, c.id AS cid, c.name_vi, c.icon,
-                       COALESCE(m.is_learning, FALSE) AS learning, COALESCE(m.is_learned, FALSE) AS learned
+                       COALESCE(m.is_learning, FALSE) AS learning, COALESCE(m.is_learned, FALSE) AS learned,
+                       sv.user_id IS NOT NULL AS saved
                 FROM phrases ph
                 JOIN place_categories c ON c.id = ph.category_id
                 LEFT JOIN user_phrase_marks m ON m.phrase_id = ph.id AND m.user_id = :viewerId
+                LEFT JOIN saved_phrases sv ON sv.phrase_id = ph.id AND sv.user_id = :viewerId
                 WHERE %s
-                ORDER BY c.sort_order, c.id, ph.id
-                LIMIT :max""".formatted(String.join(" AND ", where)), params,
+                ORDER BY %s
+                LIMIT :max""".formatted(String.join(" AND ", where),
+                        "saved".equals(filter.mine()) ? "sv.created_at DESC, ph.id DESC" : "c.sort_order, c.id, ph.id"),
+                params,
                 (rs, i) -> new Row(rs.getLong("id"), rs.getString("kind"), rs.getString("japanese"),
                         rs.getString("romaji"), rs.getString("meaning_vi"),
                         new CategoryRef(rs.getString("cid"), rs.getString("name_vi"), rs.getString("icon")),
-                        rs.getBoolean("learning"), rs.getBoolean("learned")));
+                        rs.getBoolean("learning"), rs.getBoolean("learned"), rs.getBoolean("saved")));
         Map<Long, List<TopicRef>> topics = topicsOf(rows.stream().map(Row::id).toList());
         return rows.stream().map(r -> new PhraseCard(r.id(), r.kind(), r.japanese(), r.romaji(), r.meaningVi(),
-                r.category(), topics.getOrDefault(r.id(), List.of()), r.learning(), r.learned()))
+                r.category(), topics.getOrDefault(r.id(), List.of()), r.learning(), r.learned(), r.saved()))
                 .toList();
     }
 
     private record Row(long id, String kind, String japanese, String romaji, String meaningVi, CategoryRef category,
-                       boolean learning, boolean learned) {
+                       boolean learning, boolean learned, boolean saved) {
     }
 
     private Map<Long, List<TopicRef>> topicsOf(List<Long> phraseIds) {
@@ -182,6 +197,17 @@ public class PhraseRepository {
     public void clearFlash(long userId, long phraseId) {
         jdbc.update("UPDATE user_phrase_marks SET is_learned = FALSE, is_learning = FALSE WHERE user_id = ? AND phrase_id = ?",
                 userId, phraseId);
+    }
+
+    /** "Lưu" / "Bỏ lưu". Saving twice keeps one row and its first time; unsaving an unsaved entry is fine. */
+    public void setSaved(long userId, long phraseId, boolean on) {
+        if (on) {
+            jdbc.update("""
+                    INSERT INTO saved_phrases (user_id, phrase_id) VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE created_at = created_at""", userId, phraseId);
+        } else {
+            jdbc.update("DELETE FROM saved_phrases WHERE user_id = ? AND phrase_id = ?", userId, phraseId);
+        }
     }
 
     /** {learning, learned} of one phrase for one user. */

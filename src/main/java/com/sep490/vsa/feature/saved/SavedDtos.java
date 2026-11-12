@@ -44,11 +44,20 @@ public final class SavedDtos {
                              Instant savedAt) {
     }
 
-    public record Counts(int places, int posts, int questions, int guides, int total) {
+    /**
+     * A saved entry of "Nhật ngữ" that is not deleted; opens /phrases?q=&lt;japanese&gt;.
+     *
+     * @param kind PHRASE ("Mẫu câu") or VOCAB ("Từ vựng")
+     */
+    public record SavedPhrase(Long id, String kind, String japanese, String romaji, String meaningVi,
+                              String categoryName, String icon, Instant savedAt) {
+    }
+
+    public record Counts(int places, int posts, int questions, int guides, int phrases, int total) {
     }
 
     /** Each list is newest saved first. */
     public record SavedResponse(List<SavedPlace> places, List<SavedBlog> posts, List<SavedBlog> questions,
-                                List<SavedGuide> guides, Counts counts) {
+                                List<SavedGuide> guides, List<SavedPhrase> phrases, Counts counts) {
     }
 }

@@ -7,6 +7,7 @@ import com.sep490.vsa.feature.phrase.PhraseDtos.Marks;
 import com.sep490.vsa.feature.phrase.PhraseDtos.Overview;
 import com.sep490.vsa.feature.phrase.PhraseDtos.PhraseCard;
 import com.sep490.vsa.feature.phrase.PhraseDtos.ReportRequest;
+import com.sep490.vsa.feature.phrase.PhraseDtos.SaveState;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,7 +38,7 @@ public class PhraseController {
         return ApiResponse.ok("OK", service.overview(me));
     }
 
-    /** {@code mine}: learning ("Chưa thuộc") or learned ("Đã thuộc"). */
+    /** {@code mine}: learning ("Chưa thuộc"), learned ("Đã thuộc") or saved ("Đã lưu"). */
     @GetMapping("/api/phrases")
     public ApiResponse<List<PhraseCard>> list(@RequestParam(required = false) String topic,
                                               @RequestParam(required = false) String category,
@@ -57,6 +58,16 @@ public class PhraseController {
     @DeleteMapping("/api/phrases/{id:\\d+}/flash")
     public ApiResponse<Marks> clearFlash(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
         return ApiResponse.ok("Đã bỏ đánh dấu.", service.clearFlash(me, id));
+    }
+
+    @PostMapping("/api/phrases/{id:\\d+}/save")
+    public ApiResponse<SaveState> save(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
+        return ApiResponse.ok("Đã lưu.", service.save(me, id, true));
+    }
+
+    @DeleteMapping("/api/phrases/{id:\\d+}/save")
+    public ApiResponse<SaveState> unsave(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
+        return ApiResponse.ok("Đã bỏ lưu.", service.save(me, id, false));
     }
 
     @PostMapping("/api/phrases/{id:\\d+}/report")

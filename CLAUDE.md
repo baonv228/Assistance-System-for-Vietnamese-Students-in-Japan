@@ -342,7 +342,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and `/reviews` (Home) and the event pages show names without a link yet.
 - "Đã lưu" (`feature/saved`, read only): `GET /api/me/saved` (USER role) lists saved ACTIVE places (a merged place
   shows the place it was merged into), PUBLISHED posts and questions of active accounts and published, not deleted
-  guides (`guides`, V20 `saved_guides`, summary cut to 160), newest saved first; page `/saved` (`pages/saved.html` +
+  guides (`guides`, V20 `saved_guides`, summary cut to 160) and not deleted "Nhật ngữ" entries (`phrases`, V22
+  `saved_phrases`; card opens `/phrases?q=<japanese>`, "Luyện thẻ ghi nhớ" → `/phrases?view=saved`), newest saved
+  first; page `/saved` (`pages/saved.html` +
   `assets/js/pages/saved.js`, "Bỏ lưu" uses the save API of each kind). The profile has `savedCount` for "Đã lưu (N)"
   on Tôi (guides included). Places are saved from the Map (`saved_places`).
 - Cẩm nang progress (`feature/guide`): one rule, `GuideProgressService.states(userId, guideIds)`: a guide with a
@@ -663,27 +665,31 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - The prototype's "Học" tab, named "Nhật ngữ" in the navbar (key `learn`, icon `translate`; was "Mẫu câu & Từ vựng").
   Page `/phrases` (`pages/phrases.html`, `assets/js/pages/phrases.js`, `assets/css/phrases.css`); the view is in the
   address: none = "Chủ đề", `?by=category` = "Địa điểm", `?topic=pay&kind=VOCAB`, `?category=konbini&kind=PHRASE`,
-  `?view=learning|learned` (the Member's own lists, guests go to sign in), `&status=`, `?q=` (search). Old
+  `?view=learning|learned|saved` (the Member's own lists, guests go to sign in), `&status=`, `?q=` (search). Old
   `?view=favorites` / `?view=notebook` links open the start page.
   Home's "Học thêm chủ đề này" opens the phrase's topic (`HomeDtos.Phrase.topicId`, else its category). Tables:
   `phrases` (kind PHRASE "Mẫu câu" / VOCAB "Từ vựng", one place
   category), `learning_topics`, `phrase_topic_links`, `user_phrase_marks` (`is_learning` "Chưa thuộc", `is_learned` "Đã
-  thuộc", never both, CHECK `ck_mark_card`, V17; the old `in_notebook` / `is_favorite` column was dropped in V18).
+  thuộc", never both, CHECK `ck_mark_card`, V17; the old `in_notebook` / `is_favorite` column was dropped in V18),
+  `saved_phrases` (V22, "Lưu").
   Entries are written by the
   Academic Manager (sample data in `dev/sample-data.sql`: six topics; "Lịch sự cơ bản" was dropped by the team and
   `DevDataSeeder.dropPoliteTopic` removes it from databases that loaded it before).
 - Removed (user decisions): practice sentences ("Câu luyện tập": no Member form, no Academic Manager pages, no API;
   V18 drops `practice_sentences` and the PRACTICE target of `ck_scan_target`, `ck_case_target`, `ck_appeal_target`,
   after deleting the practice rows that only development databases held, points taken back), the
-  "Sổ tay" review deck (no review schedule, levels or suggestions: a flash card answer is simply kept) and "Yêu thích" /
-  "Đã lưu" (no heart, no list, no API; "Nhật ngữ đã lưu" left Tôi; the Academic Manager's library has no "Yêu thích"
-  count).
+  "Sổ tay" review deck (no review schedule, levels or suggestions: a flash card answer is simply kept) and "Yêu thích"
+  (no heart; the Academic Manager's library has no "Yêu thích" count). Saving came back later as "Lưu" (user decision,
+  12/11/2026), the same as saving a post, question or guide: `saved_phrases` (V22), "Lưu" / "Đã lưu" on every card
+  (guests → sign in, not for staff), the list `?view=saved` (newest saved first, kind and status filters, flash cards)
+  behind "Đã lưu (n)" next to "Luyện tập" (Members), and the "Nhật ngữ" section of `/saved` (counted in `savedCount`).
 - API (`PhraseController`, `PhraseService`, `PhraseRepository`, `PhraseDtos`; GETs public): `GET /api/phrases/overview`
   (`parts`: Mẫu câu and Từ vựng, each with its topics, most entries first, and categories, each with `count` and the
-  Member's `learned`; `member`; ACADEMIC_REPORT reasons), `GET
-  /api/phrases?topic=&category=&mine=learning|learned&q=` (cards by category then id, at most 200: category,
-  topics, `learning`, `learned`; `q` matches Japanese, romaji, meaning, category and topic names, accents and case
-  ignored; an unknown `mine` → 400). Members only (role USER, ACTIVE; staff MSG18, guests 401): POST
+  Member's `learned`; `member`; ACADEMIC_REPORT reasons; `savedCount`), `GET
+  /api/phrases?topic=&category=&mine=learning|learned|saved&q=` (cards by category then id, `saved` newest saved
+  first, at most 200: category, topics, `learning`, `learned`, `saved`; `q` matches Japanese, romaji, meaning, category
+  and topic names, accents and case ignored; an unknown `mine` → 400). Members only (role USER, ACTIVE; staff MSG18,
+  guests 401): POST|DELETE `/api/phrases/{id}/save` (`{saved}`; saving twice keeps one row; a deleted phrase → 404), POST
   `/api/phrases/{id}/flash` `{learned}` (the flash card answer, the last one counts), DELETE `/api/phrases/{id}/flash`
   ("Bỏ đánh dấu"; each answers the phrase's marks), POST `/api/phrases/{id}/report` `{reasonId, note}`. The kind of a
   set is filtered in the page, so the list takes no `kind`. Where each part of the page is drawn: the map at the top of

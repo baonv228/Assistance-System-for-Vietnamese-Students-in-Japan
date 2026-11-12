@@ -29,9 +29,9 @@ public final class PhraseDtos {
 
     /**
      * The start page: the two parts (Mẫu câu, Từ vựng), whether the viewer may mark and report (signed-in Members),
-     * and the report reasons.
+     * the report reasons and how many entries the Member saved ("Đã lưu", 0 for others).
      */
-    public record Overview(List<Part> parts, boolean member, List<Reason> reportReasons) {
+    public record Overview(List<Part> parts, boolean member, List<Reason> reportReasons, int savedCount) {
     }
 
     public record CategoryRef(String id, String name, String icon) {
@@ -42,10 +42,11 @@ public final class PhraseDtos {
 
     /**
      * {@code kind} PHRASE (Mẫu câu) or VOCAB (Từ vựng). {@code learning} / {@code learned}: the Member's last flash card
-     * answer ("Chưa thuộc" / "Đã thuộc"; both false = not answered yet).
+     * answer ("Chưa thuộc" / "Đã thuộc"; both false = not answered yet). {@code saved}: the Member saved it ("Lưu").
      */
     public record PhraseCard(long id, String kind, String japanese, String romaji, String meaningVi,
-                             CategoryRef category, List<TopicRef> topics, boolean learning, boolean learned) {
+                             CategoryRef category, List<TopicRef> topics, boolean learning, boolean learned,
+                             boolean saved) {
     }
 
     public record ReportRequest(@NotNull(message = "Hãy chọn lý do báo cáo.") Long reasonId, String note) {
@@ -57,5 +58,9 @@ public final class PhraseDtos {
 
     /** The marks of one phrase after a change. */
     public record Marks(boolean learning, boolean learned) {
+    }
+
+    /** "Lưu" / "Bỏ lưu" of one phrase: saved or not after the change. */
+    public record SaveState(boolean saved) {
     }
 }
