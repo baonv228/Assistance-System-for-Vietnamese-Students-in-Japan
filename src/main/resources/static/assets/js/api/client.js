@@ -142,7 +142,8 @@ export const apiClient = {
     interests: () => request("/me/interests"),
     saveInterests: (topicIds) => request("/me/interests", { method: "PUT", body: JSON.stringify({ topicIds }) }),
     deleteAccount: () => request("/me", { method: "DELETE" }),
-    // "Đã lưu": { places, posts, questions, guides, counts }. Unsave with saveBlog / saveQuestion / saveGuide(id, false).
+    // "Đã lưu": { places, posts, questions, guides, phrases, counts }. Unsave with saveBlog / saveQuestion / saveGuide /
+    // savePhrase(id, false).
     saved: () => request("/me/saved"),
     // Public profile (UC-U07). The lists answer { items, page, hasMore }
     publicProfile: (id) => request(`/users/${id}`),
@@ -295,13 +296,14 @@ export const apiClient = {
     chooseBestAnswer: (id, answerId) =>
         request(`/questions/${id}/best-answer`, { method: "PUT", body: JSON.stringify({ answerId }) }),
 
-    // "Nhật ngữ". overview: { parts: [{ kind, name, icon, count, learned, topics, categories }], member, reportReasons };
-    // phrases params: { topic, category, mine: learning|learned, q } → [PhraseCard]; marks answer
-    // { learning, learned }; flash: learned true ("Đã thuộc") / false ("Chưa thuộc")
+    // "Nhật ngữ". overview: { parts: [{ kind, name, icon, count, learned, topics, categories }], member, reportReasons,
+    // savedCount }; phrases params: { topic, category, mine: learning|learned|saved, q } → [PhraseCard]; marks answer
+    // { learning, learned }; flash: learned true ("Đã thuộc") / false ("Chưa thuộc"); savePhrase → { saved }
     phraseOverview: () => request("/phrases/overview"),
     phrases: (params = {}) => request(`/phrases?${toQuery(params)}`),
     phraseFlash: (id, learned) => post(`/phrases/${id}/flash`, { learned }),
     phraseClearFlash: (id) => request(`/phrases/${id}/flash`, { method: "DELETE" }),
+    savePhrase: (id, on) => request(`/phrases/${id}/save`, { method: on ? "POST" : "DELETE" }),
     reportPhrase: (id, body) => post(`/phrases/${id}/report`, body),
 
     // Academic Manager. phrase body: { categoryId, kind: PHRASE|VOCAB, japanese, romaji, meaningVi, topicIds,

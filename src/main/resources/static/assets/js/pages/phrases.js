@@ -4,9 +4,11 @@
 // The view lives in the address, so Back works and links from other pages (Home) open the right list:
 //   start page   none = Chủ đề, ?by=category = Địa điểm, ?q= (search, both kinds)
 //   a set        ?topic=pay&kind=VOCAB, ?category=konbini&kind=PHRASE (without kind: the kind it has, Mẫu câu first),
-//                ?view=learning|learned (the flash card lists, both kinds; &kind= filters them)
+//                ?view=learning|learned (the flash card lists, both kinds; &kind= filters them),
+//                ?view=saved ("Đã lưu": entries saved with "Lưu", newest saved first; also listed on /saved)
 //   &status=learning|learned|new filters a set by the Member's marks ("Chưa thuộc", "Đã thuộc", "Chưa luyện").
-// "Yêu thích" / "Đã lưu" was removed (user decision); old ?view=favorites links open the start page.
+// The old "Yêu thích" was removed (user decision; old ?view=favorites links open the start page); "Lưu" came back later
+// as its own list (saved_phrases, V22), like saving a post, question or guide.
 //
 // Where each part of the screen is drawn (everything goes into <div id="content"> of phrases.html, except the dialogs):
 //   START PAGE  renderStart()
@@ -15,6 +17,7 @@
 //     search results (under Từ vựng / Mẫu câu) .... #results    (cards: phraseCard())
 //     everything below, hidden while searching .... #browse
 //       "Luyện tập" button ....................... [data-act=practice] → openPractice() (dialog #flash-dlg)
+//       "Đã lưu (n)" link (Members) .............. ?view=saved
 //       "Đăng nhập để lưu kết quả…" (guests) ...... .info
 //       "Chủ đề" / "Địa điểm" switch ............. .part-tabs [data-by]
 //       "Từ vựng", then "Mẫu câu" sections ........ kindSection() → topic/category cards groupCard() + progress()
@@ -26,7 +29,8 @@
 //     "Luyện thẻ ghi nhớ (n thẻ)" button ......... #set-tools [data-act=flash]   updateSetHead()
 //     the cards ................................. #set-list      phraseCard()
 //   ONE CARD  phraseCard(): kind badge, category and topic badges (links), "Chưa thuộc"/"Đã thuộc" badge statusBadge(),
-//     Japanese / romaji / meaning, buttons "Đưa cho nhân viên xem" (phrases only), "Nghe", "Bỏ đánh dấu", "Báo lỗi".
+//     Japanese / romaji / meaning, buttons "Đưa cho nhân viên xem" (phrases only), "Nghe", "Lưu" / "Đã lưu",
+//     "Bỏ đánh dấu", "Báo lỗi".
 //     Clicks on all of it: the one listener on #content ("actions" below).
 //   DIALOGS (in phrases.html)
 //     #report-dlg  "Báo lỗi mẫu câu" ............. openReport(), its submit listener
@@ -44,7 +48,9 @@ const MINE = {
     learning: { name: "Chưa thuộc", icon: "replay", has: (p) => p.learning,
         empty: `Không còn thẻ nào chưa thuộc. Lật thẻ ở một chủ đề và chọn "Chưa thuộc" để lưu lại đây.` },
     learned: { name: "Đã thuộc", icon: "task_alt", has: (p) => p.learned,
-        empty: `Chưa có thẻ nào đã thuộc. Lật thẻ và chọn "Đã thuộc" khi bạn nhớ câu đó.` }
+        empty: `Chưa có thẻ nào đã thuộc. Lật thẻ và chọn "Đã thuộc" khi bạn nhớ câu đó.` },
+    saved: { name: "Đã lưu", icon: "bookmark", has: (p) => p.saved,
+        empty: `Bạn chưa lưu mẫu câu hay từ vựng nào. Bấm "Lưu" trên một thẻ để giữ lại ở đây.` }
 };
 /** The "Chưa thuộc / Đã thuộc / Chưa luyện" filter (Members only): the flash card answer kept for each entry. */
 const STATUS = {
@@ -177,8 +183,9 @@ function renderStart(v) {
         <div id="browse" ${v.q ? "hidden" : ""}>
             <div class="row start-actions">
                 <button class="btn pri" type="button" data-act="practice">${ic("style")}Luyện tập</button>
+                ${member() ? `<a class="btn" href="?view=saved" data-nav>${ic("bookmark")}Đã lưu (${overview.savedCount || 0})</a>` : ""}
             </div>
-            ${user ? "" : `<div class="info">${ic("info")} <a class="link" href="${esc(loginUrl())}">Đăng nhập</a> để lưu kết quả lật thẻ (Chưa thuộc / Đã thuộc).</div>`}
+            ${user ? "" : `<div class="info">${ic("info")} <a class="link" href="${esc(loginUrl())}">Đăng nhập</a> để lưu mẫu câu, từ vựng và kết quả lật thẻ (Chưa thuộc / Đã thuộc).</div>`}
             <div class="part-tabs" role="group" aria-label="Xem theo">${Object.entries(SECTIONS).map(([key, s]) => `
                 <button type="button" class="part-tab" data-by="${key}" aria-pressed="${key === v.by}">
                     ${ic(s.icon)}<span class="grow"><b>${s.name}</b><span class="note">${groupCount(s)} ${s.name.toLowerCase()}</span></span>
@@ -362,11 +369,12 @@ function updateSetHead() {
 
 /**
  * ONE CARD (search results and sets): badges (kind, category unless the set is that category, topics, mark), the
- * Japanese, romaji and meaning, then the buttons. "Báo lỗi" shows for guests (it sends them to sign in) and Members,
- * not for staff. The buttons are handled by the click listener on #content (data-act).
+ * Japanese, romaji and meaning, then the buttons. "Lưu" and "Báo lỗi" show for guests (they send them to sign in) and
+ * Members, not for staff. The buttons are handled by the click listener on #content (data-act).
  */
 function phraseCard(p, withCategory) {
     const report = user && !member() ? "" : `<button class="btn sm" type="button" data-act="report-phrase">${ic("flag")}Báo lỗi</button>`;
+    const save = user && !member() ? "" : `<button class="btn sm${p.saved ? " on" : ""}" type="button" data-act="save" aria-pressed="${Boolean(p.saved)}">${ic(p.saved ? "bookmark_added" : "bookmark")}${p.saved ? "Đã lưu" : "Lưu"}</button>`;
     return `
         <article class="card vocab" data-id="${p.id}">
             <div class="row">
@@ -382,6 +390,7 @@ function phraseCard(p, withCategory) {
             <div class="row">
                 ${p.kind === "VOCAB" ? "" : `<button class="btn sm pri" type="button" data-act="staff">${ic("front_hand")}Đưa cho nhân viên xem</button>`}
                 <button class="btn sm" type="button" data-act="speak">${ic("volume_up")}Nghe</button>
+                ${save}
                 ${member() && (p.learning || p.learned) ? `<button class="btn sm" type="button" data-act="clear">${ic("undo")}Bỏ đánh dấu</button>` : ""}
                 ${report}
             </div>
@@ -453,6 +462,7 @@ content.addEventListener("click", async (event) => {
         case "staff": showStaff(phrase); break;
         case "speak": speak(phrase.japanese); break;
         case "clear": await clearMark(phrase, button); break;
+        case "save": await toggleSave(phrase, button); break;
         case "report-phrase": openReport(phrase.id); break;
         case "flash": startFlash(shown()); break;
         case "practice": await openPractice(button); break;
@@ -467,6 +477,31 @@ async function clearMark(phrase, button) {
         applyMarks(phrase, await apiClient.phraseClearFlash(phrase.id));
         refresh(phrase);
         toast("Đã bỏ đánh dấu.");
+    } catch (error) {
+        button.disabled = false;
+        failed(error);
+    }
+}
+
+/**
+ * "Lưu" / "Đã lưu" on a card: POST or DELETE /api/phrases/{id}/save (guests go to sign in). In the "Đã lưu" list an
+ * unsaved card leaves the list; the start page's "Đã lưu (n)" follows.
+ */
+async function toggleSave(phrase, button) {
+    if (!user) {
+        location.assign(loginUrl());
+        return;
+    }
+    const on = !phrase.saved;
+    button.disabled = true;
+    try {
+        const result = await apiClient.savePhrase(phrase.id, on);
+        if (result.saved !== phrase.saved && overview) {
+            overview.savedCount = Math.max(0, (overview.savedCount || 0) + (result.saved ? 1 : -1));
+        }
+        phrase.saved = result.saved;
+        refresh(phrase);
+        toast(result.saved ? "Đã lưu. Xem lại trong Đã lưu." : "Đã bỏ lưu.");
     } catch (error) {
         button.disabled = false;
         failed(error);

@@ -1,4 +1,5 @@
-// "Đã lưu" (UC Browse Favorites): saved places, posts, questions and guides of the signed-in Member, newest saved first.
+// "Đã lưu" (UC Browse Favorites): saved places, posts, questions, guides and "Nhật ngữ" entries of the signed-in Member,
+// newest saved first.
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { esc, fullDate, ic, loginUrl, timeAgo } from "../lib/ui.js";
@@ -9,20 +10,26 @@ const ROUTES = {
     POST: (id) => `/blog/${id}`,
     QA: (id) => `/qa/${id}`,
     GUIDE: (id) => `/guides/${id}`,
+    PHRASE: (japanese) => `/phrases?${new URLSearchParams({ q: japanese })}`,
+    savedPhrases: "/phrases?view=saved",           // the "Đã lưu" list of Nhật ngữ (flash cards over it)
     login: loginUrl                                // back to "Đã lưu" after signing in
 };
 const SECTIONS = [
     { key: "places", title: "Địa điểm", icon: "location_on", empty: "Chưa lưu địa điểm nào.", list: "place-grid", card: placeCard },
     { key: "posts", title: "Bài viết", icon: "article", empty: "Chưa lưu bài nào.", list: "post-list", card: blogCard },
     { key: "questions", title: "Câu hỏi", icon: "contact_support", empty: "Chưa lưu câu hỏi nào.", list: "post-list", card: blogCard },
-    { key: "guides", title: "Cẩm nang", icon: "menu_book", empty: "Chưa lưu cẩm nang nào.", list: "post-list", card: guideCard }
+    { key: "guides", title: "Cẩm nang", icon: "menu_book", empty: "Chưa lưu cẩm nang nào.", list: "post-list", card: guideCard },
+    { key: "phrases", title: "Nhật ngữ", icon: "translate", empty: "Chưa lưu mẫu câu hay từ vựng nào.", list: "post-list", card: phraseCard,
+        more: `<a class="link" href="${ROUTES.savedPhrases}">Luyện thẻ ghi nhớ${ic("chevron_right")}</a>` }
 ];
 // "Bỏ lưu" on a card, by its data-type: the save API of that kind, the list the item leaves and the message.
 const UNSAVE = {
     POST: { key: "posts", call: (id) => apiClient.saveBlog(id, false), message: "Đã bỏ lưu bài viết." },
     QA: { key: "questions", call: (id) => apiClient.saveQuestion(id, false), message: "Đã bỏ lưu câu hỏi." },
-    GUIDE: { key: "guides", call: (id) => apiClient.saveGuide(id, false), message: "Đã bỏ lưu cẩm nang." }
+    GUIDE: { key: "guides", call: (id) => apiClient.saveGuide(id, false), message: "Đã bỏ lưu cẩm nang." },
+    PHRASE: { key: "phrases", call: (id) => apiClient.savePhrase(id, false), message: "Đã bỏ lưu." }
 };
+const KIND = { PHRASE: "Mẫu câu", VOCAB: "Từ vựng" };
 
 const summary = document.querySelector("#summary");
 const content = document.querySelector("#content");
@@ -44,7 +51,8 @@ try {
 function render() {
     content.innerHTML = SECTIONS.map((s) => `
         <section class="saved-section" id="sec-${s.key}" aria-labelledby="h-${s.key}">
-            <h3 id="h-${s.key}">${ic(s.icon)}${s.title} <span class="note" data-count="${s.key}"></span></h3>
+            <h3 id="h-${s.key}">${ic(s.icon)}${s.title} <span class="note" data-count="${s.key}"></span>
+                ${s.more ? `<span class="saved-more" data-more="${s.key}">${s.more}</span>` : ""}</h3>
             <div class="${s.list}" data-list="${s.key}">
                 ${data[s.key].map(s.card).join("")}
             </div>
@@ -98,6 +106,23 @@ function guideCard(g) {
         </article>`;
 }
 
+/** A saved phrase or word: kind and place category, Japanese, romaji, meaning; opens it in "Nhật ngữ". */
+function phraseCard(p) {
+    return `
+        <article class="card post saved-phrase" data-id="${p.id}" data-type="PHRASE">
+            <div class="row meta"><span class="badge br">${esc(KIND[p.kind] || p.kind)}</span>
+                ${p.categoryName ? `<span class="badge">${ic(p.icon || "place")}${esc(p.categoryName)}</span>` : ""}</div>
+            <h3 lang="ja"><a class="stretch" href="${ROUTES.PHRASE(p.japanese)}">${esc(p.japanese)}</a></h3>
+            ${p.romaji ? `<p class="note romaji">${esc(p.romaji)}</p>` : ""}
+            <p class="excerpt">${esc(p.meaningVi)}</p>
+            <div class="row foot">
+                ${p.savedAt ? `<span class="note">Đã lưu: <time datetime="${esc(p.savedAt)}" title="${esc(fullDate(p.savedAt))}">${timeAgo(p.savedAt)}</time></span>` : ""}
+                <span class="grow"></span>
+                <button class="btn sm" type="button" data-unsave>${ic("bookmark_remove")}Bỏ lưu</button>
+            </div>
+        </article>`;
+}
+
 async function onClick(event) {
     const button = event.target.closest("[data-unsave]");
     if (!button) {
@@ -125,6 +150,10 @@ function updateCounts(message) {
         content.querySelector(`[data-count="${s.key}"]`).textContent = n ? `(${n})` : "";
         content.querySelector(`[data-empty="${s.key}"]`).hidden = n > 0;
         content.querySelector(`[data-list="${s.key}"]`).hidden = n === 0;
+        const more = content.querySelector(`[data-more="${s.key}"]`);
+        if (more) {
+            more.hidden = n === 0;
+        }
     });
     const counted = total ? `${total} mục đã lưu.` : "Bạn chưa lưu mục nào.";
     summary.textContent = message ? `${message} ${counted}` : counted;
