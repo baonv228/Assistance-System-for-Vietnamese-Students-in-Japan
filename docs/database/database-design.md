@@ -22,7 +22,7 @@
 | 6. Review | `reviews`, `review_media`, `review_likes` |
 | 7. Sự kiện | `events` |
 | 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots`, `user_interest_topics` (V21) |
-| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks` (`practice_sentences` bỏ ở V18) |
+| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks`, `saved_phrases` (V22) (`practice_sentences` bỏ ở V18) |
 | 10. Kiểm duyệt và báo cáo | `reason_options`, `banned_keywords`, `moderation_scans`, `report_cases`, `reports`, `appeals` |
 | 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress`, `saved_guides` (V20) |
 | 12. Thông báo và hệ thống | `notifications`, `system_settings`, `activity_logs`, `api_usage` |
@@ -643,6 +643,15 @@ Nút "Lưu" trên trang cẩm nang; danh sách hiện trong "Đã lưu". Chỉ h
 |---|---|---|
 | user_id | BIGINT | PK, FK → users |
 | guide_id | BIGINT | PK, FK → guide_items |
+| created_at | DATETIME | NN |
+
+### `saved_phrases` – Mẫu câu, từ vựng đã lưu (V22)
+Nút "Lưu" trên mỗi thẻ ở trang Nhật ngữ; danh sách hiện trong "Đã lưu" và trong `/phrases?view=saved`. Chỉ hiện mục chưa bị xóa mềm (`phrases.deleted_at`); dòng của mục bị xóa vẫn giữ, mục được khôi phục thì hiện lại.
+
+| Cột | Kiểu | Ràng buộc |
+|---|---|---|
+| user_id | BIGINT | PK, FK → users |
+| phrase_id | BIGINT | PK, FK → phrases |
 | created_at | DATETIME | NN |
 
 ---

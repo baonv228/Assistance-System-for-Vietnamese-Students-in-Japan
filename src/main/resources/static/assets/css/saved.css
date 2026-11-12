@@ -12,3 +12,9 @@
 @media (max-width: 480px) {
     .place-grid { grid-template-columns: minmax(0, 1fr); }
 }
+/* "Nhật ngữ": "Luyện thẻ ghi nhớ" link at the end of the heading, and the Japanese of a saved phrase */
+.saved-section h3 .saved-more { margin-left: auto; font-size: .9rem; font-weight: 500; }
+.saved-section h3 .saved-more[hidden] { display: none; }
+.saved-phrase h3 { font-size: 1.15rem; }
+.saved-phrase .romaji { font-style: italic; }
+.saved-phrase .excerpt { margin: 0; }
