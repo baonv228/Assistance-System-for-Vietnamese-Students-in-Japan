@@ -1,5 +1,7 @@
 // Small helpers shared by the login, sign-up and complete-sign-up pages.
 
+import { android, googleSignInBlocked } from "../lib/device.js";
+
 export function showAlert(element, message, type = "error") {
     element.textContent = message;
     element.className = `alert ${type} show`;
@@ -68,7 +70,11 @@ export function setupPasswordRules(input, list, minLength = () => 8) {
     return () => Object.values(rules).every((rule) => rule(input.value));
 }
 
-/** Configures the Google / Facebook buttons depending on which providers the server has enabled. */
+/**
+ * Configures the Google / Facebook buttons depending on which providers the server has enabled. Inside an app's own
+ * browser (Zalo, Facebook, Messenger…, opened from a shared link) Google refuses every sign-in with its English page
+ * "403: disallowed_useragent", so there the Google button points to a note on how to open the page in Chrome or Safari.
+ */
 export async function setupSocialButtons(apiClient) {
     const buttons = document.querySelectorAll("[data-provider]");
     let providers = { google: false, facebook: false };
@@ -77,15 +83,79 @@ export async function setupSocialButtons(apiClient) {
     } catch {
         // keep both disabled
     }
+    let note = null;
     buttons.forEach((button) => {
         const id = button.dataset.provider;
-        if (providers[id]) {
-            button.addEventListener("click", () => {
-                window.location.href = `/oauth2/authorization/${id}`;
-            });
-        } else {
+        if (!providers[id]) {
             button.disabled = true;
             button.title = "Chưa được cấu hình trên máy chủ";
+            return;
+        }
+        if (id === "google" && googleSignInBlocked()) {
+            note = note || inAppNote(button.closest(".social-row"));
+            button.addEventListener("click", () => {
+                note.classList.remove("flash");
+                void note.offsetWidth;   // restart the animation on every press
+                note.classList.add("flash");
+                note.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                note.focus({ preventScroll: true });
+            });
+            return;
+        }
+        button.addEventListener("click", () => {
+            window.location.href = `/oauth2/authorization/${id}`;
+        });
+    });
+}
+
+/** The note under the social buttons in an in-app browser: why Google does not work here and how to leave. */
+function inAppNote(row) {
+    const link = `${window.location.origin}${window.location.pathname}`;
+    const note = document.createElement("div");
+    note.className = "alert info show in-app-note";
+    note.id = "in-app-note";
+    note.tabIndex = -1;
+    note.setAttribute("role", "note");
+
+    const text = document.createElement("p");
+    text.textContent = "Google không cho đăng nhập trong trình duyệt của Zalo, Facebook, Messenger… Hãy mở trang này "
+        + "bằng Chrome hoặc Safari (bấm ⋯ hoặc biểu tượng chia sẻ rồi chọn “Mở bằng trình duyệt”), hoặc đăng nhập "
+        + "bằng email.";
+    const address = document.createElement("span");
+    address.className = "note-link";
+    address.textContent = link;
+
+    const actions = document.createElement("div");
+    actions.className = "note-actions";
+    if (android()) {
+        // Android hands an intent:// link to the app named in it: the same page opens in Chrome
+        const chrome = document.createElement("a");
+        chrome.className = "btn btn-social";
+        chrome.href = `intent://${window.location.host}${window.location.pathname}${window.location.search}`
+            + "#Intent;scheme=https;package=com.android.chrome;end";
+        chrome.textContent = "Mở bằng Chrome";
+        actions.append(chrome);
+    }
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "btn btn-social";
+    copy.textContent = "Sao chép liên kết";
+    copy.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(link);
+            copy.textContent = "Đã sao chép liên kết";
+        } catch {
+            // some app browsers block the clipboard: select the address so a long press copies it
+            const range = document.createRange();
+            range.selectNodeContents(address);
+            window.getSelection()?.removeAllRanges();
+            window.getSelection()?.addRange(range);
+            copy.textContent = "Giữ ngón tay lên liên kết để sao chép";
         }
     });
+    actions.append(copy);
+
+    note.append(text, address, actions);
+    row.after(note);
+    return note;
 }

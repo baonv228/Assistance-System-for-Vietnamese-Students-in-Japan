@@ -152,6 +152,16 @@ body.auth-page {
 .btn-social:hover:not([disabled]) { background: var(--surface-2); }
 .btn-social svg { width: 20px; height: 20px; flex: none; }
 .social-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* Opened inside Zalo / Facebook / Messenger: Google refuses to sign in there (auth-ui.js inAppNote) */
+.in-app-note { margin: 12px 0 0; }
+.in-app-note:focus { outline: none; box-shadow: var(--focus); }
+.in-app-note p { margin: 0; }
+.in-app-note .note-link { display: block; margin-top: 8px; font-weight: 600; overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
+.in-app-note .note-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.in-app-note .btn { width: auto; height: 38px; padding: 0 14px; font-size: 14px; }
+.in-app-note.flash { animation: note-flash .9s ease-out; }
+@keyframes note-flash { 0% { box-shadow: 0 0 0 4px var(--brand); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .in-app-note.flash { animation: none; } }
 
 .divider {
     display: flex;
