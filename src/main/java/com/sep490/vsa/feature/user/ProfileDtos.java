@@ -51,4 +51,19 @@ public final class ProfileDtos {
             Long areaId,
             @Pattern(regexp = "PRE|ARR|LEAVE|HOME", message = "Giai đoạn không hợp lệ") String stage) {
     }
+
+    /**
+     * {@code PUT /api/me/feed-preferences} ("Điều chỉnh" in "Dành cho bạn" on the Home): area and stage as
+     * {@link UpdateProfileRequest}, and {@code topicIds} = the whole new "Chủ đề quan tâm" choice (empty clears it),
+     * or null to keep the topics as they are.
+     */
+    public record UpdateFeedPreferencesRequest(
+            Long areaId,
+            @Pattern(regexp = "PRE|ARR|LEAVE|HOME", message = "Giai đoạn không hợp lệ") String stage,
+            List<Long> topicIds) {
+    }
+
+    /** What is saved now; {@code topicIds} = the chosen topics still offered, in the Blog's topic order. */
+    public record FeedPreferencesResponse(Long areaId, String areaName, String stage, List<Long> topicIds) {
+    }
 }

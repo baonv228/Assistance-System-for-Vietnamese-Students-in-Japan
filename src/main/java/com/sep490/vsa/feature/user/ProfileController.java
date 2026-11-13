@@ -2,7 +2,9 @@ package com.sep490.vsa.feature.user;
 
 import com.sep490.vsa.common.dto.ApiResponse;
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.user.ProfileDtos.FeedPreferencesResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
+import com.sep490.vsa.feature.user.ProfileDtos.UpdateFeedPreferencesRequest;
 import com.sep490.vsa.feature.user.ProfileDtos.UpdateProfileRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -37,6 +39,17 @@ public class ProfileController {
     public ApiResponse<ProfileResponse> update(@AuthenticationPrincipal AppUserPrincipal me,
                                                @Valid @RequestBody UpdateProfileRequest body) {
         return ApiResponse.ok("Đã lưu khu vực và giai đoạn.", profileService.update(me.id(), body.areaId(), body.stage()));
+    }
+
+    /**
+     * "Điều chỉnh" in "Dành cho bạn" on the Home: area, stage and, unless {@code topicIds} is null, the "Chủ đề quan
+     * tâm", saved together or not at all ({@link ProfileService#updateFeedPreferences}).
+     */
+    @PutMapping("/api/me/feed-preferences")
+    public ApiResponse<FeedPreferencesResponse> updateFeedPreferences(@AuthenticationPrincipal AppUserPrincipal me,
+                                                                      @Valid @RequestBody UpdateFeedPreferencesRequest body) {
+        return ApiResponse.ok("Đã lưu.",
+                profileService.updateFeedPreferences(me.id(), body.areaId(), body.stage(), body.topicIds()));
     }
 
     @DeleteMapping("/api/me")

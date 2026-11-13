@@ -111,6 +111,12 @@ public class InterestService {
         return read(userId);
     }
 
+    /** The ids of the topics the user chose that are still offered, in the Blog's topic order. */
+    @Transactional(readOnly = true)
+    public List<Long> chosenTopicIds(long userId) {
+        return chosen(userId).stream().map(Interest::id).toList();
+    }
+
     private InterestSettings read(long userId) {
         List<Interest> chosen = chosen(userId);
         Set<Long> chosenIds = ids(chosen);
