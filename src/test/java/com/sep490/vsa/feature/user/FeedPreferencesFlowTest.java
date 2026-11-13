@@ -35,6 +35,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,8 +53,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * "Điều chỉnh" in "Dành cho bạn" on the member Home ({@code PUT /api/me/feed-preferences}): area, stage and "Chủ đề
  * quan tâm" are saved together or not at all, end to end against MySQL ({@code asvsj_test}). Not one transaction: the
- * saves commit, and every test deletes its accounts (their topics go with them) afterwards. What the topics do to the
- * feed is checked in HomeFeedFlowTest, the topic rules in InterestFlowTest.
+ * saves commit, as a save and an account deletion at once must; every test deletes its accounts (their topics go with
+ * them) afterwards. What the topics do to the feed is checked in HomeFeedFlowTest, the topic rules in InterestFlowTest.
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:mysql://localhost:3306/asvsj_test?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
@@ -205,6 +210,48 @@ class FeedPreferencesFlowTest {
         assertThatThrownBy(() -> profiles.updateFeedPreferences(deleted, areaA, "ARR", List.of()))
                 .isInstanceOf(ApiException.class).hasMessage(NOT_SIGNED_IN);
         assertThat(row(deleted)).containsEntry("area_id", null).containsEntry("stage", null);
+    }
+
+    /**
+     * "Xóa tài khoản" at the moment of a save: whichever runs first, the deleted account keeps no area, stage or topic
+     * and neither call fails but with 401. The save locks the users row before anything else; the deletion clears area
+     * and stage in the statement that locks it, so an area saved after the deletion read the account is cleared too.
+     */
+    @Test
+    void deletingTheAccountWhileSavingLeavesNoAreaStageOrTopic() throws Exception {
+        List<Long> topics = List.of(topic("Nhà ở"), topic("Y tế"));
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            for (int round = 0; round < 15; round++) {
+                long leaving = user("USER", "ACTIVE");
+                // No area or stage yet: when the deletion read the account before the save, User.anonymize then
+                // changes nothing in them, and only the deletion's own UPDATE clears what the save wrote meanwhile
+                profiles.updateFeedPreferences(leaving, null, null, List.of(topic("Đi lại")));
+                CountDownLatch start = new CountDownLatch(1);
+                Future<?> deletion = pool.submit(() -> {
+                    start.await();
+                    profiles.deleteAccount(leaving);
+                    return null;
+                });
+                Future<?> save = pool.submit(() -> {
+                    start.await();
+                    try {
+                        profiles.updateFeedPreferences(leaving, areaB, "PRE", topics);
+                    } catch (ApiException afterDeletion) {             // waited for the deletion, then saw DELETED
+                        assertThat(afterDeletion).hasMessage(NOT_SIGNED_IN);
+                    }
+                    return null;
+                });
+                start.countDown();
+                deletion.get(20, TimeUnit.SECONDS);                    // neither fails nor deadlocks
+                save.get(20, TimeUnit.SECONDS);
+                assertThat(row(leaving)).containsEntry("status", "DELETED")
+                        .containsEntry("area_id", null).containsEntry("stage", null);
+                assertThat(chosenIds(leaving)).isEmpty();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     // ---------------------------------------------------------------- helpers

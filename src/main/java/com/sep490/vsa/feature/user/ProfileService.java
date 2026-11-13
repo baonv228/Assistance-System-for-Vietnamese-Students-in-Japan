@@ -194,8 +194,11 @@ public class ProfileService {
         jdbc.update("""
                 UPDATE tag_requests SET status = 'REJECTED', reject_reason = ?, reviewed_at = ?
                 WHERE user_id = ? AND status = 'PENDING'""", DELETED_ACCOUNT_REASON, Timestamp.from(now), userId);
-        // points is read-only in User (kept in step with point_transactions by PointService)
-        jdbc.update("UPDATE users SET points = 0 WHERE id = ?", userId);
+        // points is read-only in User (kept in step with point_transactions by PointService). Area and stage are
+        // cleared here too: the entity was read before this statement locked the row, so an area saved meanwhile
+        // ("Điều chỉnh" on the Home, Tôi) is not in it, and User.anonymize alone (@DynamicUpdate: only what changed
+        // from that read is written) would leave it on the deleted account
+        jdbc.update("UPDATE users SET points = 0, area_id = NULL, stage = NULL WHERE id = ?", userId);
         // "Chủ đề quan tâm" go with the area and stage (User.anonymize). After the users row is locked, the order of
         // InterestService.update, so a save of the topics at the same moment waits instead of deadlocking
         jdbc.update("DELETE FROM user_interest_topics WHERE user_id = ?", userId);

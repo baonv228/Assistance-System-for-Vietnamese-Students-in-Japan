@@ -153,7 +153,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - "Xóa tài khoản" (`ProfileService.deleteAccount`) also deletes the chosen "Chủ đề quan tâm", revokes the user's tags,
   closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
-  COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
+  COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes). That statement also clears
+  area and stage: an area saved after the entity was read would otherwise stay (`@DynamicUpdate`).
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/data-deletion`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
