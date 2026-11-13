@@ -33,6 +33,7 @@ public final class CleanUrls {
         PAGES.put("/register", "/pages/register.html");
         PAGES.put("/complete-signup", "/pages/complete-signup.html");
         PAGES.put("/terms", "/pages/terms.html");
+        PAGES.put("/data-deletion", "/pages/data-deletion.html");
         PAGES.put("/profile", "/pages/profile.html");
         PAGES.put("/saved", "/pages/saved.html");
         PAGES.put("/notifications", "/pages/notifications.html");

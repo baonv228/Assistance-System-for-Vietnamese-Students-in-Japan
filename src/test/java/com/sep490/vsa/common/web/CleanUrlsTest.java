@@ -40,6 +40,20 @@ class CleanUrlsTest {
     }
 
     @Test
+    void theDataDeletionPageFacebookAsksForHasItsOwnAddress() throws Exception {
+        try (var context = new AnnotationConfigWebApplicationContext()) {
+            context.setServletContext(new MockServletContext());
+            context.register(TestMvcConfig.class, CleanUrls.Routes.class);
+            context.refresh();
+            var mvc = MockMvcBuilders.webAppContextSetup(context).build();
+            assertThat(new ClassPathResource("static/pages/data-deletion.html").exists()).isTrue();
+            mvc.perform(get("/data-deletion")).andExpect(status().isOk())
+                    .andExpect(forwardedUrl("/pages/data-deletion.html"));
+            assertThat(CleanUrls.cleanAddress("/pages/data-deletion.html", null)).isEqualTo("/data-deletion");
+        }
+    }
+
+    @Test
     void eventUrlsWithTrailingSlashesKeepTheirQuery() {
         for (String path : new String[]{"/events", "/events/12", "/events/12/review", "/moderator/events"}) {
             assertThat(CleanUrls.cleanAddress(path + "/", "q=Tokyo")).isEqualTo(path + "?q=Tokyo");

@@ -231,6 +231,14 @@ body.auth-page {
 .legal .tabs a { padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: var(--ink); font-weight: 600; }
 .legal .tabs a[aria-current="page"] { background: var(--brand); border-color: var(--brand); color: #fff; }
 .legal article { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; white-space: pre-line; }
+/* Pages written in HTML (/data-deletion) rather than one stored text */
+.legal article.doc { white-space: normal; line-height: 1.6; }
+.legal article.doc > :first-child { margin-top: 0; }
+.legal article.doc > :last-child { margin-bottom: 0; }
+.legal article.doc h2 { font-size: 18px; margin: 24px 0 8px; }
+.legal article.doc ul, .legal article.doc ol { padding-left: 22px; margin: 8px 0; }
+.legal article.doc li + li { margin-top: 4px; }
+@media (max-width: 480px) { .legal { padding: 28px 16px 48px; } .legal article { padding: 18px; } }
 
 @media (max-width: 860px) {
     .auth-shell { grid-template-columns: 1fr; }

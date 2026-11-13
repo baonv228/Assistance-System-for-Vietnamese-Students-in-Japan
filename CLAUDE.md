@@ -143,7 +143,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/data-deletion`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
   `/search`, `/messages`, `/messages/{id}`, `/users/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/moderator/reports`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
