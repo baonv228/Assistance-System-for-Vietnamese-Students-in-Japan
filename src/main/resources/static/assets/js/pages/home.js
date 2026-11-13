@@ -348,22 +348,20 @@ function bindForYou(home) {
         }
     });
     save.addEventListener("click", async () => {
-        // Without the area picker the area is sent as it was, never cleared
+        // Without the area picker the area is sent as it was, never cleared; without the topic picker, or when the
+        // topics did not change, they are not sent (null) and stay as they are
         const areaId = picker ? picker.value() : home.areaId;
         const stage = document.querySelector("#hp-stage").value;
+        const topicIds = interests?.changed() ? interests.value() : null;
         save.disabled = true;                       // one save at a time
         save.textContent = "Đang lưu…";
         error.hidden = true;
-        let topicsSaved = false;
-        let profileSaved = false;
+        let saved = false;
         try {
-            // The topics only when they changed; both saves send the whole choice, so pressing "Lưu" again is safe
-            if (interests?.changed()) {
-                await interests.save();
-                topicsSaved = true;
-            }
-            await apiClient.updateProfile({ areaId, stage: stage || null });
-            profileSaved = true;
+            // One request: area, stage and topics are saved together or not at all. It sends the whole choice, so
+            // pressing "Lưu" again is safe
+            await apiClient.saveFeedPreferences({ areaId, stage: stage || null, topicIds });
+            saved = true;
             // Draws the page again: the suggestions, the greeting and the cards follow the new choices
             await renderMember("Đã lưu. Gợi ý bên dưới đã theo lựa chọn mới của bạn.");
             document.querySelector("#foryou").scrollIntoView({ block: "start" });
@@ -373,11 +371,10 @@ function bindForYou(home) {
             save.textContent = "Lưu";
             // The server's message; a network failure gets MSG14 (the browser's own text is in English)
             const message = err instanceof ApiError && err.message ? err.message : "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
-            const saved = topicsSaved && !profileSaved
-                ? "Đã lưu chủ đề quan tâm, nhưng chưa lưu được khu vực và giai đoạn: " : "";
+            const prefix = saved ? "Đã lưu, nhưng chưa tải lại được gợi ý: " : "";
             error.innerHTML = err.status === 401
-                ? `${esc(saved + message)} <a class="link" href="${esc(loginUrl())}">Đăng nhập lại</a>`
-                : esc(saved + message);
+                ? `${esc(prefix + message)} <a class="link" href="${esc(loginUrl())}">Đăng nhập lại</a>`
+                : esc(prefix + message);
             error.hidden = false;
         }
     });

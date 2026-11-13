@@ -153,7 +153,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - "Xóa tài khoản" (`ProfileService.deleteAccount`) also deletes the chosen "Chủ đề quan tâm", revokes the user's tags,
   closes pending tag requests (REJECTED,
   "Tài khoản đã xóa"), discards every tag proof photo and sets `users.points` to 0, in the same transaction (READ
-  COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
+  COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes). That statement also clears
+  area and stage: an area saved after the entity was read would otherwise stay (`@DynamicUpdate`).
 
 ## Roles, homepage, profile
 - Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/data-deletion`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
@@ -225,7 +226,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   ("cần chốt" constants in `InterestService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST,
   `label`, `detail` = the linked place or the matching topic; one INTEREST at most, the chosen topic before the learnt
   one, listed before STAGE when chosen), `reason` = the first label and `engaged` (already liked, saved or commented
-  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below).
+  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below). The Home's
+  "Điều chỉnh" saves all three with one `PUT /api/me/feed-preferences` `{areaId, stage, topicIds}` (`topicIds` null =
+  topics unchanged; `ProfileService.updateFeedPreferences`): one transaction, users row locked first, so they are saved
+  together or not at all; its answer `{areaId, areaName, stage, topicIds}` reads nothing of "Tôi", so a table of another
+  feature missing on the shared database (V22 `saved_phrases` on 11/13) no longer undoes the save. Test:
+  `FeedPreferencesFlowTest`.
   Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
   bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage/topics form in place and the feed is redrawn after "Lưu", the reasons on every post, the
@@ -241,7 +247,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save. UI:
   `components/interest-picker.js` (toggle buttons `.topic-pick` in site.css, at most 5, a "gợi ý" mark on learnt ones),
   card "Chủ đề quan tâm" on Tôi (`#interests`, Members only, own "Lưu"; an unsaved choice survives the page redraw after
-  "Lưu" of area and stage) and in the Home's "Điều chỉnh" form (saved with area and stage). "Dựa trên" chips
+  "Lưu" of area and stage) and in the Home's "Điều chỉnh" form (saved with area and stage in one request, see above).
+  "Dựa trên" chips
   (`lib/feed-posts.js interestChips`): chosen ones first (icon `interests`), learnt ones after (`history`, `.learnt`).
   "Xóa tài khoản" deletes the rows. Tests: `InterestFlowTest`, `HomeFeedFlowTest`, `src/test/js/feed-posts.test.mjs`.
   Not done: choosing topics while signing up.
@@ -969,6 +976,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Working notes
 - `spring.flyway.out-of-order=true`: migrations are written on several branches at once (V9 here while the HandBook
   branch has V7/V8), so a database that already ran a higher version still applies a lower one merged later.
+- `application.properties` points at the shared server MySQL (103.140.249.78/asvsj, also read by senpaioi.com) with
+  `spring.flyway.enabled=false`: a merged migration is not applied there by itself. Until it is, every page reading
+  the new table answers 500 (V22 `saved_phrases` missing broke Tôi, "Đã lưu" and "Nhật ngữ" on 11/13). After merging
+  a `V<n>__…sql`, apply it to the shared database with Flyway (same files, out-of-order on), never by hand-written SQL,
+  so its history row and checksum stay right. Tests turn Flyway on for their own local databases
+  (`src/test/resources/config/application-local.properties`).
 - `common/web/ProxiedHttpsRedirect` (before Spring Security): a GET/HEAD that a proxy or tunnel marks
   `X-Forwarded-Proto: http` answers 301 to the same page at `https://<host>` (the http port dropped), because Web Crypto,
   the microphone and Web Push only work on https pages; requests straight to the server (localhost, the LAN address)

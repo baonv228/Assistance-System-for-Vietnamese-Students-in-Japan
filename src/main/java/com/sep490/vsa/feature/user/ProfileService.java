@@ -5,9 +5,11 @@ import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.AuthorStatusSync;
+import com.sep490.vsa.feature.home.InterestService;
 import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.saved.SavedRepository;
 import com.sep490.vsa.feature.user.ProfileDtos.DailyUsage;
+import com.sep490.vsa.feature.user.ProfileDtos.FeedPreferencesResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.RankResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.TagResponse;
@@ -46,10 +48,12 @@ public class ProfileService {
     private final AuthorStatusSync authorStatusSync;
     private final MediaService media;
     private final LiveEvents live;
+    private final InterestService interests;
 
     public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock,
                           SystemSettings settings, SavedRepository saved, ActiveAdminGuard adminGuard,
-                          AuthorStatusSync authorStatusSync, MediaService media, LiveEvents live) {
+                          AuthorStatusSync authorStatusSync, MediaService media, LiveEvents live,
+                          InterestService interests) {
         this.users = users;
         this.providers = providers;
         this.jdbc = jdbc;
@@ -60,6 +64,7 @@ public class ProfileService {
         this.authorStatusSync = authorStatusSync;
         this.media = media;
         this.live = live;
+        this.interests = interests;
     }
 
     @Transactional(readOnly = true)
@@ -79,9 +84,7 @@ public class ProfileService {
                 SELECT t.name FROM tag_requests r JOIN tag_types t ON t.id = r.tag_type_id
                 WHERE r.user_id = ? AND r.status = 'PENDING' ORDER BY r.submitted_at DESC LIMIT 1""",
                 (rs, i) -> rs.getString(1), userId).stream().findFirst().orElse(null);
-        String areaName = user.getAreaId() == null ? null : jdbc.query(
-                "SELECT display_name FROM areas WHERE id = ?", (rs, i) -> rs.getString(1), user.getAreaId())
-                .stream().findFirst().orElse(null);
+        String areaName = areaName(user.getAreaId());
         int postsPerDay = settings.getInt(SystemSettings.POSTS_PER_DAY, 3);
         int pinsPerDay = settings.getInt(SystemSettings.PINS_PER_DAY, 2);
         int videosPerDay = settings.getInt(SystemSettings.VIDEOS_PER_DAY, 1);
@@ -108,13 +111,50 @@ public class ProfileService {
     @Transactional
     public ProfileResponse update(Long userId, Long areaId, String stage) {
         User user = load(userId);
+        assertArea(areaId);
+        user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
+        users.flush();
+        return get(userId);
+    }
+
+    /**
+     * "Điều chỉnh" in "Dành cho bạn" on the member Home: area, stage and, unless {@code topicIds} is null, the "Chủ đề
+     * quan tâm" ({@link InterestService#update}: Members only, MSG18 for staff) in one transaction, so they are saved
+     * together or not at all. Before, the Home sent the topics and then {@code PUT /api/me/profile}: when the second call
+     * failed the topics were saved and the area and stage were not.
+     * <p>
+     * The answer reads only the users row, the area's name and the chosen topics, unlike {@link #update}, whose answer
+     * is the whole "Tôi" page (saved items, tags, ranks…): a table of another feature that cannot be read (on 11/13 the
+     * shared database still lacked V22 {@code saved_phrases}) no longer undoes the save.
+     * <p>
+     * The users row is locked first, in the order of {@link InterestService#update} and {@link #deleteAccount}, so a save
+     * that meets a deletion waits for it and then answers 401 instead of writing an area on the deleted account.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public FeedPreferencesResponse updateFeedPreferences(Long userId, Long areaId, String stage, List<Long> topicIds) {
+        jdbc.query("SELECT id FROM users WHERE id = ? FOR UPDATE", (rs, i) -> rs.getLong(1), userId);
+        User user = load(userId);
+        assertArea(areaId);
+        if (topicIds != null) {
+            interests.update(userId, topicIds);
+        }
+        user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
+        users.flush();
+        return new FeedPreferencesResponse(user.getAreaId(), areaName(user.getAreaId()), user.getStage(),
+                interests.chosenTopicIds(userId));
+    }
+
+    private void assertArea(Long areaId) {
         if (areaId != null && jdbc.queryForObject("SELECT COUNT(*) FROM areas WHERE id = ? AND is_active",
                 Integer.class, areaId) == 0) {
             throw ApiException.badRequest("Khu vực không hợp lệ");
         }
-        user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
-        users.flush();
-        return get(userId);
+    }
+
+    private String areaName(Long areaId) {
+        return areaId == null ? null : jdbc.query(
+                "SELECT display_name FROM areas WHERE id = ?", (rs, i) -> rs.getString(1), areaId)
+                .stream().findFirst().orElse(null);
     }
 
     /**
@@ -154,8 +194,11 @@ public class ProfileService {
         jdbc.update("""
                 UPDATE tag_requests SET status = 'REJECTED', reject_reason = ?, reviewed_at = ?
                 WHERE user_id = ? AND status = 'PENDING'""", DELETED_ACCOUNT_REASON, Timestamp.from(now), userId);
-        // points is read-only in User (kept in step with point_transactions by PointService)
-        jdbc.update("UPDATE users SET points = 0 WHERE id = ?", userId);
+        // points is read-only in User (kept in step with point_transactions by PointService). Area and stage are
+        // cleared here too: the entity was read before this statement locked the row, so an area saved meanwhile
+        // ("Điều chỉnh" on the Home, Tôi) is not in it, and User.anonymize alone (@DynamicUpdate: only what changed
+        // from that read is written) would leave it on the deleted account
+        jdbc.update("UPDATE users SET points = 0, area_id = NULL, stage = NULL WHERE id = ?", userId);
         // "Chủ đề quan tâm" go with the area and stage (User.anonymize). After the users row is locked, the order of
         // InterestService.update, so a save of the topics at the same moment waits instead of deadlocking
         jdbc.update("DELETE FROM user_interest_topics WHERE user_id = ?", userId);
