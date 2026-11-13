@@ -79,9 +79,7 @@ public class ProfileService {
                 SELECT t.name FROM tag_requests r JOIN tag_types t ON t.id = r.tag_type_id
                 WHERE r.user_id = ? AND r.status = 'PENDING' ORDER BY r.submitted_at DESC LIMIT 1""",
                 (rs, i) -> rs.getString(1), userId).stream().findFirst().orElse(null);
-        String areaName = user.getAreaId() == null ? null : jdbc.query(
-                "SELECT display_name FROM areas WHERE id = ?", (rs, i) -> rs.getString(1), user.getAreaId())
-                .stream().findFirst().orElse(null);
+        String areaName = areaName(user.getAreaId());
         int postsPerDay = settings.getInt(SystemSettings.POSTS_PER_DAY, 3);
         int pinsPerDay = settings.getInt(SystemSettings.PINS_PER_DAY, 2);
         int videosPerDay = settings.getInt(SystemSettings.VIDEOS_PER_DAY, 1);
@@ -108,13 +106,23 @@ public class ProfileService {
     @Transactional
     public ProfileResponse update(Long userId, Long areaId, String stage) {
         User user = load(userId);
+        assertArea(areaId);
+        user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
+        users.flush();
+        return get(userId);
+    }
+
+    private void assertArea(Long areaId) {
         if (areaId != null && jdbc.queryForObject("SELECT COUNT(*) FROM areas WHERE id = ? AND is_active",
                 Integer.class, areaId) == 0) {
             throw ApiException.badRequest("Khu vực không hợp lệ");
         }
-        user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
-        users.flush();
-        return get(userId);
+    }
+
+    private String areaName(Long areaId) {
+        return areaId == null ? null : jdbc.query(
+                "SELECT display_name FROM areas WHERE id = ?", (rs, i) -> rs.getString(1), areaId)
+                .stream().findFirst().orElse(null);
     }
 
     /**
