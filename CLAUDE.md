@@ -108,6 +108,19 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `.example` file); for a LOCKED or DELETED account `SocialLoginService.findOrLink` writes nothing (no login time, no
   new link) and the handler sends it to `/login?error=account_locked`. A social "complete" that meets another new
   account at the email's unique key answers 409 "Email này đã được đăng ký. Hãy đăng nhập.".
+- Google/Facebook on a server (`https://senpaioi.com`, behind Cloudflare; the server uses the same Google client and
+  Facebook app as development): the `redirect_uri` is `app.public-url` (env `APP_PUBLIC_URL`) +
+  `/login/oauth2/code/google|facebook` when that is a real address (`common/security/SocialRedirectUri`; localhost or
+  unset → built from the request as before), and must be registered exactly so at Google ("Authorized redirect URIs")
+  and Facebook ("Valid OAuth Redirect URIs"); real users also need the Google app "In production" and the Facebook app
+  "Live" (privacy policy `/terms?doc=privacy`, data deletion instructions `/data-deletion`, a static page). At start
+  `SocialLoginReport` logs which providers are on and the URIs to register (WARN when off or no public address);
+  `SocialLoginFailureHandler` logs every failure (provider, error code, the provider's description; never a code or
+  token) and sends `/login?error=social`, or `social_cancelled` when the person pressed cancel (`access_denied`).
+  Google refuses sign-in in app browsers (Zalo, Facebook, Messenger… and any Android WebView: "403
+  disallowed_useragent"; `lib/device.js googleSignInBlocked`): there the Google button points to a note under the
+  buttons ("Mở bằng Chrome" intent link on Android, "Sao chép liên kết"), `auth-ui.js inAppNote`. Test:
+  `SocialLoginOAuthFlowTest` (whole flow against a fake Google/Facebook on a local port), `SocialRedirectUriTest`.
 - Sign-up limits (`RegistrationService`, `AuthRules`; "cần chốt" ones marked there): per mailbox one code per
   `email_code_resend_seconds` and 10 in 24 h (`AuthRules.mailbox`: "+tag" dropped for every domain, dots too for
   gmail.com/googlemail.com; only for counting, the account keeps the email as typed), 5 codes an hour per client address
@@ -143,7 +156,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   COMMITTED like an Admin's lock, so the comment recount locks only the posts it changes).
 
 ## Roles, homepage, profile
-- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
+- Page addresses have no ".html" (`common/web/CleanUrls`): `/login`, `/register`, `/forgot-password`, `/reset-password`, `/terms`, `/data-deletion`, `/profile`, `/saved`, `/notifications`, `/reviews`, `/for-you`,
   `/search`, `/messages`, `/messages/{id}`, `/users/{id}`,
   `/blog`, `/blog/new`, `/blog/{id}`, `/blog/{id}/edit`, `/qa`, `/qa/ask`, `/qa/{id}`, `/qa/{id}/edit`, `/coming-soon`,
   `/events`, `/events/{id}`, `/events/{id}/review`, `/moderator`, `/moderator/events`, `/moderator/pins`, `/moderator/closed`, `/moderator/places`, `/moderator/merge`, `/moderator/tags`, `/moderator/reports`, `/tag-request`, `/admin`, `/admin/users`, `/admin/system-config`, `/admin/activity-log`… forward to the files in
