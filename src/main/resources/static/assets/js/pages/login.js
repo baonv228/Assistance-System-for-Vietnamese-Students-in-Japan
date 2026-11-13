@@ -66,6 +66,7 @@ const notices = {
     registered: ["Đăng ký thành công. Hãy đăng nhập bằng email và mật khẩu vừa tạo.", "success"],
     reset: ["Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.", "success"],
     social: ["Đăng nhập bằng Google hoặc Facebook không thành công. Vui lòng thử lại.", "error"],
+    social_cancelled: ["Bạn đã hủy đăng nhập bằng Google hoặc Facebook. Hãy thử lại khi bạn sẵn sàng.", "error"],
     social_no_email: ["Tài khoản mạng xã hội không chia sẻ email. Hãy cho phép chia sẻ email hoặc đăng ký bằng email.", "error"],
     account_locked: ["Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên.", "error"]
 };
