@@ -976,6 +976,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 ## Working notes
 - `spring.flyway.out-of-order=true`: migrations are written on several branches at once (V9 here while the HandBook
   branch has V7/V8), so a database that already ran a higher version still applies a lower one merged later.
+- `application.properties` points at the shared server MySQL (103.140.249.78/asvsj, also read by senpaioi.com) with
+  `spring.flyway.enabled=false`: a merged migration is not applied there by itself. Until it is, every page reading
+  the new table answers 500 (V22 `saved_phrases` missing broke Tôi, "Đã lưu" and "Nhật ngữ" on 11/13). After merging
+  a `V<n>__…sql`, apply it to the shared database with Flyway (same files, out-of-order on), never by hand-written SQL,
+  so its history row and checksum stay right. Tests turn Flyway on for their own local databases
+  (`src/test/resources/config/application-local.properties`).
 - `common/web/ProxiedHttpsRedirect` (before Spring Security): a GET/HEAD that a proxy or tunnel marks
   `X-Forwarded-Proto: http` answers 301 to the same page at `https://<host>` (the http port dropped), because Web Crypto,
   the microphone and Web Push only work on https pages; requests straight to the server (localhost, the LAN address)
