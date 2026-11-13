@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appleMobile, inAppBrowser } from "../../main/resources/static/assets/js/lib/device.js";
+import { android, appleMobile, googleSignInBlocked, inAppBrowser } from "../../main/resources/static/assets/js/lib/device.js";
 
 const UA = {
     iphoneSafari: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
@@ -22,6 +22,8 @@ const UA = {
         + "Version/4.0 Chrome/126.0.6478.71 Mobile Safari/537.36 [FB_IAB/Orca-Android;FBAV/465.0.0.38.109;]",
     zaloIos: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
         + "Mobile/15E148 Zalo iOS/583 ZaloTheme/light ZaloLanguage/vn",
+    zaloAndroid: "Mozilla/5.0 (Linux; Android 14; SM-A546E Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) "
+        + "Version/4.0 Chrome/126.0.6478.71 Mobile Safari/537.36 Zalo android/12100516 ZaloTheme/light ZaloLanguage/vi",
     lineIos: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
         + "Mobile/15E148 Safari Line/14.9.0",
     instagram: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
@@ -38,6 +40,26 @@ test("in-app browsers of Facebook, Messenger, Zalo, LINE and Instagram are recog
     // a word that merely contains "Line/" is no LINE app
     assert.equal(inAppBrowser("Mozilla/5.0 Outline/1.0"), false);
     assert.equal(inAppBrowser(""), false);
+});
+
+test("Google sign-in is known to be refused in app browsers and Android WebViews, not in real browsers", () => {
+    for (const name of ["facebookIos", "messengerAndroid", "zaloIos", "lineIos", "instagram", "zaloAndroid"]) {
+        assert.equal(googleSignInBlocked(UA[name]), true, name);
+    }
+    // an app not in the list that shows the page in a WebView
+    assert.equal(googleSignInBlocked("Mozilla/5.0 (Linux; Android 13; SM-A536E Build/TP1A.220624.014; wv) "
+        + "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/125.0.6422.165 Mobile Safari/537.36"), true);
+    for (const name of ["iphoneSafari", "iphoneChrome", "ipadDesktopMode", "androidChrome", "windowsEdge"]) {
+        assert.equal(googleSignInBlocked(UA[name]), false, name);
+    }
+    assert.equal(googleSignInBlocked(""), false);
+});
+
+test("Android phones are recognised for the “Mở bằng Chrome” link", () => {
+    assert.equal(android(UA.androidChrome), true);
+    assert.equal(android(UA.zaloAndroid), true);
+    assert.equal(android(UA.iphoneSafari), false);
+    assert.equal(android(UA.windowsEdge), false);
 });
 
 test("iPhones, and iPads that show themselves as a Mac with a touch screen, are Apple mobile devices", () => {

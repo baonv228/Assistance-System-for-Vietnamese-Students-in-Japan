@@ -27,6 +27,19 @@ export function inAppBrowser(ua = userAgent()) {
     return IN_APP.test(ua);
 }
 
+/**
+ * Google refuses its sign-in in browsers built into apps ("403: disallowed_useragent"): the apps above and any other
+ * Android app showing pages in a WebView ("; wv)" in the user agent). Chrome, Safari and Chrome Custom Tabs are fine.
+ */
+export function googleSignInBlocked(ua = userAgent()) {
+    return inAppBrowser(ua) || /;\s*wv\)/.test(ua);
+}
+
+/** An Android phone or tablet (a page there can ask Chrome to open it, see intent links in auth-ui.js). */
+export function android(ua = userAgent()) {
+    return /\bAndroid\b/.test(ua);
+}
+
 /** A touch screen without a mouse (phones, tablets): Enter then makes a new line, as in the phone's own apps. */
 export function touchOnly() {
     return Boolean(globalThis.matchMedia?.("(hover: none) and (pointer: coarse)").matches);

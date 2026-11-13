@@ -35,6 +35,20 @@ Cùng lúc đó app nạp dữ liệu mẫu từ prototype (địa điểm, revi
 `src/main/resources/dev/sample-data.sql`, chỉ khi bảng `places` còn trống.
 **Không bao giờ bật profile `local` trên server deploy**: khi deploy, đặt `SPRING_PROFILES_ACTIVE=prod`.
 
+### Đăng nhập Google/Facebook trên server (https://senpaioi.com)
+- Đặt biến môi trường `APP_PUBLIC_URL=https://senpaioi.com` (không có "/" ở cuối) và các khóa
+  `SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID`, `..._GOOGLE_CLIENT_SECRET`,
+  `..._FACEBOOK_CLIENT_ID`, `..._FACEBOOK_CLIENT_SECRET`. Khi khởi động, log in ra địa chỉ cần khai báo
+  ("Register this redirect URI at the provider: …").
+- Google Cloud Console → Credentials → OAuth client: thêm Authorized redirect URI
+  `https://senpaioi.com/login/oauth2/code/google`; OAuth consent screen → Audience → **Publish app** (In production),
+  nếu không chỉ "Test users" mới đăng nhập được.
+- Meta for Developers → Facebook Login → Settings: thêm Valid OAuth Redirect URI
+  `https://senpaioi.com/login/oauth2/code/facebook`; App settings → Basic: App domains `senpaioi.com`, Privacy Policy URL
+  `https://senpaioi.com/terms?doc=privacy`, User data deletion `https://senpaioi.com/data-deletion`, icon, category; rồi
+  chuyển App mode sang **Live**, nếu không chỉ người có vai trò trong app mới đăng nhập được.
+- Lỗi đăng nhập được ghi vào log server: "Social sign-in with google failed: …".
+
 ### Thay đổi database (quan trọng)
 - Mọi bảng được tạo bởi các file **Flyway migration** trong `src/main/resources/db/migration/`.
   Hibernate **không** tự tạo hay sửa bảng (`ddl-auto=none`).

@@ -152,6 +152,16 @@ body.auth-page {
 .btn-social:hover:not([disabled]) { background: var(--surface-2); }
 .btn-social svg { width: 20px; height: 20px; flex: none; }
 .social-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* Opened inside Zalo / Facebook / Messenger: Google refuses to sign in there (auth-ui.js inAppNote) */
+.in-app-note { margin: 12px 0 0; }
+.in-app-note:focus { outline: none; box-shadow: var(--focus); }
+.in-app-note p { margin: 0; }
+.in-app-note .note-link { display: block; margin-top: 8px; font-weight: 600; overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
+.in-app-note .note-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.in-app-note .btn { width: auto; height: 38px; padding: 0 14px; font-size: 14px; }
+.in-app-note.flash { animation: note-flash .9s ease-out; }
+@keyframes note-flash { 0% { box-shadow: 0 0 0 4px var(--brand); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .in-app-note.flash { animation: none; } }
 
 .divider {
     display: flex;
@@ -231,6 +241,14 @@ body.auth-page {
 .legal .tabs a { padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: var(--ink); font-weight: 600; }
 .legal .tabs a[aria-current="page"] { background: var(--brand); border-color: var(--brand); color: #fff; }
 .legal article { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; white-space: pre-line; }
+/* Pages written in HTML (/data-deletion) rather than one stored text */
+.legal article.doc { white-space: normal; line-height: 1.6; }
+.legal article.doc > :first-child { margin-top: 0; }
+.legal article.doc > :last-child { margin-bottom: 0; }
+.legal article.doc h2 { font-size: 18px; margin: 24px 0 8px; }
+.legal article.doc ul, .legal article.doc ol { padding-left: 22px; margin: 8px 0; }
+.legal article.doc li + li { margin-top: 4px; }
+@media (max-width: 480px) { .legal { padding: 28px 16px 48px; } .legal article { padding: 18px; } }
 
 @media (max-width: 860px) {
     .auth-shell { grid-template-columns: 1fr; }

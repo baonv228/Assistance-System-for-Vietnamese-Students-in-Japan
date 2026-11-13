@@ -2,6 +2,7 @@ package com.sep490.vsa.common.security;
 
 import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -94,7 +96,9 @@ public class SecurityConfig {
                                                    CsrfTokenRepository csrfTokenRepository,
                                                    JdbcTemplate jdbc,
                                                    ObjectProvider<ClientRegistrationRepository> clientRegistrations,
-                                                   AuthenticationSuccessHandler socialLoginSuccessHandler) throws Exception {
+                                                   AuthenticationSuccessHandler socialLoginSuccessHandler,
+                                                   AuthenticationFailureHandler socialLoginFailureHandler,
+                                                   @Value("${app.public-url}") String publicUrl) throws Exception {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
@@ -147,12 +151,15 @@ public class SecurityConfig {
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpStatus.NO_CONTENT.value())));
 
-        if (clientRegistrations.getIfAvailable() != null) {
+        ClientRegistrationRepository registrations = clientRegistrations.getIfAvailable();
+        if (registrations != null) {
             http.oauth2Login(oauth -> oauth
                     .loginPage("/login")
+                    // The redirect_uri comes from app.public-url on a server (see SocialRedirectUri)
+                    .authorizationEndpoint(endpoint -> endpoint
+                            .authorizationRequestResolver(SocialRedirectUri.resolver(registrations, publicUrl)))
                     .successHandler(socialLoginSuccessHandler)
-                    .failureHandler((request, response, exception) ->
-                            response.sendRedirect("/login?error=social")));
+                    .failureHandler(socialLoginFailureHandler));
         }
         return http.build();
     }
