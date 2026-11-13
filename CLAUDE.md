@@ -225,7 +225,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   ("cần chốt" constants in `InterestService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST,
   `label`, `detail` = the linked place or the matching topic; one INTEREST at most, the chosen topic before the learnt
   one, listed before STAGE when chosen), `reason` = the first label and `engaged` (already liked, saved or commented
-  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below).
+  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below). The Home's
+  "Điều chỉnh" saves all three with one `PUT /api/me/feed-preferences` `{areaId, stage, topicIds}` (`topicIds` null =
+  topics unchanged; `ProfileService.updateFeedPreferences`): one transaction, users row locked first, so they are saved
+  together or not at all; its answer `{areaId, areaName, stage, topicIds}` reads nothing of "Tôi", so a table of another
+  feature missing on the shared database (V22 `saved_phrases` on 11/13) no longer undoes the save. Test:
+  `FeedPreferencesFlowTest`.
   Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
   bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
   "Điều chỉnh" opens the area/stage/topics form in place and the feed is redrawn after "Lưu", the reasons on every post, the
@@ -241,7 +246,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   kept keep their `created_at`. A topic switched off later is ignored on read and dropped at the next save. UI:
   `components/interest-picker.js` (toggle buttons `.topic-pick` in site.css, at most 5, a "gợi ý" mark on learnt ones),
   card "Chủ đề quan tâm" on Tôi (`#interests`, Members only, own "Lưu"; an unsaved choice survives the page redraw after
-  "Lưu" of area and stage) and in the Home's "Điều chỉnh" form (saved with area and stage). "Dựa trên" chips
+  "Lưu" of area and stage) and in the Home's "Điều chỉnh" form (saved with area and stage in one request, see above).
+  "Dựa trên" chips
   (`lib/feed-posts.js interestChips`): chosen ones first (icon `interests`), learnt ones after (`history`, `.learnt`).
   "Xóa tài khoản" deletes the rows. Tests: `InterestFlowTest`, `HomeFeedFlowTest`, `src/test/js/feed-posts.test.mjs`.
   Not done: choosing topics while signing up.

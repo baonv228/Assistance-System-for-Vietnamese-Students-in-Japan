@@ -5,9 +5,11 @@ import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
 import com.sep490.vsa.feature.blog.AuthorStatusSync;
+import com.sep490.vsa.feature.home.InterestService;
 import com.sep490.vsa.feature.media.MediaService;
 import com.sep490.vsa.feature.saved.SavedRepository;
 import com.sep490.vsa.feature.user.ProfileDtos.DailyUsage;
+import com.sep490.vsa.feature.user.ProfileDtos.FeedPreferencesResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.ProfileResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.RankResponse;
 import com.sep490.vsa.feature.user.ProfileDtos.TagResponse;
@@ -46,10 +48,12 @@ public class ProfileService {
     private final AuthorStatusSync authorStatusSync;
     private final MediaService media;
     private final LiveEvents live;
+    private final InterestService interests;
 
     public ProfileService(UserRepository users, UserAuthProviderRepository providers, JdbcTemplate jdbc, Clock clock,
                           SystemSettings settings, SavedRepository saved, ActiveAdminGuard adminGuard,
-                          AuthorStatusSync authorStatusSync, MediaService media, LiveEvents live) {
+                          AuthorStatusSync authorStatusSync, MediaService media, LiveEvents live,
+                          InterestService interests) {
         this.users = users;
         this.providers = providers;
         this.jdbc = jdbc;
@@ -60,6 +64,7 @@ public class ProfileService {
         this.authorStatusSync = authorStatusSync;
         this.media = media;
         this.live = live;
+        this.interests = interests;
     }
 
     @Transactional(readOnly = true)
@@ -110,6 +115,33 @@ public class ProfileService {
         user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
         users.flush();
         return get(userId);
+    }
+
+    /**
+     * "Điều chỉnh" in "Dành cho bạn" on the member Home: area, stage and, unless {@code topicIds} is null, the "Chủ đề
+     * quan tâm" ({@link InterestService#update}: Members only, MSG18 for staff) in one transaction, so they are saved
+     * together or not at all. Before, the Home sent the topics and then {@code PUT /api/me/profile}: when the second call
+     * failed the topics were saved and the area and stage were not.
+     * <p>
+     * The answer reads only the users row, the area's name and the chosen topics, unlike {@link #update}, whose answer
+     * is the whole "Tôi" page (saved items, tags, ranks…): a table of another feature that cannot be read (on 11/13 the
+     * shared database still lacked V22 {@code saved_phrases}) no longer undoes the save.
+     * <p>
+     * The users row is locked first, in the order of {@link InterestService#update} and {@link #deleteAccount}, so a save
+     * that meets a deletion waits for it and then answers 401 instead of writing an area on the deleted account.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public FeedPreferencesResponse updateFeedPreferences(Long userId, Long areaId, String stage, List<Long> topicIds) {
+        jdbc.query("SELECT id FROM users WHERE id = ? FOR UPDATE", (rs, i) -> rs.getLong(1), userId);
+        User user = load(userId);
+        assertArea(areaId);
+        if (topicIds != null) {
+            interests.update(userId, topicIds);
+        }
+        user.updateProfile(areaId, stage == null || stage.isBlank() ? null : stage);
+        users.flush();
+        return new FeedPreferencesResponse(user.getAreaId(), areaName(user.getAreaId()), user.getStage(),
+                interests.chosenTopicIds(userId));
     }
 
     private void assertArea(Long areaId) {
