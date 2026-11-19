@@ -65,7 +65,8 @@ public class PhraseService {
             return new Part(kind, e.getValue()[0], e.getValue()[1], totals[0], totals[1],
                     repository.topics(viewer, kind), repository.categories(viewer, kind));
         }).toList();
-        return new Overview(parts, member, reports.academicReasons(), member ? repository.savedCount(viewer) : 0);
+        return new Overview(parts, member, reports.academicReasons(), member ? repository.savedCount(viewer) : 0,
+                PhraseRepository.LIST_MAX);
     }
 
     /**

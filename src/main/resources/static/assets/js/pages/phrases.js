@@ -98,6 +98,8 @@ const member = () => Boolean(overview?.member);
 const part = (kind) => overview.parts.find((x) => x.kind === kind);
 /** The parts in the page's order: Từ vựng, then Mẫu câu. */
 const kinds = () => Object.keys(KIND).map(part).filter(Boolean);
+/** An answer of GET /api/phrases that reached the server's limit (overview.listMax), so some entries are left out. */
+const cut = (list) => Boolean(overview?.listMax) && list.length >= overview.listMax;
 
 /** The view asked for by the address (see the top of this file); unknown values fall back to the start page. */
 function view() {
@@ -262,7 +264,9 @@ async function search(q) {
         if (seq !== searchSeq) return;           // an answer for an older text
         items = found;
         const groups = kinds().map((x) => [x, found.filter((p) => p.kind === x.kind)]).filter(([, list]) => list.length);
-        box.innerHTML = `<p class="note">${found.length} kết quả</p>`
+        box.innerHTML = (cut(found)
+            ? `<p class="note">Hiện ${found.length} kết quả đầu tiên. Hãy gõ thêm để thu hẹp.</p>`
+            : `<p class="note">${found.length} kết quả</p>`)
             + (found.length ? groups.map(([x, list]) => `<h3 class="part-h">${ic(x.icon)}${esc(x.name)} (${list.length})</h3>`
                 + list.map((p) => phraseCard(p, true)).join("")).join("")
                 : `<p class="note">Không tìm thấy mẫu câu hay từ vựng nào.</p>`);
@@ -379,8 +383,8 @@ function phraseCard(p, withCategory) {
         <article class="card vocab" data-id="${p.id}">
             <div class="row">
                 <span class="badge">${KIND[p.kind] || esc(p.kind)}</span>
-                ${withCategory ? `<a class="badge" href="?category=${encodeURIComponent(p.category.id)}" data-nav>${ic(p.category.icon)} ${esc(p.category.name)}</a>` : ""}
-                ${p.topics.map((t) => `<a class="badge br" href="?topic=${encodeURIComponent(t.id)}" data-nav>${esc(t.name)}</a>`).join("")}
+                ${withCategory ? `<a class="badge" href="?category=${encodeURIComponent(p.category.id)}&kind=${p.kind}" data-nav>${ic(p.category.icon)} ${esc(p.category.name)}</a>` : ""}
+                ${p.topics.map((t) => `<a class="badge br" href="?topic=${encodeURIComponent(t.id)}&kind=${p.kind}" data-nav>${esc(t.name)}</a>`).join("")}
                 <span class="grow"></span>
                 ${statusBadge(p)}
             </div>
@@ -591,17 +595,36 @@ function showStaff(phrase) {
 
 staffDlg.querySelector("[data-speak-staff]").addEventListener("click", () => speak(staffDlg.dataset.text));
 
-/** Reads the Japanese aloud with the browser's own voice (free, no API). */
+const NO_VOICE = "Thiết bị này không hỗ trợ đọc tiếng Nhật.";
+
+/** A Japanese voice of the browser, if it has one ("ja-JP", "ja_JP", "ja"). */
+const japaneseVoice = () => speechSynthesis.getVoices()
+    .find((voice) => (voice.lang || "").toLowerCase().replace("_", "-").startsWith("ja"));
+
+// Some browsers (Chrome) fill the voice list only after a while; asking once here starts that early
+if ("speechSynthesis" in window) speechSynthesis.getVoices();
+
+/**
+ * Reads the Japanese aloud with the browser's own voice (free, no API). "Thiết bị này không hỗ trợ đọc tiếng Nhật."
+ * (UC 8 AF11) when the browser cannot speak, when its voice list (once loaded) holds no Japanese voice, or when the
+ * reading fails; a reading cut short by the next "Nghe" is not a failure.
+ */
 function speak(text) {
     try {
         if (!("speechSynthesis" in window)) throw new Error("no speech");
+        const voice = japaneseVoice();
+        if (!voice && speechSynthesis.getVoices().length) throw new Error("no Japanese voice");
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = "ja-JP";
         utterance.rate = 0.85;
+        if (voice) utterance.voice = voice;
+        utterance.onerror = (event) => {
+            if (event.error !== "canceled" && event.error !== "interrupted") toast(NO_VOICE, "error");
+        };
         speechSynthesis.cancel();
         speechSynthesis.speak(utterance);
     } catch {
-        toast("Thiết bị này không hỗ trợ đọc tiếng Nhật.", "error");
+        toast(NO_VOICE, "error");
     }
 }
 
@@ -647,6 +670,11 @@ function practiceGroups(by) {
         .filter((g) => g.count > 0);
 }
 
+/** How many entries the library holds (both kinds, from the overview). */
+const libraryTotal = () => overview.parts.reduce((sum, x) => sum + x.count, 0);
+/** The library read for "Luyện tập" stopped at the server's limit and really left entries out. */
+const libraryCut = () => cut(library) && library.length < libraryTotal();
+
 /** The entries of the chosen topic or place (all of them when none is chosen). */
 const practiceScope = () => (practice.by ? library.filter((p) => inGroup(p, practice.by, practice.group)) : library);
 
@@ -674,6 +702,7 @@ function renderPractice() {
         <div class="row"><h3 id="flash-title" class="grow">Luyện tập</h3>
             <button class="icon-btn" type="button" data-close aria-label="Đóng">${ic("close")}</button></div>
         <p class="note">Chọn thẻ muốn luyện. Lật thẻ rồi chọn "Chưa thuộc" hoặc "Đã thuộc".</p>
+        ${libraryCut() ? `<p class="note">${ic("info")} Thư viện có ${libraryTotal()} mục; ở đây chỉ luyện được ${library.length} mục đầu. Để có đủ thẻ, hãy mở từng chủ đề hoặc địa điểm và bấm "Luyện thẻ ghi nhớ".</p>` : ""}
         <div class="practice-opt"><b>Luyện theo</b>
             <div class="seg" role="group" aria-label="Luyện theo">
                 ${option("p-by", "", "Tất cả", !practice.by)}
