@@ -18,6 +18,7 @@ import com.sep490.vsa.feature.event.EventDtos.ReviewRequest;
 import com.sep490.vsa.feature.event.EventDtos.ReviewSaved;
 import com.sep490.vsa.feature.event.EventDtos.ReviewUpdateRequest;
 import com.sep490.vsa.feature.event.EventRepository.EventRow;
+import com.sep490.vsa.feature.event.EventRepository.OwnRow;
 import com.sep490.vsa.feature.event.EventRepository.ReviewState;
 import com.sep490.vsa.feature.media.InvalidMediaException;
 import com.sep490.vsa.feature.media.MediaService;
@@ -47,6 +48,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -111,9 +113,12 @@ public class EventReviewService {
     public ReviewForm form(AppUserPrincipal me, long eventId) {
         Account account = member(me);
         EventCard event = startedEvent(eventId);
-        OwnReview own = repository.ownReviewId(eventId, event.reviewYear(), account.id())
-                .flatMap(repository::ownReview)
-                .filter(r -> !"REMOVED".equals(r.status()))
+        Optional<OwnRow> row = repository.ownReviewId(eventId, event.reviewYear(), account.id())
+                .flatMap(repository::ownReview);
+        if (row.filter(r -> "REMOVED".equals(r.status())).isPresent()) {
+            throw removedThisYear(event.reviewYear());
+        }
+        OwnReview own = row
                 .map(r -> new OwnReview(r.id(), r.rating(), r.content(), r.status(), repository.attachedMedia(r.id())))
                 .orElse(null);
         return new ReviewForm(event, limits(), quota(account), filter.hasIdentityTag(account.id()), own);
@@ -126,8 +131,12 @@ public class EventReviewService {
                               MultipartFile video) {
         Account account = member(me);
         EventCard event = startedEvent(eventId);
-        if (repository.ownReviewId(eventId, event.reviewYear(), account.id()).isPresent()) {
-            throw alreadyReviewed(event.reviewYear());
+        Optional<OwnRow> existing = repository.ownReviewId(eventId, event.reviewYear(), account.id())
+                .flatMap(repository::ownReview);
+        if (existing.isPresent()) {
+            // A review removed by a Moderator is kept until the purge and still holds this year (AF12)
+            throw "REMOVED".equals(existing.get().status())
+                    ? removedThisYear(event.reviewYear()) : alreadyReviewed(event.reviewYear());
         }
         Integer rating = request == null ? null : request.rating();
         String content = request == null ? null : EventRules.strip(request.content());
@@ -411,8 +420,8 @@ public class EventReviewService {
     }
 
     private Limits limits() {
-        return new Limits(EventRules.CONTENT_MAX, EventRules.IMAGES_MAX, MediaService.IMAGE_MAX_MB,
-                EventRules.VIDEOS_MAX, MediaService.VIDEO_MAX_SECONDS, media.videoMaxMb());
+        return new Limits(EventRules.CONTENT_MIN, EventRules.CONTENT_MAX, EventRules.IMAGES_MAX,
+                MediaService.IMAGE_MAX_MB, EventRules.VIDEOS_MAX, MediaService.VIDEO_MAX_SECONDS, media.videoMaxMb());
     }
 
     /** Only signed-in Users (Members) write, like and report reviews. Guests get 401; staff and locked accounts MSG18. */
@@ -446,6 +455,11 @@ public class EventReviewService {
 
     private static ApiException alreadyReviewed(int year) {
         return ApiException.conflict("Bạn đã viết review cho lần tổ chức năm " + year + ". Hãy sửa review đó.");
+    }
+
+    private static ApiException removedThisYear(int year) {
+        return ApiException.conflict("Review năm " + year
+                + " của bạn đã bị gỡ nên không viết lại được cho lần tổ chức này.");
     }
 
     static ApiException reviewNotFound() {

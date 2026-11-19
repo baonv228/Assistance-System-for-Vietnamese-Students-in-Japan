@@ -829,7 +829,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   with coordinates, `GET /api/moderator/events/places?q=`), cost, "Mẹo cho người đi" and an optional cover photo
   (multipart part `event` + `cover`; re-encoded like any photo, marked PASSED without the scanner and without the QR
   rule because staff upload it: real event posters carry official QR codes). Empty place name → "Vị trí trên bản đồ" / "Chưa gắn vị trí", empty cost → "Chưa rõ". Delete is soft
-  (`deleted_at`): the event, its reviews and their photos are shown nowhere. Create/update/delete go to the activity log
+  (`deleted_at`): the event, its reviews and their photos are shown nowhere; open report cases of its reviews are
+  closed ("Sự kiện đã bị xóa.", no points, no false reports, nobody notified). Create/update/delete go to the activity log
   (`EVENT_CREATED|UPDATED|DELETED`, target EVENT). The answer says whether the pin is on the map yet (30-day window).
 - Public: `GET /api/events?q=` (soonest first, accents ignored; the page groups Đang diễn ra / Trong 30 ngày tới / Sau
   này / Đã diễn ra), `GET /api/events/pins?days=15|30` (located events happening now or starting within the window, for
@@ -837,8 +838,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   State and days are Japan dates. Pages `/events` and `/events/{id}` (`pages/events.html`, `event-detail.html`); events
   without a cover get a drawing from the prototype (`lib/fest-art.js`, picked by words in the title).
 - Event reviews (`EventReviewService`, `reviews` rows with `event_id` + `event_year` = year of the start date): Members
-  only, once the event has started, one per user per year (409 otherwise). Page `/events/{id}/review` writes the
-  review of this year or edits it. Same order of checks as Write Post: stars 1–5 + text ≤ 2,000 + files (≤ 5 photos,
+  only, once the event has started, one per user per year (409 otherwise; a review of this year removed by a Moderator
+  holds the year until the purge: no write/edit button, `viewer.reviewRemoved`, 409 "Review năm … đã bị gỡ…"). Page `/events/{id}/review` writes the
+  review of this year or edits it. Same order of checks as Write Post: stars 1–5 + text 10–2,000 + files (≤ 5 photos,
   1 video ≤ 30 s) → links (BR-22) → new-account limit (counted with posts in `user_daily_usage`) → banned keywords.
   No files → PUBLISHED and `PointService.REVIEW` (+10, reason REVIEW_CREATED, paid once); files → PROCESSING and
   `EventReviewPublishService` scans them like `BlogPublishService` (keyword check again, retry job, notifications

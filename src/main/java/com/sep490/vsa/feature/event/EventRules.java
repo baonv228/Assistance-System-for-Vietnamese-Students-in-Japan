@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * Field rules of the event form (Moderator) and of the event review form. Values marked "cần chốt" are not in the SRS
- * yet; the review limits are the agreed review rules (≤ 2,000 characters, ≤ 5 photos of ≤ 20 MB, one video ≤ 30 s).
+ * yet; the review limits are the agreed review rules (10–2,000 characters, ≤ 5 photos of ≤ 20 MB, one video ≤ 30 s).
  */
 final class EventRules {
 
@@ -24,6 +24,7 @@ final class EventRules {
     static final int DAYS_MAX = 366;
 
     // Review form
+    static final int CONTENT_MIN = 10;
     static final int CONTENT_MAX = 2000;
     static final int IMAGES_MAX = 5;
     static final int VIDEOS_MAX = 1;
@@ -107,6 +108,8 @@ final class EventRules {
         }
         if (content == null) {
             errors.put("content", "Hãy viết vài dòng về sự kiện.");
+        } else if (content.length() < CONTENT_MIN) {
+            errors.put("content", "Nội dung cần ít nhất " + CONTENT_MIN + " ký tự.");
         } else if (content.length() > CONTENT_MAX) {
             errors.put("content", "Nội dung tối đa 2.000 ký tự (hiện có " + content.length() + ").");
         }
