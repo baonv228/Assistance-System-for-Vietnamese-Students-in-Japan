@@ -710,6 +710,7 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
     /* staff top bar on a phone: the flower alone, so the role badge and the three buttons fit */
     .staff-top .logo-txt { display: none; }
     .staff-top .site-account .btn.sm { padding: 0 9px; }
+}
 /* the logo's name leaves room for "Tin nhắn", the bell and "Đăng xuất" on the smallest phones */
 @media (max-width: 360px) {
     .logo .logo-name { display: none; }
@@ -738,3 +739,28 @@ button.card:hover, a.card:hover { border-color: var(--brand); }
 .area-mapbox .row { flex-wrap: wrap; }
 .area-map { height: 300px; border-radius: 10px; border: 1px solid var(--line); }
 .area-credit { font-size: 12px; margin: 0; }
+
+/* "Duyệt ghim tự động" on the Moderator overview (components/pin-settings-card.js) */
+.pin-settings { display: grid; gap: 10px; }
+.pin-settings h3 { margin: 0; display: flex; gap: 6px; align-items: center; }
+.pin-settings .ps-form { display: grid; gap: 12px; }
+.pin-settings .ps-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px; }
+.pin-settings .check { display: flex; gap: 10px; align-items: center; font-weight: 600; }
+.pin-settings .check input { width: 18px; height: 18px; accent-color: var(--brand); }
+.pin-settings .row { flex-wrap: wrap; gap: 8px; }
+.pin-settings .input {
+    width: 100%;
+    max-width: 220px;
+    box-sizing: border-box;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+.pin-settings .input:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
+.pin-settings .input:disabled { background: var(--surface-2); color: var(--muted); }
+.pin-settings .input[aria-invalid="true"] { border-color: var(--crit); }
+.pin-settings .field .note { margin: 0; }

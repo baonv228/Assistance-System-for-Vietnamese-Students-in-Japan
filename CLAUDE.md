@@ -62,9 +62,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - New accounts (< 7 days): per day max 3 posts/reviews, 2 pins, 1 video.
 - Places: OpenStreetMap places store their `osm_id`, names, address and coordinates (ODbL allows it; credit
   "© OpenStreetMap contributors"); places saved from Google Maps before keep their `google_place_id` (no address or
-  coordinates); user pins need Moderator approval, except those of the top rank ("Senpai tin cậy", 300 points); same name within 200 m
+  coordinates); user pins need Moderator approval, except when the Moderators' "Duyệt ghim tự động" lets them through (on, ≥ 100 points, 3 a day by default); same name within 200 m
   → warning. Moderator removes places softly (with reason, restorable) and merges duplicates (final, no undo).
-  5 "đã đóng cửa" reports → Moderator queue; only the Moderator sets the closed label.
+  "Báo cáo địa điểm" with a required reason: 5 "Đã đóng cửa" reports → Moderator queue (only the Moderator sets the
+  closed label); one "Sai thông tin" report → Moderator queue at once; the reporters are told the decision.
 - One review per user per place, and per year of an event. Review text ≤ 2,000 chars, ≤ 5 photos
   (≤ 20 MB each), video ≤ 30 s.
 - Featured posts are automatic: top 3 of the week/month by likes + 2 × comments by others + rank bonus, min score 10,
@@ -864,6 +865,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   user decision: pins, category counts, search and "Địa điểm quanh đây" leave out places outside `AreaService.inJapan`, a
   point outside it asks no map service, a review of such a place answers 400 `ReviewService.ONLY_JAPAN` and a pin
   `AreaService.NOT_IN_JAPAN`; Write Post and Đặt câu hỏi still search Japan and Vietnam, so a post can link a place in Vietnam),
+  the page sends the part of the map the user can see (`south,west,north,east`, without the list panel / phone sheet;
+  user decision, as on Google Maps): `PlaceService.searchMap` lists up to 20 matches **inside that box** (Senpai ơi
+  places first, then OSM through Photon `bbox` / Nominatim `viewbox&bounded=1`, nearest to the box's centre first,
+  `scope` AREA) and the map does not move; only when the box holds none, all of Japan with the box's centre as Photon's
+  bias (`scope` WIDE, the map service's order kept so "Tokyo Tower" comes before nearer "… Tower" buildings) and the map
+  goes to the first result (plus the next two within 1.5 km), never zooming out to all of them. After moving the map,
+  "Tìm kiếm ở khu vực này" (`#search-here`) searches the same text again in the new view (no automatic search on every
+  move: fair use of Photon/Nominatim). No box sent = all of Japan as before; a box that is not one → 400.
   `/api/map/places/{id}` (a MERGED place answers with its target and `mergedFrom`; REMOVED/REJECTED and other people's
   PENDING → 404 "Địa điểm này không còn trên Senpai ơi."), `/places/{id}/reviews?page=` (10 per page, newest first,
   PUBLISHED plus the viewer's own PROCESSING), `/places/{id}/phrases` (no longer used by the page: the tab "Từ vựng và
@@ -913,21 +922,41 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   in a pin name), `POST /api/map/pins` (part "pin" `{lat,lng,nameJa,nameEn,nameVi,categoryId,address,rating,content,
   confirmDuplicate}` + ≤ 5 "images"). ≥ 1 of nameJa/nameEn; the first review follows the review rules (+10 when
   published); duplicates without `confirmDuplicate` → 409; new accounts `pins_per_day` (2) in `user_daily_usage.pins`.
-  A member at the top rank (`points` ≥ the highest `ranks.min_points`: "Senpai tin cậy", 300; user decision, the queue
-  stays small) needs no Moderator: the pin is ACTIVE at once, `reviewed_by` empty, APPROVED history via TOP_RANK, +15; only a
-  pin sent past the "Có thể trùng" warning still waits (`PinSaved.approved`, `PinCompose.noApprovalNeeded`).
+  "Duyệt ghim tự động" (user decision 20/11/2026, replaces "top rank only"; the Moderators set it because they answer for
+  the pins): `PinService.autoApproves` = `pin_auto_approve` 1 and `users.points` ≥ `pin_auto_min_points` (default 100,
+  "Người chỉ đường") and fewer than `pin_auto_per_day` (default 3) of the member's pins went on the map that way this
+  Japan day (place_history APPROVED via AUTO, or TOP_RANK from before). Such a pin is ACTIVE at once, `reviewed_by` empty,
+  history via AUTO, +15; a pin sent past the "Có thể trùng" warning still waits (`PinSaved.approved`,
+  `PinCompose.noApprovalNeeded`). Settings: V23 rows in `system_settings`, set on the Moderator overview (card
+  `components/pin-settings-card.js`, `GET|PUT /api/moderator/pin-settings`, `PinSettingsService`: all errors in `fields`,
+  rows locked FOR UPDATE, each changed value logged SETTING_UPDATE) and listed on the Admin's settings page too
+  (`AdminConfigService.SETTING_METADATA`, group "Ghim địa điểm (Moderator)"). No account-age rule (user decision: the
+  minimum points are enough). Test: `PinFlowTest`.
   Others: saved as places source USER, status PENDING (+ place_history CREATED via PIN); only its author sees it; its first
   review can be edited but not deleted while PENDING. UI: "Cắm ghim" → pick mode → panel "pin" with a draggable pin (a
   map click moves it), "Có phải là một trong các nơi này?" (OSM/Senpai ơi places within 60 m → write a review there
   instead, text carried over) and the "Có thể trùng" box ("Viết review cho nơi này" / "Vẫn gửi ghim mới").
-- "Báo đã đóng cửa" (UC-U20): `POST /api/map/places/{id}/closed-report` → `{count, threshold, queued}`; one row per
-  user and place (`place_closed_reports`, 409 on a second), ACTIVE and not closed places only; at
-  `closed_report_threshold` (5) the place waits for a Moderator, the label is never set automatically.
+- "Báo cáo địa điểm" (UC-U20; user decision 20/11/2026, it was a one-click "Báo đã đóng cửa"): button on the place
+  panel → the report dialog with two kinds, "Đã đóng cửa" (CLOSED) and "Sai thông tin" (WRONG_INFO: name, position,
+  category, address), and a **required reason** (≤ 300 characters, banned keywords and BR-22 links checked as in a
+  comment); a kind the member already reported is greyed out. `POST /api/map/places/{id}/report` `{kind, note}` →
+  `{count, threshold, queued}` (`MapService.reportPlace`); table `place_closed_reports` (name kept) with `kind` and
+  `note` (V24, key place + user + kind: one report of each kind per member, 409 on a second); ACTIVE places only, CLOSED
+  not on a labelled place. CLOSED waits for `closed_report_threshold` (5) reports, WRONG_INFO is in the Moderators'
+  queue from the first; nothing is changed or labelled automatically. Place details carry `reportedClosed` and
+  `reportedWrong`. Every decision of a Moderator tells the reporters (`PLACE_REPORT_HANDLED`, ref PLACE; notification
+  links to `/map?place=` while the place is ACTIVE or MERGED). Test: `PinFlowTest`.
 - Moderator place pages (feature/place `ModeratorPlaceController`, `PinModerationService`, `PlaceModerationRepository`,
   `PlaceModerationDtos`; pages use `components/staff-desk.js`, `lib/mod-place-ui.js` toast + small Leaflet map,
   `assets/css/mod-places.css`). Every action locks the place row (`FOR UPDATE`), writes `place_history`, the activity
   log (target PLACE) and, for a community pin, a notification; a place another Moderator just handled → 409.
-  - "Ghim mới" `/moderator/pins` (UC-M05, UC-M06): `GET /api/moderator/pins?category=&duplicates=` (PENDING USER pins,
+  - "Ghim mới" `/moderator/pins` (UC-M05, UC-M06) is the same map workspace (`pages/moderator/pins.html`, `<body
+    data-view="pins">`, `mod-map.js`): the panel starts with the queue (oldest first, "Chỉ ghim “Có thể trùng”") and
+    opens the oldest pin at once; a pin (also a PENDING pin clicked on `/moderator/places`) shows its names, first
+    review, the places within 200 m (the map fits pin + them, similar names lit orange; clicking one of them on the map
+    picks it as the merge target) and "Duyệt" / "Gộp" / "Từ chối"; after an action the queue goes on to the next oldest
+    pin. API:
+    `GET /api/moderator/pins?category=&duplicates=` (PENDING USER pins,
     oldest first, approved places within 200 m, "Có thể trùng" = a squashed name contains / is contained in another),
     `GET /api/moderator/pins/{id}` (names, first review with its PASSED photos, places within 200 m with distance and
     review count, PIN_REJECT reasons, categories, `scanning`), `POST …/approve` `{nameVi, categoryId}` (ACTIVE, +15
@@ -937,13 +966,40 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
     `{targetId}` (an ACTIVE place within 200 m; the first review moves there unless the author already has one there, then
     it is deleted; pin MERGED + `merged_into_id`, saves moved, `place_merges` row, MERGED history on both).
     `MediaAccess` lets an ACTIVE Moderator see PASSED files of a review of a PENDING place (audience STAFF, no-store).
-  - "Báo đóng cửa" `/moderator/closed` (UC-M04 AF4/AF5): `GET /api/moderator/closed` (`waiting` = ACTIVE open places with
-    ≥ `closed_report_threshold` unresolved reports, most first; `closed` = labelled places), `PUT
-    /api/moderator/places/{id}/closed` `{closed}` (true: label + reports kept as resolved, CLOSED history; false: label
-    off, reports deleted so people can report again, REOPENED history), `DELETE /api/moderator/places/{id}/closed-reports`
-    ("Vẫn mở cửa, xóa các báo cáo").
-  - "Địa điểm" `/moderator/places` (UC-M07, UC-M08; `PlaceAdminService`, page `mod-places.js`, `?id=` opens a place,
-    `?new=1` "Thêm địa điểm"): `GET /api/moderator/places?q=&category=&source=&status=&prefecture=&page=` (10 a page,
+  - "Báo cáo địa điểm" `/moderator/closed` (UC-M04 AF4/AF5; menu entry renamed from "Báo cáo đóng cửa") is the same
+    map workspace too (`pages/moderator/closed.html`, `data-view="closed"`): the panel lists the places waiting (most
+    reports first, both kinds counted) and those labelled, and opens the first waiting place at once; its details list
+    the open reports (kind, reason, who, when) and show "N người báo “đã đóng cửa”" with "Xác nhận, gắn nhãn đã đóng
+    cửa" / "Vẫn mở cửa, xóa các báo cáo", and "N người báo “sai thông tin”" with "Đã xử lý" / "Báo cáo không đúng" (the
+    Moderator first corrects the place with "Sửa thông tin" or removes it); a decided place leaves the queue and the next
+    one opens; a labelled place has "Gỡ nhãn, địa điểm đã mở lại". On every view of the workspace the pins carry the
+    number of open reports (both kinds). API: `GET /api/moderator/closed` (`waiting` = ACTIVE places with ≥
+    `closed_report_threshold` open CLOSED reports and not labelled, or with an open WRONG_INFO report; `reports` and
+    `wrongReports` per row; `closed` = labelled places), `PUT /api/moderator/places/{id}/closed` `{closed}` (true: label,
+    CLOSED reports kept as resolved, reporters thanked, CLOSED history; false: label off, CLOSED reports deleted so
+    people can report again, REOPENED history), `DELETE …/{id}/closed-reports` ("Vẫn mở cửa": CLOSED reports deleted,
+    reporters told), `POST …/{id}/wrong-reports/resolve` ("Đã xử lý": WRONG_INFO reports kept as resolved, reporters
+    thanked) and `DELETE …/{id}/wrong-reports` ("Báo cáo không đúng": deleted, reporters told the details are right),
+    both writing `place_history` REPORTS_HANDLED (V24 widens `ck_phist_action`) and the activity log. Removing a place
+    ("Gỡ khỏi bản đồ") resolves its open reports of both kinds and tells each reporter once. `PlaceInfo` carries
+    `wrongReports` and `reports`. Merging moves the open reports with their kind and reason.
+  - "Địa điểm" `/moderator/places` = the Moderator's **map workspace** (user decision 20/11/2026: one map page for
+    places and, next, new pins; page `mod-map.js` + `mod-map.css`, `?id=` opens a place, `?new=1` "Thêm địa điểm"). Big
+    map with the base map of `/map` (`lib/basemap.js`: "Gọn"/"Chi tiết", MapLibre loading, the shops the style draws,
+    distances; pin styles in `map-pins.css`, shared with `/map`, plus `.gone` REMOVED/REJECTED, `.merged`, `.dup`), every
+    place in every status (default "Mọi trạng thái") from `GET /api/moderator/places/map?q=&category=&source=&status=
+    &prefecture=` (`PlaceAdminService.map`, places with a position, newest first, at most 5,000, `truncated`); the panel
+    on the left lists the places in view (nearest to the centre, 100 at most), or shows one place (facts, actions,
+    history), the form (the pink pin on the map is dragged or the map clicked to move it; history "dời 121 m") or the
+    removal reason. The search box flies to a place of Senpai ơi (from the pins), a prefecture (to its areas, islands
+    over 2.5° away left out) or an area (`/api/areas/search`); the prefecture filter flies too. Adding a place, three
+    ways: click a shop the "Gọn" map draws (a place Senpai ơi has, by `osmId` in the pins or the same name close by,
+    opens; else "Chưa có trên Senpai ơi" → "Thêm vào Senpai ơi" = `modPickOsm`, the form filled from Nominatim, the pink
+    pin at the shop); "Tìm … trên OpenStreetMap" in the search suggestions (one request per press, `GET /api/map/search`
+    with the view, dark pins and a results list; back from a place returns to the results, a saved shop leaves them);
+    or "Thêm địa điểm" then a click on the map (on a drawn shop it takes that shop; elsewhere a bare pin, the map zooms
+    to the street). The list API below stays for other callers:
+    `GET /api/moderator/places?q=&category=&source=&status=&prefecture=&page=` (10 a page,
     newest first, `q` over the names and address with accents ignored; source MODERATOR also lists TEAM; `prefectures`
     for the filter), `GET …/{id}` (details, counts, history as ready text "Sửa thông tin · Danh mục: Quán ăn → Siêu
     thị", categories, PLACE_REMOVE reasons), `GET /api/moderator/places/osm-search?q=` (= `PlaceService.search`: Senpai ơi places with an id → "Mở",

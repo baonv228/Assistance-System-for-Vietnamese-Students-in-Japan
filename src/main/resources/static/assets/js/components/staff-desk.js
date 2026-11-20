@@ -14,7 +14,7 @@ export const DESKS = {
         modules: [
             ["tags", "verified", "Duyệt tag định danh", "UC-M01, UC-M02", "/moderator/tags"],
             ["reports", "flag", "Báo cáo nội dung", "UC-M03, UC-M04", "/moderator/reports"],
-            ["closed", "storefront", "Báo cáo đóng cửa", "UC-M05", "/moderator/closed"],
+            ["closed", "flag", "Báo cáo địa điểm", "UC-M04", "/moderator/closed"],
             ["pins", "add_location_alt", "Duyệt ghim mới", "UC-M06", "/moderator/pins"],
             ["events", "celebration", "Sự kiện", "UC-M07", "/moderator/events"],
             ["guide", "menu_book", "Cẩm nang", "UC-M08", "/moderator/guides"],

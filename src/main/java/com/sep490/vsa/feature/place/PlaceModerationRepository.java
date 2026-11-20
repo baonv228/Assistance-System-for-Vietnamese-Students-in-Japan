@@ -198,10 +198,14 @@ public class PlaceModerationRepository {
 
     private static final String CLOSED_COLUMNS = """
             p.id, p.name_vi, c.id, c.name_vi, c.icon,
-            (SELECT COUNT(*) FROM place_closed_reports cr WHERE cr.place_id = p.id AND cr.resolved_at IS NULL) AS n,
+            (SELECT COUNT(*) FROM place_closed_reports cr
+             WHERE cr.place_id = p.id AND cr.kind = 'CLOSED' AND cr.resolved_at IS NULL) AS n,
             p.address,
             (SELECT MAX(r.created_at) FROM reviews r WHERE r.place_id = p.id AND r.status = 'PUBLISHED' AND %s),
-            p.closed_at, p.osm_id, p.lat, p.lng
+            p.closed_at, p.osm_id, p.lat, p.lng,
+            (SELECT COUNT(*) FROM place_closed_reports wr
+             WHERE wr.place_id = p.id AND wr.kind = 'WRONG_INFO' AND wr.resolved_at IS NULL) AS w,
+            p.is_closed AS shut
             """.formatted(ActiveAuthors.of("r"));
 
     private static ClosedRow closedRow(ResultSet rs) throws SQLException {
@@ -210,16 +214,19 @@ public class PlaceModerationRepository {
         return new ClosedRow(rs.getLong(1), rs.getString(2),
                 new CategoryRef(rs.getString(3), rs.getString(4), rs.getString(5)), rs.getInt(6), rs.getString(7),
                 last == null ? null : last.toInstant(), closedAt == null ? null : closedAt.toInstant(),
-                rs.getString(10), decimal(rs, 11), decimal(rs, 12));
+                rs.getString(10), decimal(rs, 11), decimal(rs, 12), rs.getInt(13));
     }
 
-    /** Open places with at least {@code threshold} reports not handled yet, most reports first. */
+    /**
+     * ACTIVE places to check: open ones with at least {@code threshold} "Đã đóng cửa" reports, and any with a "Sai
+     * thông tin" report (from the first one), most reports first.
+     */
     public List<ClosedRow> waitingClosed(int threshold) {
         return jdbc.query("SELECT " + CLOSED_COLUMNS + """
                  FROM places p JOIN place_categories c ON c.id = p.category_id
-                WHERE p.status = 'ACTIVE' AND NOT p.is_closed
-                HAVING n >= ?
-                ORDER BY n DESC, p.id""", (rs, i) -> closedRow(rs), threshold);
+                WHERE p.status = 'ACTIVE'
+                HAVING (n >= ? AND NOT shut) OR w > 0
+                ORDER BY n + w DESC, p.id""", (rs, i) -> closedRow(rs), threshold);
     }
 
     /** Places with the "đã đóng cửa" label, labelled last first. */
@@ -230,11 +237,47 @@ public class PlaceModerationRepository {
                 ORDER BY p.closed_at DESC, p.id DESC""", (rs, i) -> closedRow(rs));
     }
 
+    /** "Đã đóng cửa" reports not handled yet. */
     public int openClosedReports(long placeId) {
+        return openReports(placeId, "CLOSED");
+    }
+
+    public int openReports(long placeId, String kind) {
         Integer n = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM place_closed_reports WHERE place_id = ? AND resolved_at IS NULL""",
-                Integer.class, placeId);
+                SELECT COUNT(*) FROM place_closed_reports WHERE place_id = ? AND kind = ? AND resolved_at IS NULL""",
+                Integer.class, placeId, kind);
         return n == null ? 0 : n;
+    }
+
+    /** The reports not handled yet, both kinds, newest first, for the place's details. */
+    public List<PlaceModerationDtos.PlaceReport> reportsOf(long placeId) {
+        return jdbc.query("""
+                SELECT r.kind, r.note, r.user_id, u.display_name, r.created_at
+                FROM place_closed_reports r JOIN users u ON u.id = r.user_id
+                WHERE r.place_id = ? AND r.resolved_at IS NULL
+                ORDER BY r.created_at DESC, r.user_id""",
+                (rs, i) -> new PlaceModerationDtos.PlaceReport(rs.getString(1), rs.getString(2), rs.getLong(3),
+                        rs.getString(4), rs.getTimestamp(5).toInstant()), placeId);
+    }
+
+    /** The members whose report of this kind waits (to thank them once a Moderator decided). */
+    public List<Long> reporters(long placeId, String kind) {
+        return jdbc.queryForList("""
+                SELECT user_id FROM place_closed_reports WHERE place_id = ? AND kind = ? AND resolved_at IS NULL""",
+                Long.class, placeId, kind);
+    }
+
+    /** The reports of this kind were right and are handled: kept, so the same people do not report it again. */
+    public int resolveReports(long placeId, String kind, Instant now) {
+        return jdbc.update("""
+                UPDATE place_closed_reports SET resolved_at = ?
+                WHERE place_id = ? AND kind = ? AND resolved_at IS NULL""", Timestamp.from(now), placeId, kind);
+    }
+
+    /** The reports of this kind were wrong: they go, and anyone may report again later. */
+    public int deleteReports(long placeId, String kind) {
+        return jdbc.update("DELETE FROM place_closed_reports WHERE place_id = ? AND kind = ? AND resolved_at IS NULL",
+                placeId, kind);
     }
 
     public void setClosed(long placeId, boolean closed, Instant now) {
@@ -242,15 +285,14 @@ public class PlaceModerationRepository {
                 closed, closed ? Timestamp.from(now) : null, Timestamp.from(now), placeId);
     }
 
-    /** The reports were right: kept as handled, so the same people do not report the closed place again. */
+    /** The "Đã đóng cửa" reports were right: kept as handled, so the same people do not report the closed place again. */
     public void resolveClosedReports(long placeId, Instant now) {
-        jdbc.update("UPDATE place_closed_reports SET resolved_at = ? WHERE place_id = ? AND resolved_at IS NULL",
-                Timestamp.from(now), placeId);
+        resolveReports(placeId, "CLOSED", now);
     }
 
-    /** The place is open: the reports go, and anyone may report it again later. */
+    /** The place is open: its "Đã đóng cửa" reports go (handled ones too), and anyone may report it again later. */
     public int deleteClosedReports(long placeId) {
-        return jdbc.update("DELETE FROM place_closed_reports WHERE place_id = ?", placeId);
+        return jdbc.update("DELETE FROM place_closed_reports WHERE place_id = ? AND kind = 'CLOSED'", placeId);
     }
 
     // ---------------------------------------------------------------- "Địa điểm" (UC-M07, UC-M08)
@@ -316,6 +358,30 @@ public class PlaceModerationRepository {
         return jdbc.query(sql, (rs, i) -> new PlaceRow(rs.getLong(1), rs.getString(2), rs.getString(3),
                 new CategoryRef(rs.getString(4), rs.getString(5), rs.getString(6)), rs.getString(7), rs.getString(8),
                 rs.getBoolean(9), rs.getString(10), rs.getInt(11), rs.getTimestamp(12).toInstant()), args.toArray());
+    }
+
+    /**
+     * The places with a position matching the filters, for the Moderator's map: at most {@code limit} rows (the caller
+     * asks one more to know there are more), newest first so the latest work is always on the map.
+     */
+    public List<PlaceModerationDtos.MapPin> mapPins(PlaceFilter filter, int limit) {
+        List<Object> args = new ArrayList<>();
+        String sql = """
+                SELECT p.id, p.name_vi, p.name_ja, p.name_en, p.osm_id, p.category_id, p.lat, p.lng, p.status, p.source,
+                       p.is_closed, COALESCE(rc.n, 0), COALESCE(cr.n, 0)
+                FROM places p
+                LEFT JOIN (SELECT r.place_id, COUNT(*) AS n FROM reviews r
+                           WHERE r.place_id IS NOT NULL AND r.status = 'PUBLISHED' AND %s
+                           GROUP BY r.place_id) rc ON rc.place_id = p.id
+                LEFT JOIN (SELECT place_id, COUNT(*) AS n FROM place_closed_reports
+                           WHERE resolved_at IS NULL GROUP BY place_id) cr ON cr.place_id = p.id
+                """.formatted(ActiveAuthors.of("r"))
+                + where(filter, args) + " AND p.lat IS NOT NULL AND p.lng IS NOT NULL"
+                + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?";
+        args.add(limit);
+        return jdbc.query(sql, (rs, i) -> new PlaceModerationDtos.MapPin(rs.getLong(1), rs.getString(2),
+                rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getDouble(7), rs.getDouble(8),
+                rs.getString(9), rs.getString(10), rs.getBoolean(11), rs.getInt(12), rs.getInt(13)), args.toArray());
     }
 
     public long countPlaces(PlaceFilter filter) {

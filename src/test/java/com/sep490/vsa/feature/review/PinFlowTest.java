@@ -4,6 +4,7 @@ import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.moderation.ImageModerator;
 import com.sep490.vsa.feature.place.ExternalPlaces;
 import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,7 @@ import static org.springframework.security.web.context.HttpSessionSecurityContex
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -143,28 +145,57 @@ class PinFlowTest {
                 INSERT INTO places (name_vi, category_id, lat, lng, source, status, created_by)
                 VALUES (?, 'konbini', ?, ?, 'OSM', 'ACTIVE', ?)""", "Konbini " + word, lat, lng, author);
         long place = jdbc.queryForObject("SELECT id FROM places WHERE name_vi = ?", Long.class, "Konbini " + word);
+        String closed = "{\"kind\":\"CLOSED\",\"note\":\"Tiệm đã dọn đi.\"}";
         for (int i = 1; i <= 4; i++) {
-            mvc.perform(withCsrf(post("/api/map/places/" + place + "/closed-report")).session(session(user(30))))
+            report(place, user(30), closed)
                     .andExpect(jsonPath("$.data.count").value(i)).andExpect(jsonPath("$.data.queued").value(false));
         }
         long fifth = user(30);
-        mvc.perform(withCsrf(post("/api/map/places/" + place + "/closed-report")).session(session(fifth)))
+        report(place, fifth, "{\"kind\":\"CLOSED\",\"note\":\"  \"}").andExpect(status().isBadRequest());   // a reason
+        report(place, fifth, closed)
                 .andExpect(jsonPath("$.data.count").value(5)).andExpect(jsonPath("$.data.queued").value(true));
-        mvc.perform(withCsrf(post("/api/map/places/" + place + "/closed-report")).session(session(fifth)))
-                .andExpect(status().isConflict());
+        report(place, fifth, closed).andExpect(status().isConflict());
+        // "Sai thông tin" is a second kind: one more report of the same member, queued from the first one
+        report(place, fifth, "{\"kind\":\"WRONG_INFO\",\"note\":\"Ghim nằm sai bên kia đường.\"}")
+                .andExpect(jsonPath("$.data.count").value(1)).andExpect(jsonPath("$.data.queued").value(true));
         mvc.perform(get("/api/map/places/" + place).session(session(fifth)))
                 .andExpect(jsonPath("$.data.reportedClosed").value(true))
+                .andExpect(jsonPath("$.data.reportedWrong").value(true))
                 .andExpect(jsonPath("$.data.closed").value(false));      // only a Moderator sets the label
     }
 
+    private ResultActions report(long place, long userId, String json) throws Exception {
+        return mvc.perform(withCsrf(post("/api/map/places/" + place + "/report")).session(session(userId))
+                .contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    /** The Moderators' "Duyệt ghim tự động" back to the V23 values, so no other test sees what one test set. */
+    @AfterEach
+    void resetAutoApproval() {
+        setting("pin_auto_approve", "1");
+        setting("pin_auto_min_points", "100");
+        setting("pin_auto_per_day", "3");
+    }
+
+    private void setting(String key, String value) {
+        jdbc.update("""
+                INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)""", key, value);
+    }
+
     @Test
-    void aTopRankMembersPinGoesOnTheMapAtOnce() throws Exception {
+    void theModeratorsRuleDecidesWhichPinsGoOnTheMapAtOnce() throws Exception {
+        setting("pin_auto_min_points", "300");
         jdbc.update("UPDATE users SET points = 299 WHERE id = ?", author);
         mvc.perform(get("/api/map/pins/compose").session(session(author)))
                 .andExpect(jsonPath("$.data.noApprovalNeeded").value(false));
         jdbc.update("UPDATE users SET points = 300 WHERE id = ?", author);
         mvc.perform(get("/api/map/pins/compose").session(session(author)))
                 .andExpect(jsonPath("$.data.noApprovalNeeded").value(true));
+        setting("pin_auto_approve", "0");                       // switched off: everyone waits
+        mvc.perform(get("/api/map/pins/compose").session(session(author)))
+                .andExpect(jsonPath("$.data.noApprovalNeeded").value(false));
+        setting("pin_auto_approve", "1");
 
         String body = send(author, pin("Tin cậy " + word, false)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Ghim đã lên bản đồ. +15 điểm."))
@@ -187,6 +218,43 @@ class PinFlowTest {
                 .andReturn().getResponse().getContentAsString();
         long waiting = Long.parseLong(second.replaceAll(".*\"placeId\":(\\d+).*", "$1"));
         assertThat(jdbc.queryForObject("SELECT status FROM places WHERE id = ?", String.class, waiting)).isEqualTo("PENDING");
+    }
+
+    @Test
+    void onlyThatManyPinsOfOneMemberADayGoOnTheMapAtOnce() throws Exception {
+        setting("pin_auto_per_day", "1");
+        jdbc.update("UPDATE users SET points = 100 WHERE id = ?", author);
+        send(author, pin("Một " + word, false)).andExpect(jsonPath("$.data.approved").value(true));
+        lat += 0.01;                                              // far from the first one: no "Có thể trùng"
+        send(author, pin("Hai " + word, false)).andExpect(jsonPath("$.data.approved").value(false));
+        mvc.perform(get("/api/map/pins/compose").session(session(author)))
+                .andExpect(jsonPath("$.data.noApprovalNeeded").value(false));
+    }
+
+    @Test
+    void theModeratorSetsTheRuleAndEveryChangeIsLogged() throws Exception {
+        long moderator = moderator();
+        MockHttpSession mod = staffSession(moderator, "MODERATOR");
+        mvc.perform(get("/api/moderator/pin-settings").session(mod)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.autoApprove").value(true))
+                .andExpect(jsonPath("$.data.minPoints").value(100))
+                .andExpect(jsonPath("$.data.perDay").value(3))
+                .andExpect(jsonPath("$.data.ranks").isNotEmpty());
+        mvc.perform(withCsrf(put("/api/moderator/pin-settings")).session(mod).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"autoApprove\":true,\"minPoints\":-1,\"perDay\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.data.minPoints").exists())
+                .andExpect(jsonPath("$.data.perDay").exists());
+        long logsBefore = jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE actor_id = ? AND action = 'SETTING_UPDATE'",
+                Long.class, moderator);
+        mvc.perform(withCsrf(put("/api/moderator/pin-settings")).session(mod).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"autoApprove\":false,\"minPoints\":50,\"perDay\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.autoApprove").value(false))
+                .andExpect(jsonPath("$.data.minPoints").value(50));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE actor_id = ? AND action = 'SETTING_UPDATE'",
+                Long.class, moderator)).isEqualTo(logsBefore + 2);       // perDay was unchanged: not logged
+        mvc.perform(get("/api/moderator/pin-settings").session(session(author))).andExpect(status().isForbidden());
     }
 
     @Test
@@ -233,5 +301,21 @@ class PinFlowTest {
         session.setAttribute(SPRING_SECURITY_CONTEXT_KEY, new SecurityContextImpl(
                 new UsernamePasswordAuthenticationToken(me, null, List.of(new SimpleGrantedAuthority("ROLE_USER")))));
         return session;
+    }
+
+    private static MockHttpSession staffSession(long userId, String role) {
+        AppUserPrincipal me = new AppUserPrincipal(userId, "s" + userId + "@test.local", "Staff Test", role, "/moderator");
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(SPRING_SECURITY_CONTEXT_KEY, new SecurityContextImpl(
+                new UsernamePasswordAuthenticationToken(me, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)))));
+        return session;
+    }
+
+    private long moderator() {
+        String email = "pin-mod-" + UUID.randomUUID() + "@test.local";
+        jdbc.update("""
+                INSERT INTO users (email, display_name, role, status, is_adult_confirmed)
+                VALUES (?, 'Pin Mod', 'MODERATOR', 'ACTIVE', TRUE)""", email);
+        return jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
     }
 }

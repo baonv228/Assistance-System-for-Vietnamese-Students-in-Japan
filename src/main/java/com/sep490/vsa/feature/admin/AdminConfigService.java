@@ -106,6 +106,19 @@ public class AdminConfigService {
                 "Số ghim địa điểm tối đa/ngày", "Giới hạn hoạt động",
                 "Giới hạn số lượng yêu cầu tạo địa điểm mới một tài khoản mới có thể gửi trong một ngày",
                 1, 50));
+        // Set by the Moderators on their overview ("Duyệt ghim tự động"); same ranges as PinSettingsService
+        SETTING_METADATA.put("pin_auto_approve", SettingMeta.applied(
+                "Tự động duyệt ghim mới", "Ghim địa điểm (Moderator)",
+                "1 = ghim của thành viên đủ điểm lên bản đồ ngay, 0 = mọi ghim chờ Moderator duyệt",
+                0, 1));
+        SETTING_METADATA.put("pin_auto_min_points", SettingMeta.applied(
+                "Điểm tối thiểu để ghim được tự duyệt", "Ghim địa điểm (Moderator)",
+                "Thành viên có từ số điểm này trở lên thì ghim mới lên bản đồ ngay, không chờ duyệt",
+                0, 100000));
+        SETTING_METADATA.put("pin_auto_per_day", SettingMeta.applied(
+                "Số ghim tự duyệt tối đa/ngày", "Ghim địa điểm (Moderator)",
+                "Mỗi thành viên được tự duyệt tối đa bấy nhiêu ghim một ngày; ghim sau đó chờ Moderator duyệt",
+                1, 50));
         SETTING_METADATA.put("videos_per_day", SettingMeta.applied(
                 "Số video tải lên tối đa/ngày", "Giới hạn hoạt động",
                 "Giới hạn số video một tài khoản mới có thể đăng trong một ngày (0 = không cho đăng video)",
