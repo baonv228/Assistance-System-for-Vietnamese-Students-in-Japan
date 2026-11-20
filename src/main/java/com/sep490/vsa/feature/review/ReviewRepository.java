@@ -217,19 +217,34 @@ public class ReviewRepository {
     }
 
     /** The member holds the top rank ("Senpai tin cậy", 300 points), whose new pins need no Moderator. */
-    public boolean topRank(long userId) {
-        Boolean top = jdbc.queryForObject(
-                "SELECT points >= (SELECT MAX(min_points) FROM ranks) FROM users WHERE id = ?", Boolean.class, userId);
-        return Boolean.TRUE.equals(top);
+    public int points(long userId) {
+        Integer points = jdbc.queryForObject("SELECT points FROM users WHERE id = ?", Integer.class, userId);
+        return points == null ? 0 : points;
     }
 
-    /** A pin of a top-rank member goes on the map at once; no Moderator took part, so reviewed_by stays empty. */
+    /**
+     * How many of this member's pins went on the map without a Moderator between {@code from} and {@code to} (a Japan
+     * day): "AUTO" now, "TOP_RANK" for the rule before it.
+     */
+    public int autoApprovedBetween(long userId, Instant from, Instant to) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM place_history
+                WHERE actor_id = ? AND action = 'APPROVED' AND created_at >= ? AND created_at < ?
+                  AND JSON_UNQUOTE(JSON_EXTRACT(detail, '$.via')) IN ('AUTO', 'TOP_RANK')""",
+                Integer.class, userId, Timestamp.from(from), Timestamp.from(to));
+        return n == null ? 0 : n;
+    }
+
+    /**
+     * A pin approved by the Moderators' rule ({@code pin_auto_*} settings) goes on the map at once; no Moderator took
+     * part, so reviewed_by stays empty and the history says "via AUTO".
+     */
     public void approveOwnPin(long placeId, long userId, Instant now) {
         Timestamp at = Timestamp.from(now);
         jdbc.update("UPDATE places SET status = 'ACTIVE', reviewed_at = ?, updated_at = ? WHERE id = ?", at, at, placeId);
         jdbc.update("""
                 INSERT INTO place_history (place_id, action, actor_id, detail, created_at)
-                VALUES (?, 'APPROVED', ?, JSON_OBJECT('via', 'TOP_RANK'), ?)""", placeId, userId, at);
+                VALUES (?, 'APPROVED', ?, JSON_OBJECT('via', 'AUTO'), ?)""", placeId, userId, at);
     }
 
     /** The community pin, PENDING until a Moderator approves it (only its author sees it meanwhile). */

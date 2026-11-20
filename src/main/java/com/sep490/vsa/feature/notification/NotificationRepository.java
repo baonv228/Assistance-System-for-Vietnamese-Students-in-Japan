@@ -23,10 +23,12 @@ public class NotificationRepository {
                        WHEN b.id IS NOT NULL THEN CONCAT('/blog/', b.id)
                        WHEN r.event_id IS NOT NULL AND e.id IS NOT NULL THEN CONCAT('/events/', e.id)
                        WHEN r.place_id IS NOT NULL THEN CONCAT('/map?place=', r.place_id)
+                       WHEN pl.id IS NOT NULL THEN CONCAT('/map?place=', pl.id)
                    END AS link
             FROM notifications n
             LEFT JOIN blogs b ON n.ref_type IN ('BLOG', 'QUESTION') AND b.id = n.ref_id
             LEFT JOIN reviews r ON n.ref_type = 'REVIEW' AND r.id = n.ref_id
+            LEFT JOIN places pl ON n.ref_type = 'PLACE' AND pl.id = n.ref_id AND pl.status IN ('ACTIVE', 'MERGED')
             LEFT JOIN events e ON e.id = r.event_id AND e.deleted_at IS NULL
             WHERE n.user_id = ?""";
 

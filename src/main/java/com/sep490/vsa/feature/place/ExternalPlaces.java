@@ -50,6 +50,47 @@ public interface ExternalPlaces {
     }
 
     /**
+     * Where the Map searches: the box shown on screen. {@code inside} = only places in the box ("7-Eleven" around the
+     * user, not all of Tokyo); otherwise anywhere, places nearer the box's centre ranked higher (nothing in the box).
+     */
+    record Where(double south, double west, double north, double east, boolean inside) {
+
+        public double centerLat() {
+            return (south + north) / 2;
+        }
+
+        public double centerLng() {
+            return (west + east) / 2;
+        }
+
+        public boolean contains(double lat, double lng) {
+            return lat >= south && lat <= north && lng >= west && lng <= east;
+        }
+
+        public Where anywhere() {
+            return new Where(south, west, north, east, false);
+        }
+    }
+
+    /**
+     * {@link #search} in or around the Map's view. The default ignores the view; {@link PlaceService} keeps only the
+     * places in the box when {@code where.inside()}.
+     */
+    default List<Hit> search(String text, Where where) {
+        return search(text);
+    }
+
+    /** {@link #searchStations} in or around the Map's view (see {@link #search(String, Where)}). */
+    default List<Hit> searchStations(String name, Where where) {
+        return searchStations(name);
+    }
+
+    /** {@link #searchTagged} in or around the Map's view (see {@link #search(String, Where)}). */
+    default List<Hit> searchTagged(String text, List<String> osmTags, Where where) {
+        return searchTagged(text, osmTags);
+    }
+
+    /**
      * Named places around a point the user clicked on the map, nearest first (shops, stations, parks… not streets).
      *
      * @throws ExternalPlacesException when the service cannot be reached or answers with an error

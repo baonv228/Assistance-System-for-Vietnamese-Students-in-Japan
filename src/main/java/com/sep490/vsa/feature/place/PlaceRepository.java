@@ -82,6 +82,32 @@ public class PlaceRepository {
     }
 
     /**
+     * The Map's search: like {@link #search} but among places with a position in Japan, nearest to the centre of the
+     * view first, and only inside the view when {@code where.inside()}.
+     */
+    public List<PlaceOption> searchNear(String keyword, ExternalPlaces.Where where, int limit) {
+        String kw = escapeLike(keyword);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("kw", "%" + kw + "%")
+                .addValue("lat", where.centerLat())
+                .addValue("lng", where.centerLng())
+                // a degree of longitude is shorter than a degree of latitude away from the equator
+                .addValue("cos", Math.cos(Math.toRadians(where.centerLat())))
+                .addValue("s", where.south()).addValue("n", where.north())
+                .addValue("w", where.west()).addValue("e", where.east())
+                .addValue("limit", limit);
+        String inside = where.inside() ? " AND p.lat BETWEEN :s AND :n AND p.lng BETWEEN :w AND :e" : "";
+        return named.query("SELECT " + OPTION_COLUMNS + "\n"
+                + "FROM places p JOIN place_categories c ON c.id = p.category_id\n"
+                + "WHERE p.status = 'ACTIVE' AND p.lat IS NOT NULL AND p.lng IS NOT NULL\n"
+                + "  AND " + com.sep490.vsa.feature.area.AreaService.PLACE_IN_JAPAN + inside + "\n"
+                + "  AND (p.name_vi COLLATE utf8mb4_0900_ai_ci LIKE :kw OR p.name_ja COLLATE utf8mb4_0900_ai_ci LIKE :kw\n"
+                + "       OR p.name_en COLLATE utf8mb4_0900_ai_ci LIKE :kw OR p.address COLLATE utf8mb4_0900_ai_ci LIKE :kw)\n"
+                + "ORDER BY POW(p.lat - :lat, 2) + POW((p.lng - :lng) * :cos, 2), p.id\n"
+                + "LIMIT :limit", params, PlaceRepository::option);
+    }
+
+    /**
      * An OpenStreetMap id ASVSJ already has.
      *
      * @param status status of {@code shown}

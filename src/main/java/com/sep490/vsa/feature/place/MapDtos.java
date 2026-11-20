@@ -57,9 +57,16 @@ public final class MapDtos {
      *
      * @param external ON, OFF, SHORT, UNAVAILABLE, BUSY as in {@link PlaceDtos.PlaceSearch}, or LOGIN for a guest
      *                 (guests search ASVSJ places only)
+     * @param scope    AREA = the places inside the view sent with the search, nearest to its centre first; WIDE = the
+     *                 view held none, so all of Japan, nearest to the view first; null when no view was sent
      */
     public record MapSearch(List<MapCategory> categories, List<PlaceOption> places, String external,
-                            String externalReason) {
+                            String externalReason, String scope) {
+
+        public MapSearch(List<MapCategory> categories, List<PlaceOption> places, String external,
+                         String externalReason) {
+            this(categories, places, external, externalReason, null);
+        }
     }
 
     public record ScamWarningRef(long blogId, String title) {
@@ -82,7 +89,16 @@ public final class MapDtos {
                               String source, String status, boolean closed, int closedReports, int closedThreshold,
                               boolean reportedClosed, int reviewCount, Double rating,
                               List<ScamWarningRef> scamWarnings, boolean saved, boolean canAct, Long myReviewId,
-                              Long mergedFrom, List<ReportReason> reportReasons) {
+                              Long mergedFrom, List<ReportReason> reportReasons, boolean reportedWrong) {
+    }
+
+    /**
+     * "Báo cáo địa điểm".
+     *
+     * @param kind CLOSED ("Đã đóng cửa") or WRONG_INFO ("Sai thông tin")
+     * @param note the reason, required, at most 300 characters
+     */
+    public record PlaceReportRequest(String kind, String note) {
     }
 
     public record Tag(String name, String color) {

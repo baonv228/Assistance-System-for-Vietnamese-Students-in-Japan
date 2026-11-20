@@ -24,4 +24,8 @@ if (shell) {
             : `<div class="card module">${ic(icon, "big")}<h3>${esc(name)}</h3>
                 <span class="note">${esc(uc)}</span><span><span class="badge lan">Đang phát triển</span></span></div>`).join("")}
         </div>`;
+    if (!guideContent && role === "MODERATOR") {
+        const { mountPinSettingsCard } = await import("../components/pin-settings-card.js");
+        await mountPinSettingsCard(shell.main);
+    }
 }

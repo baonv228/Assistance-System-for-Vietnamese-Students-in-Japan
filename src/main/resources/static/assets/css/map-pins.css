@@ -1,0 +1,97 @@
+/* Map pins, shared by the Map (map.css) and the Moderator's map workspace (mod-map.css). Loaded after site.css. */
+.mp-wrap { background: none; border: 0; }
+.mp {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 2px solid var(--brand);
+    background: var(--surface);
+    color: var(--brand);
+    box-shadow: 0 2px 6px rgba(47, 62, 110, .35);
+    transition: transform .12s;
+}
+.mp .ic { font-size: 16px; vertical-align: 0; }
+.mp.lit { background: var(--brand); color: var(--on-brand); border-color: #fff; box-shadow: 0 0 0 7px rgba(194, 69, 110, .22), 0 2px 6px rgba(47, 62, 110, .35); }
+.mp.lit .ic { font-size: 20px; }
+.mp.comm { border-radius: 8px; }
+.mp.pend { border-style: dashed; background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.mp.shut { background: #E3E5EC; color: #8A90A6; border-color: #9AA0B8; opacity: .85; }
+.mp.ev { background: var(--lantern); border-color: #fff; color: #fff; border-radius: 9px; box-shadow: 0 0 0 6px rgba(232, 163, 60, .25), 0 2px 6px rgba(47, 62, 110, .3); }
+.mp .tagl {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1px 7px;
+    border-radius: 6px;
+    background: var(--lantern);
+    color: #3B2600;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.mp.sel { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(194, 69, 110, .35), 0 2px 8px rgba(47, 62, 110, .4); }
+.mp.osm { background: var(--ink); border-color: #fff; color: #fff; }
+.mp b {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+}
+.mp i {
+    position: absolute;
+    right: -6px;
+    top: -6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--crit);
+    color: #fff;
+    font-style: normal;
+    font-weight: 800;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    border: 2px solid #fff;
+}
+.leaflet-marker-icon:focus-visible .mp { box-shadow: var(--focus); }
+.mc {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(194, 69, 110, .88);
+    color: #fff;
+    font-weight: 800;
+    font-size: 14px;
+    border: 3px solid rgba(255, 255, 255, .9);
+    box-shadow: 0 2px 8px rgba(47, 62, 110, .35);
+}
+.me-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #1A73E8;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 6px rgba(26, 115, 232, .22);
+}
+.me-dot.tap { background: var(--brand); box-shadow: 0 0 0 8px rgba(194, 69, 110, .22); }
+.mp.newpin { background: var(--brand); color: #fff; border-color: #fff; border-radius: 8px; transform: scale(1.15); }
+/* Moderator map only: places taken off the map (REMOVED, REJECTED pins) and places merged into another */
+.mp.gone { background: var(--surface); color: var(--crit); border-color: var(--crit); border-style: dashed; opacity: .75; }
+.mp.merged { background: var(--surface-2); color: var(--muted); border-color: var(--muted); border-style: dotted; opacity: .75; }
+/* a place near a new place with a similar name ("Có thể trùng") */
+.mp.dup { box-shadow: 0 0 0 6px rgba(201, 120, 0, .35), 0 2px 6px rgba(47, 62, 110, .35); }
