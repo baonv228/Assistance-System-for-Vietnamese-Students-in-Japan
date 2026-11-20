@@ -260,12 +260,14 @@ export const apiClient = {
     // Map (UC-U14, UC-U15): { categories, places, center, signedIn }; search { categories, places, external }
     mapOverview: () => request("/map"),
     mapEvents: (days) => request(`/map/events?${toQuery({ days })}`),
-    mapSearch: (q) => request(`/map/search?${toQuery({ q })}`),
+    /** `view` = the box on screen `{south, west, north, east}`: places inside it, else all of Japan nearest first. */
+    mapSearch: (q, view = {}) => request(`/map/search?${toQuery({ q, ...view })}`),
     // UC-U19 "Cắm ghim": createPin takes FormData (part "pin" JSON + "images") ; UC-U20 "Báo đã đóng cửa"
     pinCompose: () => request("/map/pins/compose"),
     pinDuplicates: (lat, lng, names) => request(`/map/pins/duplicates?${toQuery({ lat, lng, names: names.join("|") })}`),
     createPin: (formData) => request("/map/pins", { method: "POST", body: formData }),
-    reportClosed: (id) => post(`/map/places/${id}/closed-report`),
+    /** "Báo cáo địa điểm": { kind: CLOSED | WRONG_INFO, note } → { count, threshold, queued } */
+    reportPlace: (id, body) => post(`/map/places/${id}/report`, body),
     mapNearby: (lat, lng) => request(`/map/nearby?${toQuery({ lat, lng })}`),
     mapPlace: (id) => request(`/map/places/${id}`),
     mapPlaceReviews: (id, page = 0) => request(`/map/places/${id}/reviews?${toQuery({ page })}`),
@@ -362,11 +364,18 @@ export const apiClient = {
     modClosed: () => request("/moderator/closed"),
     modSetClosed: (id, closed) => request(`/moderator/places/${id}/closed`, { method: "PUT", body: JSON.stringify({ closed }) }),
     modKeepOpen: (id) => request(`/moderator/places/${id}/closed-reports`, { method: "DELETE" }),
+    modResolveWrongInfo: (id) => post(`/moderator/places/${id}/wrong-reports/resolve`),
+    modDismissWrongInfo: (id) => request(`/moderator/places/${id}/wrong-reports`, { method: "DELETE" }),
     // "Địa điểm" (UC-M07, UC-M08). params: { q, category, source, status, area, page }. createPlace / updatePlace take
     // { osmId?, nameVi, nameJa, nameEn, address, categoryId, areaId, lat, lng, confirmDuplicate } and answer
     // { message, placeId, duplicates } (duplicates and no placeId = not saved, "Có thể trùng")
     modPlaces: (params = {}) => request(`/moderator/places?${toQuery(params)}`),
     modPlace: (id) => request(`/moderator/places/${id}`),
+    /** "Duyệt ghim tự động": { autoApprove, minPoints, perDay, ranks, waiting } */
+    modPinSettings: () => request("/moderator/pin-settings"),
+    modSavePinSettings: (body) => request("/moderator/pin-settings", { method: "PUT", body: JSON.stringify(body) }),
+    /** The Moderator's map: { pins, truncated, limit, categories, prefectures } for { category, source, status, prefecture }. */
+    modPlaceMap: (params = {}) => request(`/moderator/places/map?${toQuery(params)}`),
     modSearchOsm: (q) => request(`/moderator/places/osm-search?${toQuery({ q })}`),
     modPickOsm: (externalId) => request(`/moderator/places/osm/${encodeURIComponent(externalId)}`),
     modCreatePlace: (body) => post("/moderator/places", body),

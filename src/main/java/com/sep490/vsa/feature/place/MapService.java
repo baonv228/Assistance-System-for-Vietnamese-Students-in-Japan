@@ -28,6 +28,7 @@ import com.sep490.vsa.feature.place.MapRepository.ReviewRow;
 import com.sep490.vsa.feature.place.MapRepository.ReviewTarget;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceOption;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceSearch;
+import com.sep490.vsa.feature.moderation.ContentFilter;
 import com.sep490.vsa.feature.report.ContentReportService;
 import com.sep490.vsa.feature.report.ContentReportService.Target;
 import org.springframework.beans.factory.annotation.Value;
@@ -71,6 +72,7 @@ public class MapService {
             "MODERATOR", "Moderator", "ACADEMIC_MANAGER", "Biên tập viên nội dung tiếng Nhật", "ADMIN", "Quản trị viên");
 
     private final MapRepository repository;
+    private final ContentFilter filter;
     private final PlaceRepository places;
     private final PlaceService placeService;
     private final ContentReportService reports;
@@ -80,9 +82,10 @@ public class MapService {
     private final DevLocation devLocation;
 
     public MapService(MapRepository repository, PlaceRepository places, PlaceService placeService,
-                      ContentReportService reports, SystemSettings settings, Clock clock,
+                      ContentReportService reports, SystemSettings settings, Clock clock, ContentFilter filter,
                       @Value("${app.media.public-base-url:/media/}") String mediaBaseUrl,
                       @Value("${app.map.dev-location:}") String devLocation) {
+        this.filter = filter;
         this.repository = repository;
         this.places = places;
         this.placeService = placeService;
@@ -138,6 +141,14 @@ public class MapService {
 
     /** Categories whose name matches, then places (Senpai ơi first, then OpenStreetMap for signed-in people). */
     public MapSearch search(AppUserPrincipal me, String query) {
+        return search(me, query, null);
+    }
+
+    /**
+     * Like {@link #search(AppUserPrincipal, String)} within the view the user is looking at ({@code view} = the box on
+     * screen, see {@link PlaceService#searchMap}); without a view, the whole of Japan as before.
+     */
+    public MapSearch search(AppUserPrincipal me, String query, ExternalPlaces.Where view) {
         String q = query == null ? "" : query.strip();
         String folded = VietnameseText.squash(q);
         if (folded.isEmpty()) {
@@ -149,6 +160,12 @@ public class MapService {
                 .filter(c -> c.count() > 0)
                 .filter(c -> (" " + VietnameseText.fold(c.name())).contains(" " + typed))
                 .toList();
+        if (view != null) {
+            PlaceService.MapPlaces found = placeService.searchMap(me == null ? null : me.id(), q, view);
+            List<PlaceOption> mappable = found.items().stream().filter(MapService::onTheMap).toList();
+            return new MapSearch(categories, mappable, found.external(), found.externalReason(),
+                    found.wide() ? "WIDE" : "AREA");
+        }
         if (me == null) {
             List<PlaceOption> own = places.search(q, ASVSJ_SEARCH_LIMIT).stream().filter(MapService::onTheMap).toList();
             return new MapSearch(categories, own, "LOGIN", null);
@@ -199,10 +216,11 @@ public class MapService {
                 row.lng(), row.categoryId(), row.categoryName(), row.categoryIcon(), row.source(), row.status(),
                 row.closed(), repository.closedReports(id),
                 settings.getInt("closed_report_threshold", 5),
-                viewer != null && repository.reportedClosed(id, viewer),
+                viewer != null && repository.reported(id, viewer, CLOSED),
                 figures.count(), figures.rating(), repository.scamWarnings(id),
                 viewer != null && repository.saved(id, viewer), canAct,
-                viewer == null ? null : repository.reviewIdOf(id, viewer), mergedFrom, reasons);
+                viewer == null ? null : repository.reviewIdOf(id, viewer), mergedFrom, reasons,
+                viewer != null && repository.reported(id, viewer, WRONG_INFO));
     }
 
     /**
@@ -275,25 +293,47 @@ public class MapService {
         return new SaveState(on);
     }
 
+    static final String CLOSED = "CLOSED";
+    static final String WRONG_INFO = "WRONG_INFO";
+    static final int REPORT_NOTE_MAX = 300;
+
     /**
-     * UC-U20 "Báo đã đóng cửa": one report per user and place. At the threshold (5) the place waits for a Moderator,
-     * who alone sets the "Đã đóng cửa" label; the system never sets it by itself.
+     * "Báo cáo địa điểm" (user decision 20/11/2026): "Đã đóng cửa" (the Moderators look from
+     * {@code closed_report_threshold} reports, the label is never set by itself) or "Sai thông tin" (in their queue
+     * from the first report), always with a reason, checked like a comment (banned keywords, links). One report of
+     * each kind per member and place.
      */
     @Transactional
-    public MapDtos.ClosedState reportClosed(AppUserPrincipal me, long placeId) {
+    public MapDtos.ClosedState reportPlace(AppUserPrincipal me, long placeId, MapDtos.PlaceReportRequest request) {
         long userId = member(me);
+        String kind = request == null ? null : request.kind();
+        if (!CLOSED.equals(kind) && !WRONG_INFO.equals(kind)) {
+            throw ApiException.invalid("Hãy chọn “Đã đóng cửa” hoặc “Sai thông tin”.",
+                    Map.of("kind", "Hãy chọn loại báo cáo."));
+        }
+        String note = request.note() == null ? "" : request.note().strip();
+        if (note.isEmpty()) {
+            throw ApiException.invalid("Hãy ghi lý do để Moderator kiểm tra.", Map.of("note", "Hãy ghi lý do."));
+        }
+        if (note.codePointCount(0, note.length()) > REPORT_NOTE_MAX) {
+            throw ApiException.invalid("Lý do tối đa " + REPORT_NOTE_MAX + " ký tự.",
+                    Map.of("note", "Lý do tối đa " + REPORT_NOTE_MAX + " ký tự."));
+        }
         PlaceRow place = visible(placeId, userId);
         if (!"ACTIVE".equals(place.status())) {
-            throw ApiException.badRequest("Ghim đang chờ duyệt, chưa báo đóng cửa được.");
+            throw ApiException.badRequest("Ghim đang chờ duyệt, chưa báo cáo được.");
         }
-        if (place.closed()) {
+        if (CLOSED.equals(kind) && place.closed()) {
             throw ApiException.badRequest("Địa điểm này đã được Moderator xác nhận đóng cửa.");
         }
-        if (!repository.addClosedReport(place.id(), userId, clock.instant())) {
-            throw ApiException.conflict("Bạn đã báo địa điểm này rồi.");
+        filter.checkKeywords(note);
+        filter.checkLinks(note, userId);
+        if (!repository.addPlaceReport(place.id(), userId, kind, note, clock.instant())) {
+            throw ApiException.conflict(CLOSED.equals(kind) ? "Bạn đã báo địa điểm này đã đóng cửa rồi."
+                    : "Bạn đã báo địa điểm này sai thông tin rồi. Moderator sẽ kiểm tra.");
         }
-        int threshold = settings.getInt("closed_report_threshold", 5);
-        int count = repository.closedReports(place.id());
+        int threshold = CLOSED.equals(kind) ? settings.getInt("closed_report_threshold", 5) : 1;
+        int count = repository.placeReports(place.id(), kind);
         return new MapDtos.ClosedState(count, threshold, count >= threshold);
     }
 

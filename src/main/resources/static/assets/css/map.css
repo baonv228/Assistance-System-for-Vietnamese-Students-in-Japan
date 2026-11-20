@@ -26,6 +26,34 @@ body.mappage { overflow: hidden; }
     pointer-events: none;
 }
 .map-top > * { pointer-events: auto; }
+
+/* "Tìm kiếm ở khu vực này": after a search, once the map was moved; centred over the part of the map in view */
+.search-here {
+    position: absolute;
+    z-index: 1150;
+    top: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 18px 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 6px 20px rgba(47, 62, 110, .2);
+    cursor: pointer;
+}
+.search-here[hidden] { display: none; }
+.search-here .ic { color: var(--brand); font-size: 20px; }
+.search-here:hover { background: var(--surface-2); }
+.search-here:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.mapapp.with-panel .search-here { left: calc(404px + (100% - 404px) / 2); }
 .mtools {
     display: flex;
     gap: 8px;
@@ -363,97 +391,6 @@ body.mappage { overflow: hidden; }
 .lg.warn { border-color: var(--crit); background: var(--crit); color: #fff; font-weight: 800; font-size: 12px; }
 .lg.shut { border-color: #9AA0B8; background: #C9CCD8; }
 
-/* ---------------- pins ---------------- */
-.mp-wrap { background: none; border: 0; }
-.mp {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    border-radius: 50%;
-    border: 2px solid var(--brand);
-    background: var(--surface);
-    color: var(--brand);
-    box-shadow: 0 2px 6px rgba(47, 62, 110, .35);
-    transition: transform .12s;
-}
-.mp .ic { font-size: 16px; vertical-align: 0; }
-.mp.lit { background: var(--brand); color: var(--on-brand); border-color: #fff; box-shadow: 0 0 0 7px rgba(194, 69, 110, .22), 0 2px 6px rgba(47, 62, 110, .35); }
-.mp.lit .ic { font-size: 20px; }
-.mp.comm { border-radius: 8px; }
-.mp.pend { border-style: dashed; background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
-.mp.shut { background: #E3E5EC; color: #8A90A6; border-color: #9AA0B8; opacity: .85; }
-.mp.ev { background: var(--lantern); border-color: #fff; color: #fff; border-radius: 9px; box-shadow: 0 0 0 6px rgba(232, 163, 60, .25), 0 2px 6px rgba(47, 62, 110, .3); }
-.mp .tagl {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 1px 7px;
-    border-radius: 6px;
-    background: var(--lantern);
-    color: #3B2600;
-    font-size: 11px;
-    font-weight: 800;
-    white-space: nowrap;
-}
-.mp.sel { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(194, 69, 110, .35), 0 2px 8px rgba(47, 62, 110, .4); }
-.mp.osm { background: var(--ink); border-color: #fff; color: #fff; }
-.mp b {
-    position: absolute;
-    right: -6px;
-    bottom: -6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 4px;
-    border-radius: 9px;
-    background: var(--ink);
-    color: #fff;
-    font-size: 11px;
-    line-height: 18px;
-    text-align: center;
-}
-.mp i {
-    position: absolute;
-    right: -6px;
-    top: -6px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--crit);
-    color: #fff;
-    font-style: normal;
-    font-weight: 800;
-    font-size: 12px;
-    line-height: 18px;
-    text-align: center;
-    border: 2px solid #fff;
-}
-.leaflet-marker-icon:focus-visible .mp { box-shadow: var(--focus); }
-.mc {
-    display: grid;
-    place-items: center;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: rgba(194, 69, 110, .88);
-    color: #fff;
-    font-weight: 800;
-    font-size: 14px;
-    border: 3px solid rgba(255, 255, 255, .9);
-    box-shadow: 0 2px 8px rgba(47, 62, 110, .35);
-}
-.me-dot {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #1A73E8;
-    border: 3px solid #fff;
-    box-shadow: 0 0 0 6px rgba(26, 115, 232, .22);
-}
-
 /* ---------------- dialog, toast, misc ---------------- */
 .dlg {
     width: min(440px, calc(100vw - 32px));
@@ -533,6 +470,8 @@ body.mappage { overflow: hidden; }
     }
     .sheet-handle::before { content: ""; display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: var(--line); }
     .mapapp.with-panel .map-bar, .mapapp.with-panel .map-tools { display: none; }
+    /* below the search card and the event chips; the panel is a sheet at the bottom here */
+    .search-here, .mapapp.with-panel .search-here { top: 112px; left: 50%; }
     .mapapp.with-panel .leaflet-left { left: 0; }
     .map-bar { left: 8px; right: 8px; bottom: 8px; }
     .map-tools { right: 8px; bottom: calc(58px + var(--corner-h, 82px)); }
@@ -620,7 +559,6 @@ body.mappage { overflow: hidden; }
 }
 .thumb .x .ic { font-size: 16px; vertical-align: 0; }
 .counter { text-align: right; margin: 0; }
-.me-dot.tap { background: var(--brand); box-shadow: 0 0 0 8px rgba(194, 69, 110, .22); }
 
 /* ---------------- new pin (UC-U19) ---------------- */
 .pick-hint {
@@ -641,7 +579,6 @@ body.mappage { overflow: hidden; }
 .pick-hint .btn { color: var(--ink); }
 .mapapp.picking .map-bar, .mapapp.picking .map-tools { display: none; }
 .mapapp.picking .mapcanvas { cursor: crosshair; }
-.mp.newpin { background: var(--brand); color: #fff; border-color: #fff; border-radius: 8px; transform: scale(1.15); }
 .pin-form .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pin-form input[type="text"], .pin-form select {
     width: 100%;
@@ -666,3 +603,6 @@ body.mappage { overflow: hidden; }
 /* Event pin popup: "Xem sự kiện" opens /events/{id} */
 .leaflet-popup-content a.evlink { display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; font-weight: 600; color: var(--brand); }
 .leaflet-popup-content a.evlink .ic { font-size: 16px; }
+
+/* "Báo cáo địa điểm": a kind already reported by this member stays visible, greyed out */
+.reasons label.off { opacity: .55; cursor: default; }

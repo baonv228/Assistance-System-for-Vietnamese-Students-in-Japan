@@ -19,6 +19,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -64,6 +65,9 @@ public class OsmPlaces implements ExternalPlaces {
     static final int SEARCH_ASKED = 15;
     /** Kept after dropping places in other countries. */
     static final int SEARCH_KEPT = 10;
+    /** Asked from Photon for the Map's view ({@link ExternalPlaces.Where}); the Map lists at most 20 places. */
+    static final int AREA_ASKED = 30;
+    static final int AREA_KEPT = 25;
     /** Tokyo: Photon ranks places near it higher (most users live in Japan, many around Tokyo). */
     static final double BIAS_LAT = 35.68;
     static final double BIAS_LON = 139.76;
@@ -152,7 +156,7 @@ public class OsmPlaces implements ExternalPlaces {
         List<String> codes = regions.stream().map(r -> r.strip().toLowerCase(Locale.ROOT)).filter(r -> !r.isEmpty())
                 .toList();
         String countries = codes.isEmpty() ? "" : "&countrycodes=" + String.join(",", codes);
-        this.nominatimSearchTemplate = nominatim + "/search?q={q}&format=jsonv2&limit=10&accept-language=en"
+        this.nominatimSearchTemplate = nominatim + "/search?q={q}&format=jsonv2&limit=20&accept-language=en"
                 + "&namedetails=1&addressdetails=1" + countries;
         this.nominatimReverseTemplate = nominatim + "/reverse?lat={lat}&lon={lon}&zoom=18&format=jsonv2"
                 + "&accept-language=en&namedetails=1&addressdetails=1";
@@ -181,22 +185,37 @@ public class OsmPlaces implements ExternalPlaces {
 
     @Override
     public List<Hit> search(String text) {
-        return search(searchTemplate, text, text);
+        return search(searchTemplate, text, text, null);
+    }
+
+    @Override
+    public List<Hit> search(String text, Where where) {
+        return search(searchTemplate, text, text, where);
     }
 
     @Override
     public List<Hit> searchStations(String name) {
-        return search(stationTemplate, name, name + " station");
+        return search(stationTemplate, name, name + " station", null);
+    }
+
+    @Override
+    public List<Hit> searchStations(String name, Where where) {
+        return search(stationTemplate, name, name + " station", where);
     }
 
     /** Among places with one of these tags ("leisure:park"): "công viên Ueno" is "Ueno" among parks. */
     @Override
     public List<Hit> searchTagged(String text, List<String> osmTags) {
+        return searchTagged(text, osmTags, null);
+    }
+
+    @Override
+    public List<Hit> searchTagged(String text, List<String> osmTags, Where where) {
         List<String> tags = osmTags.stream().filter(t -> t.matches("[a-z_]+:[a-z_]+")).toList();
         String template = taggedBase + tags.stream().map(t -> "&osm_tag=" + t).collect(Collectors.joining());
         Set<String> wanted = tags.stream().map(t -> t.replace(':', '=')).collect(Collectors.toSet());
         // Nominatim (the fallback) has no tag filter: keep only places of the asked kind ("Ueno" finds the station too)
-        return search(template, text, text).stream().filter(h -> wanted.contains(h.tag())).toList();
+        return search(template, text, text, where).stream().filter(h -> wanted.contains(h.tag())).toList();
     }
 
     /**
@@ -232,17 +251,37 @@ public class OsmPlaces implements ExternalPlaces {
      * Photon first ({@code template} with {@code text}); when it is down or slower than {@value #PHOTON_WAIT_MS} ms,
      * Nominatim's search with {@code fallbackText} (Nominatim has no tag filter, so "Ueno park" rather than "Ueno").
      */
-    private List<Hit> search(String template, String text, String fallbackText) {
+    private List<Hit> search(String template, String text, String fallbackText, Where where) {
         if (System.currentTimeMillis() >= photonDownUntil) {
             try {
-                Map<String, Object> vars = Map.of("q", text, "limit", SEARCH_ASKED, "lat", BIAS_LAT, "lon", BIAS_LON);
+                Map<String, Object> vars = new HashMap<>(Map.of("q", text,
+                        "limit", where == null ? SEARCH_ASKED : AREA_ASKED,
+                        "lat", where == null ? BIAS_LAT : round(where.centerLat()),
+                        "lon", where == null ? BIAS_LON : round(where.centerLng())));
+                String uri = template;
+                if (where != null && where.inside()) {
+                    // Photon: only places in the box (minLon,minLat,maxLon,maxLat)
+                    uri += "&bbox={bbox}";
+                    vars.put("bbox", box(where.west(), where.south(), where.east(), where.north()));
+                }
+                String asked = uri;
                 return hits(call("Photon search", SEARCH_USAGE,
-                        () -> photon.get().uri(template, vars).retrieve().body(JsonNode.class)));
+                        () -> photon.get().uri(asked, vars).retrieve().body(JsonNode.class)),
+                        where == null ? SEARCH_KEPT : AREA_KEPT);
             } catch (ExternalPlacesException e) {
                 photonFailed(e);
             }
         }
-        return nominatimSearch(fallbackText);
+        return nominatimSearch(fallbackText, where);
+    }
+
+    /** Coordinates sent to the map services: 5 decimals (about 1 m) are plenty. */
+    private static String round(double value) {
+        return String.format(Locale.ROOT, "%.5f", value);
+    }
+
+    private static String box(double a, double b, double c, double d) {
+        return round(a) + "," + round(b) + "," + round(c) + "," + round(d);
     }
 
     private void photonFailed(ExternalPlacesException e) {
@@ -252,10 +291,17 @@ public class OsmPlaces implements ExternalPlaces {
     }
 
     /** Nominatim's search (1 request a second for the whole server, like the lookups), map noise left out. */
-    private List<Hit> nominatimSearch(String text) {
-        Map<String, Object> vars = Map.of("q", text);
+    private List<Hit> nominatimSearch(String text, Where where) {
+        Map<String, Object> vars = new HashMap<>(Map.of("q", text));
+        String uri = nominatimSearchTemplate;
+        if (where != null) {
+            // viewbox = the screen; bounded=1 keeps only places inside it, without it the box is only preferred
+            uri += "&viewbox={viewbox}" + (where.inside() ? "&bounded=1" : "");
+            vars.put("viewbox", box(where.west(), where.north(), where.east(), where.south()));
+        }
+        String asked = uri;
         JsonNode response = paced(() -> call("Nominatim search", LOOKUP_USAGE,
-                () -> client.get().uri(nominatimSearchTemplate, vars).retrieve().body(JsonNode.class)));
+                () -> client.get().uri(asked, vars).retrieve().body(JsonNode.class)));
         List<Hit> hits = new ArrayList<>();
         Set<String> ids = new HashSet<>();
         if (response == null) {
@@ -278,6 +324,10 @@ public class OsmPlaces implements ExternalPlaces {
 
     /** Photon's answer (search or reverse) as places in the configured countries, each once. */
     private List<Hit> hits(JsonNode response) {
+        return hits(response, SEARCH_KEPT);
+    }
+
+    private List<Hit> hits(JsonNode response, int kept) {
         List<Hit> hits = new ArrayList<>();
         Set<String> ids = new HashSet<>();
         if (response == null) {
@@ -289,7 +339,7 @@ public class OsmPlaces implements ExternalPlaces {
             if (hit != null && inRegions(hit.countryCode()) && ids.add(hit.id())) {
                 hits.add(hit);
                 remember(hit);
-                if (hits.size() == SEARCH_KEPT) {
+                if (hits.size() == kept) {
                     break;
                 }
             }

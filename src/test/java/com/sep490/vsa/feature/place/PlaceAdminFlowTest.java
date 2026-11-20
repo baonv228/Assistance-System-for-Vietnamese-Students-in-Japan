@@ -188,6 +188,32 @@ class PlaceAdminFlowTest {
         mvc.perform(get("/api/moderator/places").session(session(user("USER"), "USER"))).andExpect(status().isForbidden());
     }
 
+    @Test
+    void theMapShowsEveryStatusWithAPositionAndFollowsTheFilters() throws Exception {
+        long active = place("Map active " + word, "food", "TEAM", mod);
+        long removed = place("Map removed " + word, "food", "TEAM", mod);
+        jdbc.update("UPDATE places SET status = 'REMOVED' WHERE id = ?", removed);
+        long noPosition = place("Map nowhere " + word, "food", "GOOGLE", mod);
+        // an old place saved from Google Maps: an id there, no position (ck_places_position)
+        jdbc.update("UPDATE places SET google_place_id = ?, lat = NULL, lng = NULL WHERE id = ?", "ChIJ-" + word, noPosition);
+
+        mvc.perform(get("/api/moderator/places/map").param("q", word).session(session(mod, "MODERATOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pins[*].id", hasItem((int) active)))
+                .andExpect(jsonPath("$.data.pins[*].id", hasItem((int) removed)))
+                .andExpect(jsonPath("$.data.pins[*].id", not(hasItem((int) noPosition))))
+                .andExpect(jsonPath("$.data.pins[0].lat").isNumber())
+                .andExpect(jsonPath("$.data.truncated").value(false))
+                .andExpect(jsonPath("$.data.categories").isNotEmpty())
+                .andExpect(jsonPath("$.data.prefectures").isNotEmpty());
+        mvc.perform(get("/api/moderator/places/map").param("q", word).param("status", "REMOVED")
+                        .session(session(mod, "MODERATOR")))
+                .andExpect(jsonPath("$.data.pins[*].id", contains((int) removed)))
+                .andExpect(jsonPath("$.data.pins[0].status").value("REMOVED"));
+        mvc.perform(get("/api/moderator/places/map").session(session(user("USER"), "USER")))
+                .andExpect(status().isForbidden());
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private String form(String osmId, String nameVi, String category, double atLat, double atLng, boolean confirm) {

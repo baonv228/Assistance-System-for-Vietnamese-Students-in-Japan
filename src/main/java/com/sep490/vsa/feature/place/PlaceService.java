@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.place;
 
 import com.sep490.vsa.common.text.VietnameseText;
 import com.sep490.vsa.feature.place.ExternalPlaces.Hit;
+import com.sep490.vsa.feature.place.ExternalPlaces.Where;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceOption;
 import com.sep490.vsa.feature.place.PlaceDtos.PlaceSearch;
 import com.sep490.vsa.feature.place.PlaceRepository.Category;
@@ -135,6 +136,103 @@ public class PlaceService {
         return search(userId, query, true);
     }
 
+    /** Places listed by one search on the Map. */
+    static final int MAP_LIMIT = 20;
+
+    /**
+     * One search on the Map.
+     *
+     * @param wide true when the view held no match and the places come from all of Japan, nearest to the view first
+     */
+    public record MapPlaces(List<PlaceOption> items, String external, String externalReason, boolean wide) {
+    }
+
+    /**
+     * The Map's search, as on Google Maps: the places matching the text <b>inside the view</b> (Senpai ơi places first,
+     * then OpenStreetMap places, each nearest to the centre of the view first, at most {@value #MAP_LIMIT}), so
+     * "7-Eleven" lists the shops around the user instead of shops all over Tokyo. When the view holds none, all of
+     * Japan is searched, nearer the view first ({@code wide}): "Tokyo Tower" typed while looking at Osaka is still
+     * found. Guests ({@code userId} null) get Senpai ơi places only.
+     */
+    public MapPlaces searchMap(Long userId, String query, Where view) {
+        String q = query == null ? "" : query.strip();
+        if (q.length() > QUERY_MAX) {
+            q = q.substring(0, QUERY_MAX);
+        }
+        String squashed = VietnameseText.squash(q);
+        if (squashed.isEmpty()) {
+            return new MapPlaces(List.of(), userId == null ? "LOGIN" : external.enabled() ? "ON" : "OFF", null, false);
+        }
+        Where inside = new Where(view.south(), view.west(), view.north(), view.east(), true);
+        MapPlaces here = searchMapIn(userId, q, squashed, inside, true);
+        if (!here.items().isEmpty()) {
+            return here;
+        }
+        // Nothing in the view: all of Japan, nearer the view first. The map service is not asked again when it was
+        // busy or unreachable a moment ago (the user would only wait twice).
+        boolean askMap = "ON".equals(here.external());
+        MapPlaces wide = searchMapIn(userId, q, squashed, inside.anywhere(), askMap);
+        return askMap ? wide : new MapPlaces(wide.items(), here.external(), here.externalReason(), true);
+    }
+
+    private MapPlaces searchMapIn(Long userId, String q, String squashed, Where where, boolean askMap) {
+        List<PlaceOption> items = new ArrayList<>(repository.searchNear(q, where, MAP_LIMIT));
+        String state = "ON";
+        String reason = null;
+        if (userId == null) {
+            state = "LOGIN";
+        } else if (!external.enabled()) {
+            state = "OFF";
+        } else if (squashed.length() < MIN_CHARS) {
+            state = "SHORT";
+        } else if (askMap) {
+            try {
+                List<Hit> hits = mapSearch(userId, q, where);
+                if (hits == null) {
+                    state = "BUSY";
+                } else {
+                    List<Hit> japan = hits.stream()
+                            .filter(h -> "jp".equals(h.countryCode()))
+                            .filter(h -> !where.inside() || where.contains(h.lat(), h.lng()))
+                            .toList();
+                    items.addAll(fromMap(japan, items, MAP_LIMIT));
+                }
+            } catch (ExternalPlacesException e) {
+                state = "UNAVAILABLE";
+                reason = e.reason();
+            }
+        }
+        // Senpai ơi places first (they have reviews), then the map's. Inside the view: nearest to its centre first in
+        // each. Anywhere: Senpai ơi places nearest first (the SQL order), the map's in the order the map service gave,
+        // which weighs the name and the nearness together ("Tokyo Tower" itself before nearer buildings named "… Tower")
+        double lat = where.centerLat();
+        double lng = where.centerLng();
+        Comparator<PlaceOption> order = Comparator.comparing((PlaceOption o) -> o.id() == null);
+        if (where.inside()) {
+            order = order.thenComparingDouble(o -> metres(lat, lng, o.lat(), o.lng()));
+        }
+        Set<String> seen = new HashSet<>();
+        List<PlaceOption> sorted = items.stream()
+                .filter(o -> o.lat() != null && o.lng() != null)
+                .filter(o -> !where.inside() || where.contains(o.lat(), o.lng()))
+                .filter(o -> seen.add(o.id() != null ? "id:" + o.id() : "osm:" + o.externalId()))
+                .sorted(order)
+                .limit(MAP_LIMIT)
+                .toList();
+        return new MapPlaces(sorted, state, reason, !where.inside());
+    }
+
+    /** Part of the memory key of a map search: where it was asked (rounded to about 100 m), or "" for no view. */
+    private static String whereKey(Where where) {
+        if (where == null) {
+            return "";
+        }
+        return where.inside()
+                ? String.format(Locale.ROOT, "in:%.3f,%.3f,%.3f,%.3f:", where.south(), where.west(), where.north(),
+                        where.east())
+                : String.format(Locale.ROOT, "near:%.2f,%.2f:", where.centerLat(), where.centerLng());
+    }
+
     private PlaceSearch search(long userId, String query, boolean japanOnly) {
         String q = query == null ? "" : query.strip();
         if (q.length() > QUERY_MAX) {
@@ -153,7 +251,7 @@ public class PlaceService {
         }
         List<Hit> hits;
         try {
-            hits = mapSearch(userId, q);
+            hits = mapSearch(userId, q, null);
         } catch (ExternalPlacesException e) {
             return new PlaceSearch(items, "UNAVAILABLE", e.reason());
         }
@@ -169,17 +267,17 @@ public class PlaceService {
      * stations ("Ueno") and also as typed, stations first: typed without accents, "ga ran" may be "gà rán" (fried
      * chicken), and Photon finds some station for nearly any word.
      */
-    private List<Hit> mapSearch(long userId, String q) {
+    private List<Hit> mapSearch(long userId, String q, Where where) {
         String station = stationName(q);
         if (station == null || VietnameseText.squash(station).length() < MIN_CHARS) {
             Optional<PlaceWords.Kind> kind = PlaceWords.parse(q);
-            return kind.isPresent() ? kindSearch(userId, kind.get()) : ask(userId, q, false);
+            return kind.isPresent() ? kindSearch(userId, kind.get(), where) : ask(userId, q, false, where);
         }
-        List<Hit> stations = ask(userId, station, true);
+        List<Hit> stations = ask(userId, station, true, where);
         if (stations == null) {
             return null;
         }
-        List<Hit> typed = ask(userId, q, false);
+        List<Hit> typed = ask(userId, q, false, where);
         List<Hit> both = new ArrayList<>(stations);
         if (typed != null) {
             both.addAll(typed);
@@ -187,25 +285,28 @@ public class PlaceService {
         return both;
     }
 
-    private List<Hit> ask(long userId, String text, boolean stations) {
-        String key = (stations ? "station:" : "text:") + searchKey(text);
-        return ask(userId, key, () -> stations ? external.searchStations(text) : external.search(text));
+    private List<Hit> ask(long userId, String text, boolean stations, Where where) {
+        String key = (stations ? "station:" : "text:") + whereKey(where) + searchKey(text);
+        return ask(userId, key, () -> where == null
+                ? (stations ? external.searchStations(text) : external.search(text))
+                : (stations ? external.searchStations(text, where) : external.search(text, where)));
     }
 
     /**
      * "công viên Ueno": "Ueno" among parks first, then "Ueno park" as English text (Photon does not know Vietnamese
      * words). Only the kind typed ("công viên") asks for the English word among those places.
      */
-    private List<Hit> kindSearch(long userId, PlaceWords.Kind kind) {
+    private List<Hit> kindSearch(long userId, PlaceWords.Kind kind, Where where) {
         String name = kind.rest().isBlank() ? kind.english() : kind.rest();
-        List<Hit> tagged = ask(userId, "tag:" + String.join(",", kind.tags()) + ":" + searchKey(name),
-                () -> external.searchTagged(name, kind.tags()));
+        List<Hit> tagged = ask(userId, "tag:" + String.join(",", kind.tags()) + ":" + whereKey(where) + searchKey(name),
+                () -> where == null ? external.searchTagged(name, kind.tags())
+                        : external.searchTagged(name, kind.tags(), where));
         if (tagged == null) {
             return null;
         }
         List<Hit> both = new ArrayList<>(tagged);
         if (!kind.rest().isBlank()) {
-            List<Hit> typed = ask(userId, kind.rest() + " " + kind.english(), false);
+            List<Hit> typed = ask(userId, kind.rest() + " " + kind.english(), false, where);
             if (typed != null) {
                 both.addAll(typed);
             }
