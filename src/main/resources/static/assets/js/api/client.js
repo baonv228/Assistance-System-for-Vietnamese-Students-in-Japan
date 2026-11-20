@@ -307,6 +307,10 @@ export const apiClient = {
     phraseClearFlash: (id) => request(`/phrases/${id}/flash`, { method: "DELETE" }),
     savePhrase: (id, on) => request(`/phrases/${id}/save`, { method: on ? "POST" : "DELETE" }),
     reportPhrase: (id, body) => post(`/phrases/${id}/report`, body),
+    // "Nhiệm vụ hằng ngày" (Members): what the server cannot see by itself, e.g. { type: "LISTEN", phraseId } when
+    // "Nghe" is pressed on "Câu tiếng Nhật hôm nay" → QuestChange { changed, justCompleted: [{ id, code, title, coins }],
+    // bonusJustCompleted, bonusCoins, streak, streakMilestone, coinsAwarded, coinsToday, dailyCap, wallet }
+    questEvent: (body) => post("/me/quests/events", body),
 
     // Academic Manager. phrase body: { categoryId, kind: PHRASE|VOCAB, japanese, romaji, meaningVi, topicIds,
     // confirmDuplicate, reportCaseId } → { saved, duplicate, message }; topic body: { name, icon }

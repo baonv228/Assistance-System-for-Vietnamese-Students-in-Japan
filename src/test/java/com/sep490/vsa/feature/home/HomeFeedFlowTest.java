@@ -15,6 +15,8 @@ import com.sep490.vsa.feature.home.HomeDtos.ReviewItem;
 import com.sep490.vsa.feature.home.HomeDtos.ScopeCount;
 import com.sep490.vsa.feature.home.HomeDtos.Stats;
 import com.sep490.vsa.feature.home.HomeDtos.Tag;
+import com.sep490.vsa.feature.phrase.PhraseOfDayService;
+import com.sep490.vsa.feature.quest.QuestService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +85,10 @@ class HomeFeedFlowTest {
     private GuideProgressService guideProgress;
     @Autowired
     private HomeService home;
+    @Autowired
+    private PhraseOfDayService phraseOfDay;
+    @Autowired
+    private QuestService questService;
 
     private final List<Long> users = new ArrayList<>();
     private long area;
@@ -240,7 +246,7 @@ class HomeFeedFlowTest {
         long fresh = blog(author, "POST", "PUBLISHED", future.instant().minus(Duration.ofDays(1)), 0, 0, false, null);
         long oldNear = blog(author, "POST", "PUBLISHED", Instant.now().minus(Duration.ofDays(60)), 0, 0, true, null);
 
-        List<FeedPost> feed = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future)).member(viewer).forYou();
+        List<FeedPost> feed = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService).member(viewer).forYou();
         assertThat(feed).extracting(FeedPost::id).startsWith(fresh, oldNear);
         assertThat(feed.get(0).reason()).isNull();
         assertThat(feed.get(1).reason()).isEqualTo(NEAR);
@@ -273,7 +279,7 @@ class HomeFeedFlowTest {
         like(viewer, old, tooOld);
         blog(viewer, "POST", "PUBLISHED", tooOld, 0, 0, false, "Nhà ở");
 
-        assertThat(new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future)).member(viewer).interests())
+        assertThat(new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService).member(viewer).interests())
                 .containsExactly("Ăn uống", "Y tế", "Đi lại");
     }
 
@@ -301,7 +307,7 @@ class HomeFeedFlowTest {
     @Test
     void interestsRankAfterAreaAndStageAndPostsAlreadyReadComeLast() {
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService);
         Instant day = future.instant().minus(Duration.ofDays(1));
         setProfile(viewer, area, "PRE");
         // Saving a "Việc làm thêm" post makes it an interest (2), and that post one the viewer already read
@@ -340,7 +346,7 @@ class HomeFeedFlowTest {
     @Test
     void chosenTopicsRankRightAfterAreaBeforeStageAndLearntTopics() {
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService);
         Instant day = future.instant().minus(Duration.ofDays(1));
         setProfile(viewer, area, "PRE");
         choose(viewer, "Ăn uống");
@@ -392,7 +398,7 @@ class HomeFeedFlowTest {
     @Test
     void theStageReasonNamesAnotherTopicThanTheChosenOneWhenThePostHasOne() {
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService);
         Instant day = future.instant().minus(Duration.ofDays(1));
         setProfile(viewer, null, "PRE");
         choose(viewer, "Visa và cư trú");                                     // also a PRE topic
@@ -437,7 +443,7 @@ class HomeFeedFlowTest {
     void inactiveTopicsAndTagTypesAreLeftOut() {
         // Seen from ten years ahead only this test's posts are recent, so they lead the feed and are featured
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService);
         setProfile(viewer, null, "ARR");
         long post = blog(author, "POST", "PUBLISHED", future.instant().minus(Duration.ofDays(1)), 50, 0, false, "Nhà ở");
         long staff = user("ACTIVE");
@@ -576,7 +582,7 @@ class HomeFeedFlowTest {
     void scopesKeepOnlyThePostsThatMatchedThatReason() throws Exception {
         // Seen from ten years ahead only this test's posts are recent, so they lead every scope of the shared database
         Clock future = Clock.offset(Clock.systemUTC(), Duration.ofDays(3650));
-        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future));
+        HomeService home = new HomeService(jdbc, future, featuredPosts, guideProgress, new InterestService(jdbc, future), phraseOfDay, questService);
         Instant day = future.instant().minus(Duration.ofDays(1));
         setProfile(viewer, area, "PRE");
         // Saving a "Việc làm thêm" post makes it an interest (2 points), and that post one the viewer already read

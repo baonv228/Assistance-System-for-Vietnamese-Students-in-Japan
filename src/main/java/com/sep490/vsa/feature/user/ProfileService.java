@@ -100,9 +100,12 @@ public class ProfileService {
                 (rs, i) -> rs.getString(1), userId);
         Instant muted = user.getReportMutedUntil() != null && user.getReportMutedUntil().isAfter(now)
                 ? user.getReportMutedUntil() : null;
+        // "xu" of the daily quests (V25): not mapped in User, which only feature/coin keeps in step with its book
+        Integer coins = jdbc.queryForObject("SELECT coins FROM users WHERE id = ?", Integer.class, userId);
 
         return new ProfileResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.getAvatarUrl(),
-                user.getRole().name(), user.getRole().label(), user.getPoints(), ranks, tags, pendingTag,
+                user.getRole().name(), user.getRole().label(), user.getPoints(), coins == null ? 0 : coins,
+                ranks, tags, pendingTag,
                 user.getAreaId(), areaName, user.getStage(), user.getCreatedAt(), ageDays,
                 ageDays < newAccountDays, newAccountDays, today, muted,
                 user.getPasswordHash() != null, linked, saved.count(userId));
@@ -164,9 +167,10 @@ public class ProfileService {
      * ({@link AuthorStatusSync}).
      * <p>
      * As the "Xóa tài khoản" box says: the profile is anonymized (area, stage and chosen interest topics included),
-     * the points go to 0, the identity tags are revoked,
+     * the points and the "xu" go to 0, the identity tags are revoked,
      * pending tag requests are closed (REJECTED, "Tài khoản đã xóa") and every tag proof photo is discarded (file
-     * removed after commit). Point and tag history rows stay. The chat encryption key is revoked and the Web Push
+     * removed after commit). The daily quests, their done days and the log of flash card answers are deleted. Point,
+     * xu and tag history rows stay. The chat encryption key is revoked and the Web Push
      * subscriptions are deleted; its live update streams close after the commit.
      * <p>
      * READ COMMITTED like an Admin's lock ({@code AdminUserService.updateUserStatus}): the comment recount then locks
@@ -194,14 +198,22 @@ public class ProfileService {
         jdbc.update("""
                 UPDATE tag_requests SET status = 'REJECTED', reject_reason = ?, reviewed_at = ?
                 WHERE user_id = ? AND status = 'PENDING'""", DELETED_ACCOUNT_REASON, Timestamp.from(now), userId);
-        // points is read-only in User (kept in step with point_transactions by PointService). Area and stage are
-        // cleared here too: the entity was read before this statement locked the row, so an area saved meanwhile
-        // ("Điều chỉnh" on the Home, Tôi) is not in it, and User.anonymize alone (@DynamicUpdate: only what changed
-        // from that read is written) would leave it on the deleted account
-        jdbc.update("UPDATE users SET points = 0, area_id = NULL, stage = NULL WHERE id = ?", userId);
+        // points is read-only in User (kept in step with point_transactions by PointService), and the "xu" of the
+        // daily quests (coins, kept with coin_transactions by CoinLedger) are not mapped at all; both go to 0 in this
+        // one statement. Area and stage are cleared here too: the entity was read before this statement locked the
+        // row, so an area saved meanwhile ("Điều chỉnh" on the Home, Tôi) is not in it, and User.anonymize alone
+        // (@DynamicUpdate: only what changed from that read is written) would leave it on the deleted account
+        jdbc.update("UPDATE users SET points = 0, coins = 0, area_id = NULL, stage = NULL WHERE id = ?", userId);
         // "Chủ đề quan tâm" go with the area and stage (User.anonymize). After the users row is locked, the order of
         // InterestService.update, so a save of the topics at the same moment waits instead of deadlocking
         jdbc.update("DELETE FROM user_interest_topics WHERE user_id = ?", userId);
+        // "Nhiệm vụ hằng ngày": the quests (their counted entries go by cascade), the done days of the streak and the
+        // log of flash card answers. The account is never deleted for good, so ON DELETE CASCADE never runs; after the
+        // users row is locked, the order of every quest and xu write (MemberGuard). The book of xu stays, as the
+        // point history does
+        jdbc.update("DELETE FROM user_daily_quests WHERE user_id = ?", userId);
+        jdbc.update("DELETE FROM user_quest_days WHERE user_id = ?", userId);
+        jdbc.update("DELETE FROM phrase_answer_log WHERE user_id = ?", userId);
         user.anonymize(now);
         // Write the DELETED status now, so the recount (plain SQL in this transaction) sees it
         users.flush();

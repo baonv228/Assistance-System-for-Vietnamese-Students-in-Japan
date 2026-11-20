@@ -11,7 +11,9 @@ import java.util.List;
 /**
  * Plain SQL over {@code notifications} for the bell and the "Thông báo" page. Each row gets the page it opens: a post
  * or question by its {@code blog_type} (whatever {@code ref_type} it was sent with), a place review on the Map, an event
- * review on its event; nothing when the post, review or event is gone.
+ * review on its event; nothing when the post, review or event is gone. "Nhiệm vụ hằng ngày" ({@code ref_type} QUEST,
+ * e.g. the streak milestone QUEST_STREAK) always opens {@code /quests}: the web answers it 301 to "Nhật ngữ"
+ * ({@code CleanUrls}), the mobile app opens its own quest screen.
  */
 @Repository
 public class NotificationRepository {
@@ -19,6 +21,7 @@ public class NotificationRepository {
     private static final String SELECT_ITEMS = """
             SELECT n.id, n.type, n.content, n.is_read, n.created_at,
                    CASE
+                       WHEN n.ref_type = 'QUEST' THEN '/quests'
                        WHEN b.id IS NOT NULL AND b.blog_type = 'QA' THEN CONCAT('/qa/', b.id)
                        WHEN b.id IS NOT NULL THEN CONCAT('/blog/', b.id)
                        WHEN r.event_id IS NOT NULL AND e.id IS NOT NULL THEN CONCAT('/events/', e.id)

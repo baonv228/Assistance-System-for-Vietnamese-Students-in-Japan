@@ -22,7 +22,7 @@
 | 6. Review | `reviews`, `review_media`, `review_likes` |
 | 7. Sự kiện | `events` |
 | 8. Blog | `blog_topics`, `blogs`, `blog_topic_links`, `blog_place_links`, `blog_media`, `blog_likes`, `saved_blogs`, `comments`, `comment_likes`, `featured_snapshots`, `user_interest_topics` (V21) |
-| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks`, `saved_phrases` (V22) (`practice_sentences` bỏ ở V18) |
+| 9. Học tiếng Nhật | `learning_topics`, `phrases`, `phrase_topic_links`, `user_phrase_marks`, `saved_phrases` (V22), `daily_phrases`, `user_daily_quests`, `user_quest_items`, `user_quest_days`, `phrase_answer_log`, `coin_transactions` (V25) (`practice_sentences` bỏ ở V18) |
 | 10. Kiểm duyệt và báo cáo | `reason_options`, `banned_keywords`, `moderation_scans`, `report_cases`, `reports`, `appeals` |
 | 11. Cẩm nang | `guide_stages`, `guide_items`, `user_guide_progress`, `saved_guides` (V20) |
 | 12. Thông báo và hệ thống | `notifications`, `system_settings`, `activity_logs`, `api_usage` |
@@ -80,6 +80,7 @@ vùng Lãnh thổ phương Bắc). Người dùng chỉ lưu `area_id`, không b
 | stage | VARCHAR(10) | CHECK, NULL được | Giai đoạn tự khai: `PRE`, `ARR`, `LEAVE`, `HOME` |
 | event_window_days | SMALLINT | NN, mặc định 30 | Hiện sự kiện sắp diễn ra trong 15 hoặc 30 ngày |
 | points | INT | NN, mặc định 0 | Tổng điểm (cache, tính từ `point_transactions`) |
+| coins | INT | NN, mặc định 0, CHECK ≥ 0 | Số xu của nhiệm vụ hằng ngày (cache, tính từ `coin_transactions`; V25). Không tính vào cấp bậc |
 | false_report_count | INT | NN, mặc định 0 | Số báo cáo sai |
 | report_muted_until | DATETIME | | Bị khóa quyền báo cáo đến khi nào (7 ngày) |
 | created_at | DATETIME | NN | Ngày tạo, dùng để tính "tài khoản mới < 7 ngày" |
@@ -205,8 +206,8 @@ Chỉ lưu bản băm SHA-256 của mã; mã gốc chỉ nằm trong link gửi 
 | id | BIGINT | PK | |
 | user_id | BIGINT | FK → users, NN | |
 | delta | INT | NN | +10, -20… |
-| reason | VARCHAR(40) | NN | `REVIEW_CREATED`, `BLOG_CREATED`, `BEST_ANSWER`, `PIN_APPROVED`, `CONTENT_REMOVED`, `CONTENT_DELETED`… |
-| ref_type | VARCHAR(20) | | `REVIEW`, `BLOG`, `COMMENT`, `PLACE` |
+| reason | VARCHAR(40) | NN | `REVIEW_CREATED`, `BLOG_CREATED`, `BEST_ANSWER`, `PIN_APPROVED`, `CONTENT_REMOVED`, `CONTENT_DELETED`, `COIN_EXCHANGE` (đổi xu nhiệm vụ, V25)… |
+| ref_type | VARCHAR(20) | | `REVIEW`, `BLOG`, `COMMENT`, `PLACE`, `COIN` (ref_id = dòng `EXCHANGE` của `coin_transactions`) |
 | ref_id | BIGINT | | |
 | created_at | DATETIME | NN | |
 
@@ -520,6 +521,85 @@ Thành viên chọn ở trang Tôi hoặc ở nút "Điều chỉnh" của "Dàn
 | is_learned | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Đã thuộc" |
 | is_learning | BOOLEAN | NN, mặc định false | Lật thẻ, chọn "Chưa thuộc" (V17); không bao giờ cùng true với is_learned (`ck_mark_card`) |
 | updated_at | DATETIME | NN | |
+
+### Nhiệm vụ hằng ngày và xu (V25)
+Mỗi ngày (0:00 giờ Nhật) thành viên có 3 nhiệm vụ học nhỏ (1 cố định "Ôn thẻ ghi nhớ" + 2 xoay vòng). Xong nhiệm vụ được
+**xu**, một đơn vị riêng **không tính vào cấp bậc**. Chỉ khi thành viên tự bấm "Đổi" thì xu mới thành điểm cấp bậc
+(50 xu = 1 điểm, tối đa 10 điểm mỗi tháng giờ Nhật; dòng `COIN_EXCHANGE` trong `point_transactions`). Các con số nằm
+trong cấu hình `app.quests.*` / `app.coins.*`.
+
+#### `daily_phrases` – Câu tiếng Nhật của từng ngày
+Chọn một lần khi ngày đó cần tới rồi giữ nguyên, để Trang chủ và nhiệm vụ "Nghe câu tiếng Nhật hôm nay" dùng cùng một
+câu suốt ngày, kể cả khi Biên tập viên thêm hoặc xóa mẫu câu.
+
+| Cột | Kiểu | Ràng buộc |
+|---|---|---|
+| phrase_date | DATE | PK (ngày giờ Nhật) |
+| phrase_id | BIGINT | NN, FK → phrases |
+| created_at | DATETIME | NN |
+
+#### `user_daily_quests` – Nhiệm vụ của một thành viên trong một ngày
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| id | BIGINT | PK | |
+| user_id | BIGINT | NN, FK → users | |
+| quest_date | DATE | NN | Ngày giờ Nhật |
+| code | VARCHAR(30) | NN | `FLASH_REVIEW`, `LEARN_NEW`, `REVIEW_LEARNING`, `TOPIC`, `PHRASE_OF_DAY` |
+| sort_order | TINYINT | NN | Nhiệm vụ cố định trước |
+| params | JSON | | Mã chủ đề, `phraseId`… |
+| title | VARCHAR(160) | NN | Tiêu đề hiện trong ngày |
+| target | INT | NN, CHECK ≥ 1 | |
+| progress | INT | NN, CHECK 0 ≤ progress ≤ target | |
+| coins | INT | NN, mặc định 0 | Xu thực nhận (có thể 0 vì trần ngày) |
+| completed_at | DATETIME | | |
+| created_at | DATETIME | NN | |
+
+Khóa duy nhất `(user_id, quest_date, code)`: sinh một lần trong ngày, không đổi.
+
+#### `user_quest_items` – Mục đã được đếm cho một nhiệm vụ
+| Cột | Kiểu | Ràng buộc |
+|---|---|---|
+| user_daily_quest_id | BIGINT | PK, FK → user_daily_quests |
+| phrase_id | BIGINT | PK, FK → phrases |
+| counted_at | DATETIME | NN |
+
+#### `user_quest_days` – Ngày đã xong mọi nhiệm vụ
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| id | BIGINT | PK | |
+| user_id | BIGINT | NN, FK → users | |
+| quest_date | DATE | NN, UQ cùng user_id | |
+| all_done_at | DATETIME | | |
+| streak | INT | | Số ngày xong liên tiếp tính đến ngày này (chuỗi dài nhất = MAX) |
+| created_at | DATETIME | NN | |
+
+#### `phrase_answer_log` – Nhật ký lật thẻ
+Mỗi lần trả lời thẻ ghi nhớ thành công là một dòng (đến mili giây). Hai câu trả lời cách nhau dưới 1,5 giây thì câu sau
+vẫn lưu dấu nhưng không được đếm cho nhiệm vụ.
+
+| Cột | Kiểu | Ràng buộc |
+|---|---|---|
+| id | BIGINT | PK |
+| user_id | BIGINT | NN, FK → users |
+| phrase_id | BIGINT | NN, FK → phrases |
+| learned | BOOLEAN | NN |
+| answered_at | DATETIME(3) | NN |
+
+#### `coin_transactions` – Lịch sử cộng/trừ xu
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|---|---|---|---|
+| id | BIGINT | PK | |
+| user_id | BIGINT | NN, FK → users | |
+| delta | INT | NN | +10, +20, +50, −150… |
+| reason | VARCHAR(30) | NN | `DAILY_QUEST`, `DAILY_QUEST_ALL`, `QUEST_STREAK`, `EXCHANGE`, `DEV_ADJUST` |
+| title | VARCHAR(160) | NN | Lưu sẵn: "Ôn 10 thẻ ghi nhớ", "Nhiệm vụ ngày 18/11", "Học 7 ngày liên tiếp", "Đổi lấy 3 điểm" |
+| ref_type | VARCHAR(20) | | `QUEST` (→ user_daily_quests), `QUEST_DAY` (→ user_quest_days) |
+| ref_id | BIGINT | | |
+| quest_date | DATE | | Ngày giờ Nhật của dòng nhiệm vụ (để tính trần ngày) |
+| created_at | DATETIME | NN | |
+
+Khóa duy nhất `(user_id, reason, ref_type, ref_id)`: mỗi nhiệm vụ, mỗi phần thưởng cả ngày và mỗi mốc chuỗi chỉ được trả
+một lần. "Xóa tài khoản" đặt `users.coins` về 0, xóa nhiệm vụ, ngày xong và nhật ký lật thẻ, giữ lại lịch sử xu.
 
 ---
 

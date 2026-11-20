@@ -268,10 +268,14 @@ const FAST_MS = 5000;
 const SLOW_MS = 60000;
 const NOTICE_MS = 12000;
 const NOTICES_MAX = 3;
-/** Pop up as a notice: the result of a photo/video scan. The others only count on the bell. */
+/**
+ * Pop up as a notice: the result of a photo/video scan and a streak milestone of "Nhiệm vụ hằng ngày" ("Bạn đã học 7
+ * ngày liên tiếp. +50 xu."). The others only count on the bell.
+ */
 const NOTICE_TYPES = {
     CONTENT_PUBLISHED: ["check_circle", "ok"],
-    CONTENT_REJECTED: ["block", "crit"]
+    CONTENT_REJECTED: ["block", "crit"],
+    QUEST_STREAK: ["local_fire_department", "ok"]
 };
 
 let bell = null;
@@ -550,6 +554,19 @@ function showNotice(notification) {
             ${notification.link ? `<a class="link" href="${esc(notification.link)}">Xem</a>` : ""}</div>
         <button class="site-notice-x" type="button" title="Đóng">${ic("close")}<span class="sr-only">Đóng</span></button>`;
     addNotice(box, notice);
+}
+
+/**
+ * A short notice of the page itself in the same box (e.g. "Xong nhiệm vụ “Nghe câu tiếng Nhật hôm nay” · +10 xu." on
+ * the Home), green by default; it closes by itself like the others.
+ */
+export function showSiteNotice(text, icon = "check_circle", kind = "ok") {
+    const notice = document.createElement("div");
+    notice.className = `site-notice ${kind}`;
+    notice.innerHTML = `${ic(icon)}
+        <div class="site-notice-txt"><p>${esc(text)}</p></div>
+        <button class="site-notice-x" type="button" title="Đóng">${ic("close")}<span class="sr-only">Đóng</span></button>`;
+    addNotice(noticeBox(), notice);
 }
 
 /** Newest on top, at most NOTICES_MAX, each closes by itself after NOTICE_MS. */

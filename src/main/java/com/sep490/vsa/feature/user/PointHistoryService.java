@@ -1,5 +1,7 @@
 package com.sep490.vsa.feature.user;
 
+import com.sep490.vsa.feature.coin.CoinLedger;
+import com.sep490.vsa.feature.coin.CoinText;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,7 +16,9 @@ import java.util.Map;
  * UC-U10 "Lịch sử điểm" on Tôi: the user's point changes, newest first, 20 a page, each with its reason and the
  * content it is about. The content is linked only while people can still see it (a published post or question, a
  * published review of an active place or of an event not deleted, an approved place); otherwise the line says what it
- * was without a link. Reads other features' tables with plain SQL and never writes them.
+ * was without a link. Reads other features' tables with plain SQL and never writes them. Points bought with "xu"
+ * (reason COIN_EXCHANGE, ref COIN = the EXCHANGE row of coin_transactions) read "Đổi 150 xu" and always lead to the
+ * quests ("/quests").
  */
 @Service
 public class PointHistoryService {
@@ -30,7 +34,11 @@ public class PointHistoryService {
             "PIN_APPROVED", "Ghim được duyệt",
             "CONTENT_DELETED", "Tự xóa nội dung, điểm được thu lại",
             "CONTENT_REMOVED", "Nội dung bị Moderator gỡ",
-            "CONTENT_RESTORED", "Moderator khôi phục nội dung");
+            "CONTENT_RESTORED", "Moderator khôi phục nội dung",
+            CoinLedger.POINT_REASON, "Đổi xu nhiệm vụ");
+
+    /** Where the line of an exchange of xu leads: the quests that earned them (the web sends /quests to "Nhật ngữ"). */
+    static final String COIN_LINK = "/quests";
 
     public record PointLine(long id, int delta, String reason, String reasonLabel, String title, String link,
                             Instant createdAt) {
@@ -55,7 +63,8 @@ public class PointHistoryService {
                        rp.id, rp.name_vi, rp.status = 'ACTIVE' AND r.status = 'PUBLISHED' AS review_place_shown,
                        e.id, e.title, e.deleted_at IS NULL AND r.status = 'PUBLISHED' AS review_event_shown,
                        COALESCE(pm.id, pl.id), COALESCE(pm.name_vi, pl.name_vi),
-                       COALESCE(pm.status, pl.status) = 'ACTIVE' AS place_shown
+                       COALESCE(pm.status, pl.status) = 'ACTIVE' AS place_shown,
+                       -ct.delta AS coins_spent
                 FROM point_transactions t
                 LEFT JOIN blogs b ON t.ref_type = 'BLOG' AND b.id = t.ref_id
                 LEFT JOIN comments c ON t.ref_type = 'COMMENT' AND c.id = t.ref_id
@@ -65,6 +74,7 @@ public class PointHistoryService {
                 LEFT JOIN events e ON e.id = r.event_id
                 LEFT JOIN places pl ON t.ref_type = 'PLACE' AND pl.id = t.ref_id
                 LEFT JOIN places pm ON pm.id = pl.merged_into_id AND pl.status = 'MERGED'
+                LEFT JOIN coin_transactions ct ON t.ref_type = 'COIN' AND ct.id = t.ref_id AND ct.user_id = t.user_id
                 WHERE t.user_id = ?
                 ORDER BY t.created_at DESC, t.id DESC
                 LIMIT ? OFFSET ?""", (rs, i) -> line(rs), userId, PAGE_SIZE, p * PAGE_SIZE);
@@ -104,6 +114,12 @@ public class PointHistoryService {
                 if (rs.getBoolean("place_shown")) {
                     link = "/map?place=" + rs.getLong(20);
                 }
+            }
+            case CoinLedger.POINT_REF -> {
+                // Points bought with xu: the EXCHANGE row of coin_transactions says how many xu they cost
+                long coins = rs.getLong("coins_spent");
+                title = rs.wasNull() ? null : CoinText.pointLineTitle(coins);
+                link = COIN_LINK;
             }
             default -> {
             }
