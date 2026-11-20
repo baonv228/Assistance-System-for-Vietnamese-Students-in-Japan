@@ -19,6 +19,7 @@ import com.sep490.vsa.feature.place.PlaceModerationDtos.PinDetail;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PinQueue;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceForm;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceInfo;
+import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceMap;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlacePage;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceSaved;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.RejectRequest;
@@ -104,6 +105,18 @@ public class ModeratorPlaceController {
         return done(pins.keepOpen(me.id(), id));
     }
 
+    /** "Sai thông tin" reports: "Đã xử lý" (kept as handled, reporters thanked). */
+    @PostMapping("/api/moderator/places/{id:\\d+}/wrong-reports/resolve")
+    public ApiResponse<Done> resolveWrongInfo(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
+        return done(pins.handleWrongInfo(me.id(), id, true));
+    }
+
+    /** "Sai thông tin" reports: "Báo cáo không đúng" (they go, reporters told the details are right). */
+    @DeleteMapping("/api/moderator/places/{id:\\d+}/wrong-reports")
+    public ApiResponse<Done> dismissWrongInfo(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal me) {
+        return done(pins.handleWrongInfo(me.id(), id, false));
+    }
+
     // ---------------------------------------------------------------- "Địa điểm" /moderator/places (UC-M07, UC-M08)
 
     @GetMapping("/api/moderator/places")
@@ -114,6 +127,16 @@ public class ModeratorPlaceController {
                                          @RequestParam(required = false) String prefecture,
                                          @RequestParam(defaultValue = "0") int page) {
         return ApiResponse.ok("OK", admin.list(q, category, source, status, prefecture, page));
+    }
+
+    /** The Moderator's map: every place with a position matching the filters (the page lists those in view). */
+    @GetMapping("/api/moderator/places/map")
+    public ApiResponse<PlaceMap> placeMap(@RequestParam(required = false) String q,
+                                          @RequestParam(required = false) String category,
+                                          @RequestParam(required = false) String source,
+                                          @RequestParam(required = false) String status,
+                                          @RequestParam(required = false) String prefecture) {
+        return ApiResponse.ok("OK", admin.map(q, category, source, status, prefecture));
     }
 
     @GetMapping("/api/moderator/places/{id:\\d+}")

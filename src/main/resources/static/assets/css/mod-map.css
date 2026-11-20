@@ -1,0 +1,125 @@
+/* The Moderator's map workspace (/moderator/places, pages/mod-map.js). Load after site.css, mod-places.css (list
+   items, facts, history) and map-pins.css (the pins, as on /map). */
+
+/* The page fills the space under the staff top bar: filters on top, then the panel beside a big map */
+.desk-main.mm-page {
+    padding: 0;
+    gap: 0;
+    height: calc(100dvh - 61px);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: stretch;
+}
+.mm-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    position: relative;
+    z-index: 1300;               /* the suggestions drop over the map */
+}
+.mm-bar .input { width: auto; flex: 0 1 175px; min-width: 120px; height: 40px; }
+.mm-bar #mm-add { margin-left: auto; }
+.mm-search { position: relative; flex: 1 1 240px; min-width: 200px; }
+.mm-search .searchbox { width: 100%; }
+
+.mm-suggest {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: min(420px, 60vh);
+    overflow: auto;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(47, 62, 110, .2);
+}
+.mm-suggest h4 { margin: 6px 8px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.mm-suggest .note { margin: 8px; }
+.mm-suggest .opt {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 8px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.mm-suggest .opt:hover, .mm-suggest .opt:focus-visible { background: var(--surface-2); outline: none; }
+.mm-suggest .oi { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-text); }
+.mm-suggest .oi.osm { background: var(--ink); color: #fff; }
+.mm-suggest .ot { display: grid; min-width: 0; }
+.mm-suggest .ot b, .mm-suggest .ot small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-suggest .ot small { color: var(--muted); }
+
+.mm-body { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); min-height: 0; }
+.mm-panel { min-height: 0; overflow: auto; border-right: 1px solid var(--line); background: var(--bg, #FBF6F6); }
+.mm-head { padding: 14px 16px 6px; display: grid; gap: 4px; }
+.mm-head h2 { margin: 0; font-size: 17px; }
+.mm-head .note { margin: 0; }
+.mm-list { display: grid; gap: 8px; padding: 6px 12px 16px; }
+.mm-list .mod-item { padding: 10px 12px; border-radius: 12px; background: var(--surface); }
+.mm-detail { padding: 14px 16px 20px; }
+.mm-back { justify-self: start; }
+.mm-pos { padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.pad { padding: 8px 16px; }
+
+.mm-mapwrap { position: relative; min-width: 0; min-height: 0; }
+.mm-map { position: absolute; inset: 0; background: #E8E4DC; }
+.mm-fab {
+    position: absolute;
+    z-index: 1000;
+    right: 12px;
+    top: 12px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 4px 14px rgba(47, 62, 110, .2);
+    cursor: pointer;
+}
+.mm-fab:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.mm-hint {
+    position: absolute;
+    z-index: 1000;
+    left: 50%;
+    top: 12px;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    max-width: calc(100% - 100px);
+    padding: 10px 12px 10px 16px;
+    border-radius: 14px;
+    background: var(--ink);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(47, 62, 110, .3);
+}
+.mm-hint[hidden] { display: none; }
+.mm-hint .btn { color: var(--ink); }
+
+/* Phones and narrow windows: the map on top, the panel under it */
+@media (max-width: 860px) {
+    .desk-main.mm-page { height: auto; }
+    .mm-bar .input { flex: 1 1 140px; }
+    .mm-bar #mm-add { margin-left: 0; }
+    .mm-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 58vh auto; }
+    .mm-mapwrap { grid-row: 1; }
+    .mm-panel { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); overflow: visible; }
+}
+
+/* the reports of a place, with their reasons */
+.mm-reports li > span:first-child { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }

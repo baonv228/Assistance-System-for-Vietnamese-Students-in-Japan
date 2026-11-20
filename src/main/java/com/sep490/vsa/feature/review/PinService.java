@@ -83,7 +83,30 @@ public class PinService {
         int newDays = settings.getInt(SystemSettings.NEW_ACCOUNT_DAYS, 7);
         return new PinCompose(repository.categories(), reviews.limits(), isNew(account, newDays, now),
                 repository.pinsToday(account.id(), LocalDate.ofInstant(now, JAPAN)),
-                settings.getInt(SystemSettings.PINS_PER_DAY, 2), newDays, repository.topRank(account.id()));
+                settings.getInt(SystemSettings.PINS_PER_DAY, 2), newDays,
+                autoApproves(account.id(), LocalDate.ofInstant(now, JAPAN)));
+    }
+
+    /** Defaults of the Moderators' "Duyệt ghim tự động" (V23 writes the same values). */
+    public static final int AUTO_DEFAULT_ON = 1;
+    public static final int AUTO_DEFAULT_MIN_POINTS = 100;
+    public static final int AUTO_DEFAULT_PER_DAY = 3;
+
+    /**
+     * True when this member's next pin goes on the map without a Moderator (user decision 20/11/2026): the Moderators
+     * turned it on, the member has at least {@code pin_auto_min_points} points, and fewer than {@code pin_auto_per_day}
+     * of their pins went on that way this Japan day.
+     */
+    boolean autoApproves(long userId, LocalDate today) {
+        if (settings.getInt(SystemSettings.PIN_AUTO_APPROVE, AUTO_DEFAULT_ON) != 1
+                || repository.points(userId)
+                < settings.getInt(SystemSettings.PIN_AUTO_MIN_POINTS, AUTO_DEFAULT_MIN_POINTS)) {
+            return false;
+        }
+        Instant from = today.atStartOfDay(JAPAN).toInstant();
+        Instant to = today.plusDays(1).atStartOfDay(JAPAN).toInstant();
+        return repository.autoApprovedBetween(userId, from, to)
+                < settings.getInt(SystemSettings.PIN_AUTO_PER_DAY, AUTO_DEFAULT_PER_DAY);
     }
 
     /** Approved places within 200 m whose name looks like one of the pin's names, nearest first. */
@@ -176,8 +199,9 @@ public class PinService {
             repository.linkMedia(reviewId, media.save(userId, "review", file), order++);
         }
         repository.addPin(userId, today);
-        // "Senpai tin cậy" needs no Moderator, unless they went past the "Có thể trùng" warning: then one still looks
-        boolean approved = repository.topRank(userId) && !Boolean.TRUE.equals(r.confirmDuplicate());
+        // The Moderators' rule may put it on the map at once, unless the member went past the "Có thể trùng" warning:
+        // then one still looks. The usage row locked above keeps two pins sent together from both passing the day's cap
+        boolean approved = !Boolean.TRUE.equals(r.confirmDuplicate()) && autoApproves(userId, today);
         if (approved) {
             repository.approveOwnPin(placeId, userId, now);
             points.add(userId, PointService.PIN_APPROVED, "PIN_APPROVED", "PLACE", placeId);

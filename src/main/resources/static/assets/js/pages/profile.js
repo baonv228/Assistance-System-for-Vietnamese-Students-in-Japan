@@ -12,8 +12,10 @@ const main = document.querySelector("#me");
 const PERKS = {
     0: ["Viết review, blog", "Xin tag định danh"],
     100: ["Bài viết được cộng 5 điểm ưu tiên khi xếp hạng Bài nổi bật", "Huy hiệu trên hồ sơ"],
-    300: ["Bài viết được cộng 10 điểm ưu tiên khi xếp hạng Bài nổi bật", "Câu trả lời trong Hỏi đáp được hiện trước", "Ghim địa điểm mới lên bản đồ ngay, không cần chờ duyệt"]
+    300: ["Bài viết được cộng 10 điểm ưu tiên khi xếp hạng Bài nổi bật", "Câu trả lời trong Hỏi đáp được hiện trước"]
 };
+// Pins that skip the Moderator depend on the Moderators' "Duyệt ghim tự động" (points they set), not on one rank,
+// so that perk is a line under the ranks, not a rank's perk
 const PROVIDERS = { GOOGLE: "Google", FACEBOOK: "Facebook" };
 
 let areaPicker = null;
@@ -60,6 +62,7 @@ function render(p) {
             </div>
             <p class="note">Review +10 · Ghim được duyệt +15 ·
                 Câu trả lời hay nhất +5 · Bài bị gỡ −20 · Tự xóa bài thì điểm của bài đó được thu lại</p>
+            <p class="note">${ic("add_location_alt")} Thành viên đủ điểm (mức do Moderator đặt) được ghim địa điểm mới lên bản đồ ngay, không cần chờ duyệt.</p>
             <div class="row"><button class="btn sm" type="button" id="history-toggle" aria-expanded="false"
                 aria-controls="history">${ic("history")}Lịch sử điểm</button></div>
             <div id="history" aria-live="polite" hidden></div>
