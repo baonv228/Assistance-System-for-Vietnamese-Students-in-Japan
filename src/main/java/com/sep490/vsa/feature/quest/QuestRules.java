@@ -2,6 +2,7 @@ package com.sep490.vsa.feature.quest;
 
 import com.sep490.vsa.feature.phrase.PhraseOfDayService;
 import com.sep490.vsa.feature.quest.QuestDtos.Action;
+import com.sep490.vsa.feature.quest.QuestRepository.GroupStat;
 import com.sep490.vsa.feature.quest.QuestRepository.TopicStat;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,11 @@ import java.util.stream.Collectors;
  * library (Mẫu câu or Từ vựng, not deleted); "trả lời" is a flash card answer, "Chưa thuộc" or "Đã thuộc". The
  * "Luyện tập" filters of the action mean what the page and the app mean: {@code status} "new" = no answer kept,
  * "learning" = "Chưa thuộc", "learned" = "Đã thuộc".
+ * <p>
+ * TOPIC, LEARN_NEW and REVIEW_LEARNING may be about one "Luyện tập" group ({@link QuestGroup}: a learning topic or a
+ * place category), chosen by {@link QuestGenerator} from what the Member is interested in ({@link QuestInterests});
+ * they then only count the entries of that group, and their title, description and action name it. Without a group
+ * LEARN_NEW and REVIEW_LEARNING take the whole library, as before.
  * <p>
  * Titles and descriptions are the texts agreed with the mobile app; the title is kept with the quest row.
  */
@@ -41,6 +47,23 @@ final class QuestRules {
     static Map<String, QuestRule> byCode(List<QuestRule> rules) {
         return rules.stream().collect(Collectors.toMap(QuestRule::code, Function.identity(), (a, b) -> a,
                 LinkedHashMap::new));
+    }
+
+    /** " chủ đề “Thanh toán”" / " địa điểm “Ga tàu”" for a quest about a group, "" otherwise. */
+    private static String quotedGroup(Map<String, Object> params) {
+        return QuestGroup.of(params).map(g -> " " + g.noun() + " “" + QuestGroup.nameOf(params) + "”").orElse("");
+    }
+
+    /** " của chủ đề Thanh toán" / " của địa điểm Ga tàu" for a quest about a group, "" otherwise. */
+    private static String ofGroup(Map<String, Object> params) {
+        return QuestGroup.of(params).map(g -> " của " + g.noun() + " " + QuestGroup.nameOf(params)).orElse("");
+    }
+
+    /** The "Luyện tập" action of a quest: its group's filters (none without a group) and this status. */
+    private static Action practiceIn(Map<String, Object> params, String status) {
+        return QuestGroup.of(params)
+                .map(g -> Action.practice(g.by(), g.id(), QuestGroup.nameOf(params), "", status))
+                .orElseGet(() -> Action.practice("", "", "", "", status));
     }
 
     /**
@@ -88,10 +111,10 @@ final class QuestRules {
     }
 
     /**
-     * "Thuộc {n} mục mới": an answer "Đã thuộc" for an entry that was not "Đã thuộc" right before and never counted
-     * for this quest on any day (so "Bỏ đánh dấu" then "Đã thuộc" again never pays twice). Possible when that many
-     * entries qualify. The app is sent to the entries without an answer ("new") when there are enough of them, else
-     * to "Chưa thuộc"; worked out when the day is made and kept.
+     * "Thuộc {n} mục mới" (or "Thuộc {n} mục mới chủ đề “…”" about a group): an answer "Đã thuộc" for an entry (of the
+     * group) that was not "Đã thuộc" right before and never counted for this quest on any day (so "Bỏ đánh dấu" then
+     * "Đã thuộc" again never pays twice). Possible when that many entries qualify. The app is sent to the entries
+     * without an answer ("new") when there are enough of them, else to "Chưa thuộc"; worked out again on every read.
      */
     @Component
     static class LearnNew implements QuestRule {
@@ -119,45 +142,66 @@ final class QuestRules {
         }
 
         @Override
+        public boolean followsGroups() {
+            return true;
+        }
+
+        @Override
+        public int eligibleIn(GroupStat group) {
+            return group.learnNewEligible();
+        }
+
+        @Override
+        public Map<String, Object> paramsIn(GroupStat group, int target) {
+            Map<String, Object> params = QuestRule.groupParams(group.group(), group.name());
+            params.put("status", group.freshNotCounted() >= target ? "new" : "learning");
+            return params;
+        }
+
+        @Override
         public String title(int target, Map<String, Object> params) {
-            return "Thuộc " + target + " mục mới";
+            return "Thuộc " + target + " mục mới" + quotedGroup(params);
         }
 
         @Override
         public String description(int target, Map<String, Object> params) {
-            return "Chọn “Đã thuộc” cho " + target + " mục bạn chưa thuộc.";
+            return "Chọn “Đã thuộc” cho " + target + " mục bạn chưa thuộc" + ofGroup(params) + ".";
         }
 
         @Override
         public Action action(int target, Map<String, Object> params) {
             String status = QuestRule.textParam(params, "status");
-            return Action.practice("", "", "", "", status.isEmpty() ? "new" : status);
+            return practiceIn(params, status.isEmpty() ? "new" : status);
         }
 
         /**
          * The "Luyện tập" list that can still finish the quest, worked out on every read against what is left
-         * (target − progress): "new" (no mark) when enough entries not counted yet are there, else "learning" ("Chưa
-         * thuộc"), else no filter (both together). The status kept when the day was made could send the Member to a
-         * list too short, e.g. after answering "Chưa thuộc" to the new entries in FLASH_REVIEW.
+         * (target − progress), within the quest's group if it has one: "new" (no mark) when enough entries not counted
+         * yet are there, else "learning" ("Chưa thuộc"), else no filter (both together). The status kept when the day
+         * was made could send the Member to a list too short, e.g. after answering "Chưa thuộc" to the new entries in
+         * FLASH_REVIEW.
          */
         @Override
         public Action actionNow(long userId, int target, int progress, Map<String, Object> params) {
             int left = Math.max(1, target - progress);
-            String status = repository.notCountedFor(userId, LEARN_NEW, false) >= left ? "new"
-                    : repository.notCountedFor(userId, LEARN_NEW, true) >= left ? "learning" : "";
-            return Action.practice("", "", "", "", status);
+            QuestGroup group = QuestGroup.of(params).orElse(null);
+            String status = repository.notCountedFor(userId, LEARN_NEW, false, group) >= left ? "new"
+                    : repository.notCountedFor(userId, LEARN_NEW, true, group) >= left ? "learning" : "";
+            return practiceIn(params, status);
         }
 
         @Override
         public boolean countsAnswer(Answer answer, Map<String, Object> params) {
             return answer.learned() && !answer.wasLearned()
+                    && QuestGroup.of(params).map(g -> repository.inGroup(answer.phraseId(), g)).orElse(true)
                     && !repository.everCounted(answer.userId(), LEARN_NEW, answer.phraseId());
         }
     }
 
     /**
-     * "Luyện lại {n} thẻ “Chưa thuộc”": any answer of an entry that was "Chưa thuộc" right before it (each entry once a
-     * day). Possible when the Member keeps that many entries as "Chưa thuộc".
+     * "Luyện lại {n} thẻ “Chưa thuộc”" (or "… chủ đề “…”" about a group): any answer of an entry (of the group) that
+     * was "Chưa thuộc" right before it (each entry once a day). Possible when the Member keeps that many entries as
+     * "Chưa thuộc".
      */
     @Component
     static class ReviewLearning implements QuestRule {
@@ -179,31 +223,44 @@ final class QuestRules {
         }
 
         @Override
+        public boolean followsGroups() {
+            return true;
+        }
+
+        @Override
+        public int eligibleIn(GroupStat group) {
+            return group.learning();
+        }
+
+        @Override
         public String title(int target, Map<String, Object> params) {
-            return "Luyện lại " + target + " thẻ “Chưa thuộc”";
+            return "Luyện lại " + target + " thẻ “Chưa thuộc”" + quotedGroup(params);
         }
 
         @Override
         public String description(int target, Map<String, Object> params) {
-            return "Luyện lại " + target + " thẻ đang ở trạng thái Chưa thuộc.";
+            return "Luyện lại " + target + " thẻ đang ở trạng thái Chưa thuộc" + ofGroup(params) + ".";
         }
 
         @Override
         public Action action(int target, Map<String, Object> params) {
-            return Action.practice("", "", "", "", "learning");
+            return practiceIn(params, "learning");
         }
 
         @Override
         public boolean countsAnswer(Answer answer, Map<String, Object> params) {
-            return answer.wasLearning();
+            return answer.wasLearning()
+                    && QuestGroup.of(params).map(g -> repository.inGroup(answer.phraseId(), g)).orElse(true);
         }
     }
 
     /**
-     * "Ôn {n} thẻ chủ đề “…”": any answer of an entry linked to the topic chosen when the day was made (each entry
-     * once a day). The topic: the first one of the Member's stage ({@code app.quests.stage-topics}) holding at least
-     * the target; else, among the topics holding the target, the one with the most entries the Member does not keep
-     * as "Đã thuộc"; else (no topic that big) the biggest topic, which is only taken with a lowered target.
+     * "Ôn {n} thẻ chủ đề “…”" (or "Ôn {n} thẻ địa điểm “…”" for a place category): any answer of an entry of the group
+     * chosen when the day was made (each entry once a day). The group: one the Member is interested in (chosen by
+     * {@link QuestGenerator}); without one, the first learning topic of the Member's stage
+     * ({@code app.quests.stage-topics}) holding at least the target (reason STAGE); else, among the topics holding the
+     * target, the one with the most entries the Member does not keep as "Đã thuộc"; else (no topic that big) the
+     * biggest topic, which is only taken with a lowered target.
      */
     @Component
     static class Topic implements QuestRule {
@@ -240,36 +297,47 @@ final class QuestRules {
                     .collect(Collectors.toMap(TopicStat::id, Function.identity(), (a, b) -> a));
             Optional<TopicStat> chosen = settings.topicsFor(repository.stage(userId)).stream()
                     .map(byId::get).filter(Objects::nonNull).filter(t -> t.entries() >= fullTarget).findFirst();
+            boolean fromStage = chosen.isPresent();
             if (chosen.isEmpty()) {
                 chosen = topics.stream().filter(t -> t.entries() >= fullTarget).min(MOST_TO_LEARN);
             }
             TopicStat topic = chosen.orElseGet(() -> topics.stream().min(BIGGEST).orElseThrow());
-            Map<String, Object> params = new LinkedHashMap<>();
-            params.put("topicId", topic.id());
-            params.put("topicName", topic.name());
+            Map<String, Object> params = QuestRule.groupParams(new QuestGroup(QuestGroup.TOPIC, topic.id()),
+                    topic.name());
+            if (fromStage) {
+                params.put(QuestGenerator.REASON, QuestGenerator.REASON_STAGE);
+            }
             return new Plan(topic.entries(), params);
         }
 
         @Override
+        public boolean followsGroups() {
+            return true;
+        }
+
+        @Override
+        public int eligibleIn(GroupStat group) {
+            return group.entries();
+        }
+
+        @Override
         public String title(int target, Map<String, Object> params) {
-            return "Ôn " + target + " thẻ chủ đề “" + QuestRule.textParam(params, "topicName") + "”";
+            return "Ôn " + target + " thẻ" + quotedGroup(params);
         }
 
         @Override
         public String description(int target, Map<String, Object> params) {
-            return "Trả lời " + target + " thẻ khác nhau của chủ đề " + QuestRule.textParam(params, "topicName") + ".";
+            return "Trả lời " + target + " thẻ khác nhau" + ofGroup(params) + ".";
         }
 
         @Override
         public Action action(int target, Map<String, Object> params) {
-            return Action.practice("topic", QuestRule.textParam(params, "topicId"),
-                    QuestRule.textParam(params, "topicName"), "", "");
+            return practiceIn(params, "");
         }
 
         @Override
         public boolean countsAnswer(Answer answer, Map<String, Object> params) {
-            String topicId = QuestRule.textParam(params, "topicId");
-            return !topicId.isEmpty() && repository.inTopic(answer.phraseId(), topicId);
+            return QuestGroup.of(params).map(g -> repository.inGroup(answer.phraseId(), g)).orElse(false);
         }
     }
 

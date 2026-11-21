@@ -1,8 +1,10 @@
 package com.sep490.vsa.feature.quest;
 
 import com.sep490.vsa.feature.quest.QuestDtos.Action;
+import com.sep490.vsa.feature.quest.QuestRepository.GroupStat;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -55,6 +57,41 @@ public interface QuestRule {
     /** The phrase shown with the quest ({@code quests[].phrase}), or null. */
     default Long phraseId(Map<String, Object> params) {
         return null;
+    }
+
+    /**
+     * Whether the quest can be about one "Luyện tập" group ({@link QuestGroup}: a learning topic or a place category),
+     * e.g. one the Member is interested in. Such a quest then only counts the entries of that group.
+     */
+    default boolean followsGroups() {
+        return false;
+    }
+
+    /** For a quest that {@link #followsGroups}: how many entries of the group could count for it (0 = none). */
+    default int eligibleIn(GroupStat group) {
+        return 0;
+    }
+
+    /** For a quest that {@link #followsGroups}: its params when it is about that group. */
+    default Map<String, Object> paramsIn(GroupStat group, int target) {
+        return groupParams(group.group(), group.name());
+    }
+
+    /**
+     * The params naming a group: {@code by}, {@code group}, {@code groupName}; a learning topic also as
+     * {@code topicId} / {@code topicName}, the params of TOPIC rows before groups existed, so a build of before this
+     * change (a rollback in the middle of a day) still names and counts the day's TOPIC.
+     */
+    static Map<String, Object> groupParams(QuestGroup group, String name) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("by", group.by());
+        params.put("group", group.id());
+        params.put("groupName", name == null ? "" : name);
+        if (group.isTopic()) {
+            params.put("topicId", group.id());
+            params.put("topicName", name == null ? "" : name);
+        }
+        return params;
     }
 
     /** {@code eligible}: how many entries could count (0 = impossible); {@code params}: what the quest is about. */
