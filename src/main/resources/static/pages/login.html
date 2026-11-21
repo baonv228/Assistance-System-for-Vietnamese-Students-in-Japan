@@ -14,21 +14,106 @@
 </head>
 <body class="auth-page">
 <div class="auth-shell">
-    <aside class="auth-brand">
+    <aside class="auth-brand auth-brand--slides">
         <a class="brand-mark" href="/">
             <svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#F08DAE"><circle cx="20" cy="9" r="7"/><circle cx="30.5" cy="16.6" r="7"/><circle cx="26.5" cy="29" r="7"/><circle cx="13.5" cy="29" r="7"/><circle cx="9.5" cy="16.6" r="7"/></g><circle cx="20" cy="20" r="4.5" fill="#FCE9EF"/></svg>
             Senpai ơi
         </a>
-        <div>
-            <h2>Kinh nghiệm của người đi trước, cho người đi sau.</h2>
-            <p>Bản đồ địa điểm do chính người Việt review, cộng đồng hỏi đáp và cẩm nang từng giai đoạn sống ở Nhật.</p>
-            <ul class="brand-points">
-                <li>Review quán ăn, cửa hàng, thủ tục theo khẩu vị và túi tiền sinh viên</li>
-                <li>Hỏi đáp với senpai đã xác minh</li>
-                <li>Cảnh báo lừa đảo gắn với từng địa điểm</li>
-            </ul>
-        </div>
-        <small></small>
+        <!-- Photos: Wikimedia Commons, credited on each slide (CC BY / CC BY-SA / CC0) -->
+        <section class="hero-slides" aria-roledescription="carousel" aria-label="Senpai ơi có gì cho bạn" data-hero-slides>
+            <div class="hero-track">
+                <div class="hero-slide is-active" data-label="Senpai ơi">
+                    <div class="hero-photo">
+                        <img src="/assets/img/auth/sakura-fuji-960.jpg"
+                             srcset="/assets/img/auth/sakura-fuji-640.jpg 640w, /assets/img/auth/sakura-fuji-960.jpg 960w, /assets/img/auth/sakura-fuji-1200.jpg 1200w"
+                             sizes="(max-width: 860px) calc(100vw - 32px), (max-width: 1360px) 44vw, 600px"
+                             width="1200" height="803" style="object-position: 45% 55%" fetchpriority="high"
+                             alt="Núi Phú Sĩ phủ tuyết nhìn qua những cành hoa anh đào bên hồ Kawaguchi">
+                        <div class="hero-meta">
+                            <span class="hero-place"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Hồ Kawaguchi · <span lang="ja">河口湖</span></span>
+                            <a class="hero-credit" href="https://commons.wikimedia.org/wiki/File:Lake_Kawaguchiko_Sakura_Mount_Fuji_2.JPG" target="_blank" rel="noopener">Ảnh: Midori · CC BY 3.0<span class="sr-only"> (Wikimedia Commons, mở trong tab mới)</span></a>
+                        </div>
+                    </div>
+                    <div class="hero-copy">
+                        <p class="hero-eyebrow">Senpai ơi</p>
+                        <h2>Kinh nghiệm của người đi trước,<br> cho người đi sau.</h2>
+                        <p class="hero-text">Bản đồ địa điểm do chính người Việt review, cộng đồng hỏi đáp và cẩm nang cho từng giai đoạn sống ở Nhật.</p>
+                    </div>
+                </div>
+                <div class="hero-slide" data-label="Bản đồ">
+                    <div class="hero-photo">
+                        <img src="/assets/img/auth/ramen-960.jpg"
+                             srcset="/assets/img/auth/ramen-640.jpg 640w, /assets/img/auth/ramen-960.jpg 960w, /assets/img/auth/ramen-1200.jpg 1200w"
+                             sizes="(max-width: 860px) calc(100vw - 32px), (max-width: 1360px) 44vw, 600px"
+                             width="1200" height="797" style="object-position: 50% 55%" decoding="async"
+                             alt="Bát mì trộn mazesoba với lòng đỏ trứng, thịt xá xíu, trứng lòng đào và hành phi">
+                        <div class="hero-meta">
+                            <span class="hero-place"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Mì trộn · <span lang="ja">まぜそば</span></span>
+                            <a class="hero-credit" href="https://commons.wikimedia.org/wiki/File:Ramen_Jump_002.jpg" target="_blank" rel="noopener">Ảnh: Ocdp · CC0<span class="sr-only"> (Wikimedia Commons, mở trong tab mới)</span></a>
+                        </div>
+                    </div>
+                    <div class="hero-copy">
+                        <p class="hero-eyebrow">Bản đồ</p>
+                        <h2>Ăn gì, mua ở đâu,<br> làm thủ tục thế nào?</h2>
+                        <p class="hero-text">Review quán ăn, cửa hàng và nơi làm thủ tục theo khẩu vị và túi tiền sinh viên, kèm cảnh báo lừa đảo gắn với từng địa điểm.</p>
+                    </div>
+                </div>
+                <div class="hero-slide" data-label="Hỏi-Đáp">
+                    <div class="hero-photo">
+                        <img src="/assets/img/auth/tokyo-night-960.jpg"
+                             srcset="/assets/img/auth/tokyo-night-640.jpg 640w, /assets/img/auth/tokyo-night-960.jpg 960w, /assets/img/auth/tokyo-night-1200.jpg 1200w"
+                             sizes="(max-width: 860px) calc(100vw - 32px), (max-width: 1360px) 44vw, 600px"
+                             width="1200" height="675" style="object-position: 52% 55%" decoding="async"
+                             alt="Tokyo về đêm, tháp Tokyo sáng đèn cam giữa các tòa nhà cao tầng">
+                        <div class="hero-meta">
+                            <span class="hero-place"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Tháp Tokyo · <span lang="ja">東京タワー</span></span>
+                            <a class="hero-credit" href="https://commons.wikimedia.org/wiki/File:Tokyo_Tower,_Minato_City.jpg" target="_blank" rel="noopener">Ảnh: David Kernan · CC BY 4.0<span class="sr-only"> (Wikimedia Commons, mở trong tab mới)</span></a>
+                        </div>
+                    </div>
+                    <div class="hero-copy">
+                        <p class="hero-eyebrow">Hỏi-Đáp</p>
+                        <h2>Mới sang chưa quen?<br> Cứ hỏi senpai.</h2>
+                        <p class="hero-text">Visa, nhà ở, việc làm thêm, ngân hàng… người đi trước trả lời, có cả senpai đã xác minh.</p>
+                    </div>
+                </div>
+                <div class="hero-slide" data-label="Cẩm nang">
+                    <div class="hero-photo">
+                        <img src="/assets/img/auth/torii-960.jpg"
+                             srcset="/assets/img/auth/torii-640.jpg 640w, /assets/img/auth/torii-960.jpg 960w, /assets/img/auth/torii-1200.jpg 1200w"
+                             sizes="(max-width: 860px) calc(100vw - 32px), (max-width: 1360px) 44vw, 600px"
+                             width="1200" height="778" style="object-position: 52% 60%" decoding="async"
+                             alt="Lối đi lát đá xuyên qua hàng cổng torii đỏ cam giữa rừng ở đền Fushimi Inari, Kyoto">
+                        <div class="hero-meta">
+                            <span class="hero-place"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Fushimi Inari · <span lang="ja">伏見稲荷</span></span>
+                            <a class="hero-credit" href="https://commons.wikimedia.org/wiki/File:20181110_Fushimi_Inari_Torii_12.jpg" target="_blank" rel="noopener">Ảnh: Balon Greyjoy · CC0<span class="sr-only"> (Wikimedia Commons, mở trong tab mới)</span></a>
+                        </div>
+                    </div>
+                    <div class="hero-copy">
+                        <p class="hero-eyebrow">Cẩm nang</p>
+                        <h2>Từng bước một,<br> từ lúc chuẩn bị đến khi về nước.</h2>
+                        <p class="hero-text">Cẩm nang chia theo bốn giai đoạn, kèm danh sách việc cần làm để bạn đánh dấu dần.</p>
+                    </div>
+                </div>
+                <div class="hero-slide" data-label="Sự kiện">
+                    <div class="hero-photo">
+                        <img src="/assets/img/auth/hanabi-960.jpg"
+                             srcset="/assets/img/auth/hanabi-640.jpg 640w, /assets/img/auth/hanabi-960.jpg 960w, /assets/img/auth/hanabi-1200.jpg 1200w"
+                             sizes="(max-width: 860px) calc(100vw - 32px), (max-width: 1360px) 44vw, 600px"
+                             width="1200" height="956" style="object-position: 45% 40%" decoding="async"
+                             alt="Pháo hoa nở rộ trên bầu trời đêm ở lễ hội Nagaoka">
+                        <div class="hero-meta">
+                            <span class="hero-place"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>Lễ hội Nagaoka · <span lang="ja">長岡まつり</span></span>
+                            <a class="hero-credit" href="https://commons.wikimedia.org/wiki/File:2007_Nagaoka_Festival_004_Edit.jpg" target="_blank" rel="noopener">Ảnh: Kropsoq · CC BY-SA 3.0<span class="sr-only"> (Wikimedia Commons, mở trong tab mới)</span></a>
+                        </div>
+                    </div>
+                    <div class="hero-copy">
+                        <p class="hero-eyebrow">Sự kiện</p>
+                        <h2>Lễ hội, pháo hoa<br> và sự kiện quanh bạn.</h2>
+                        <p class="hero-text">Xem lịch, chi phí, mẹo cho người đi cùng review và ảnh của người đã đến các năm trước.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
     </aside>
 
     <main class="auth-main">

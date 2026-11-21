@@ -103,7 +103,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`
   (`currentUser().catch(() => null)`), so an early Enter never puts the email or password in the URL.
 - The left panel of the sign-in pages is sakura pink `#F08DAE` (`--sakura`, text in the plum inks `--sakura-ink*` of
-  tokens.css, theme colour too).
+  tokens.css, theme colour too). `/login` shows five Japan photos as slides (user decision 11/21): Fuji and cherry
+  blossoms, mazesoba, Tokyo Tower, Fushimi Inari, Nagaoka fireworks, each with a feature line (Bản đồ, Hỏi-Đáp, Cẩm
+  nang, Sự kiện). Photos from Wikimedia Commons in `assets/img/auth/` (640/960/1200 px, CC BY, CC BY-SA, CC0): every
+  slide keeps its credit link (author + licence), required by the licences. Phones: a short photo strip with the
+  headline over it.
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
   "complete" sent twice with one ticket (or meeting the email's unique key) answers 409 "Email này đã được đăng ký.
   Hãy đăng nhập." to the second. Without `spring.mail.host` the code is printed in the server console.
