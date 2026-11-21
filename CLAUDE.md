@@ -102,6 +102,14 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env `SESSION_TIMEOUT`, "cần chốt").
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`
   (`currentUser().catch(() => null)`), so an early Enter never puts the email or password in the URL.
+- The left panel of the sign-in pages is sakura pink `#F08DAE` (`--sakura`, text in the plum inks `--sakura-ink*` of
+  tokens.css, theme colour too). `/login` shows five Japan photos as slides (`components/auth-slides.js`, user decision
+  11/21): Fuji and cherry blossoms, mazesoba, Tokyo Tower, Fushimi Inari, Nagaoka fireworks, each with a feature line
+  (Bản đồ, Hỏi-Đáp, Cẩm nang, Sự kiện). Photos from Wikimedia Commons in `assets/img/auth/` (640/960/1200 px, CC BY,
+  CC BY-SA, CC0): every slide keeps its credit link (author + licence), required by the licences. Tabbed carousel:
+  6.5 s a slide (the bar's fill animation is the timer), pause button, arrow keys on the bars, swipe on phones, waits
+  while hovered, stops once the keyboard enters; reduced motion keeps the rotation as a plain fade (no zoom, no
+  petals). Photos 2–5 load only when next (`data-src`). Phones: a short photo strip with the headline over it.
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
   "complete" sent twice with one ticket (or meeting the email's unique key) answers 409 "Email này đã được đăng ký.
   Hãy đăng nhập." to the second. Without `spring.mail.host` the code is printed in the server console.
@@ -122,6 +130,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   disallowed_useragent"; `lib/device.js googleSignInBlocked`): there the Google button points to a note under the
   buttons ("Mở bằng Chrome" intent link on Android, "Sao chép liên kết"), `auth-ui.js inAppNote`. Test:
   `SocialLoginOAuthFlowTest` (whole flow against a fake Google/Facebook on a local port), `SocialRedirectUriTest`.
+- Google/Facebook in the mobile app (contract: `design/SOCIAL_LOGIN.md` of the app repo; no change at Google/Facebook):
+  the app opens `/oauth2/authorization/{id}?app_challenge=<PKCE S256 challenge, 43 chars base64url>` in a Chrome
+  Custom Tab, the website's flow with the same redirect_uri (a malformed challenge → 404, never the website's flow).
+  `common/security/AppSocialLogin` keeps the challenge in the saved authorization request; on the callback the browser
+  keeps the sign-in it had (a member signed in to the website there stays so), gets no pending sign-up, nothing is read
+  or written in the database, and goes to `app.mobile.social-callback` (default `senpaioi://auth`, never from the
+  request) `?code=` or `?error=social_no_email|social_cancelled|social`. Codes (`SocialAppCodes`): 32 random bytes, in
+  memory, 5 minutes, one use, at most 5000 waiting. `POST /api/auth/social/app/exchange {code, verifier}` (the app's
+  session and CSRF) takes the code out first (a wrong verifier burns it), checks S256, then `findOrLink`: SIGNED_IN (app
+  session signed in), SIGNUP_REQUIRED (`pending` in the app's session for `/social/complete`, nobody signed in), 403
+  locked/deleted, 400 "…đã hết hạn…" otherwise. Test: `SocialAppLoginFlowTest`, `SocialAppCodesTest`, `AppSocialLoginTest`.
 - Sign-up limits (`RegistrationService`, `AuthRules`; "cần chốt" ones marked there): per mailbox one code per
   `email_code_resend_seconds` and 10 in 24 h (`AuthRules.mailbox`: "+tag" dropped for every domain, dots too for
   gmail.com/googlemail.com; only for counting, the account keeps the email as typed), 5 codes an hour per client address
@@ -766,6 +785,89 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and 960 px and below 361 px, so the header never scrolls sideways. A staff account's link to its own pages
   (`.desk-link`) shows only its icon below 1500 px.
 
+## Nhiệm vụ hằng ngày and xu (feature/quest, feature/coin; V25)
+- Contract with the mobile app (JSON names fixed, the app codes against them): `WEB_DAILY_QUESTS_PROMPT.md` of the
+  mobile repo (`design/`). The app has no database: it only reads these APIs. Values in `app.quests.*` / `app.coins.*`.
+- Every Japan day (0:00 JST, app `Clock`) a Member (role USER, ACTIVE; staff MSG18, guests 401, `MemberGuard`) gets
+  3 quests, made on first need (GET today, first flash answer, first LISTEN event) under the users row lock and never
+  changed that day (`QuestGenerator`): `FLASH_REVIEW` (fixed: "Ôn 10 thẻ ghi nhớ", any 10 different entries) + 2 of
+  `LEARN_NEW` ("Đã thuộc" on an entry not "Đã thuộc" before and never counted for LEARN_NEW), `REVIEW_LEARNING` (the
+  entry was "Chưa thuộc" right before), `TOPIC` (entries of one learning topic: `app.quests.stage-topics[<stage>]`,
+  else the topic with most entries not learned), `PHRASE_OF_DAY` (LISTEN event with today's phrase). One strategy per
+  code (`QuestRule`, `QuestRules`), so a new code (QUIZ) is one more bean. LEARN_NEW's `action.status` is worked out
+  on every read against what is left (`actionNow`): "new" when enough unmarked entries, else "learning", else "". Rotating codes: a `Random` seeded by
+  (Member, day) mixed by SplitMix64 (`QuestGenerator.seed`; unmixed, nearby seeds gave almost the same order every
+  day and 491 Members of 500 never saw one code in 30 days), only feasible ones (tiny library → lowered targets, fewer
+  quests); a choice equal to yesterday's set swaps its last code for another feasible one (codes of yesterday may come
+  back, so every pair turns up). Library = phrases with `deleted_at IS NULL`.
+- Quests follow the Member's interests (user decision 21/11/2026, mobile repo `design/QUEST_INTERESTS.md`; still
+  flash cards only, no reading quests): `QuestInterests` + `QuestInterestRepository` read, plain SQL, the blog topics
+  chosen in "Chủ đề quan tâm" (`chosen-weight` 4, never expire) and, in the last `days` (90), likes 1, saves 2,
+  published comments 2 (once per post), own published posts/questions 3 (blog topics, "Khác" and inactive ones never)
+  and saved 2 / checklist-ticked 2 (once per guide) / done 1 guides (guide topics, published and not deleted); a blog
+  topic and a guide topic of the same name are one interest; it counts when chosen or ≥ `min-weight` (2) and when it
+  maps (`app.quests.interest.blog-topics[<VietnameseText.squash(name)>]`, `guide-topics[<code>]`) to a "Luyện tập"
+  group holding at least the smallest target of TOPIC / LEARN_NEW / REVIEW_LEARNING (3) (`QuestGroup`:
+  `topic:<learning_topics.id>` | `category:<place_categories.id>`); the `top` (3) strongest are kept (ties by folded
+  name). The sample account user@gmail.com has two (its question "Mua SIM…": Mua sắm, Ngân hàng và tiền). TOPIC, LEARN_NEW, REVIEW_LEARNING `followsGroups`: a code "follows an interest" when a group
+  of an interest holds its full target (`QuestRepository.groupStats`); such codes count as feasible, at least
+  `min-per-day` (1) of the rotating quests follow one when possible (replacing the last chosen one that does not;
+  avoid-yesterday keeps that), then groups are assigned TOPIC first, interests in the day's order
+  (`QuestInterests.dayOrder`: first drawn by weight with the (Member, day) seed) and an interest no other quest of the
+  day follows first. Params `{by, group, groupName, reason: INTEREST|STAGE, reasonDetail}`, plus `topicId`,
+  `topicName` for a learning topic so a rollback to the build before still counts the day's TOPIC (old TOPIC rows
+  `{topicId, topicName}` still read). `PUT /api/dev/quests/today` makes the codes as without interests unless
+  `"followInterests": true` (then strongest interest first, no draw, the same every day); titles "Ôn 5 thẻ chủ đề “…”" / "… địa điểm “…”", "Thuộc 3 mục mới chủ đề
+  “…”", "Luyện lại 5 thẻ “Chưa thuộc” chủ đề “…”"; a scoped quest counts only entries of its group. Additive JSON:
+  `quests[].reason` `{code, label, detail}` (INTEREST "Chủ đề bạn quan tâm" + interest name, STAGE "Hợp giai đoạn
+  của bạn" + null, else null) and `interests` `[{name, chosen}]` on GET today (read on every call; the day's quests
+  follow a change from the next day). A Member without interests gets quests as before (TOPIC with reason STAGE when it
+  comes from the stage; only the mixed seed changes the day's order). Tests: `QuestInterestFlowTest`,
+  `QuestInterestsUnitTest`, `contract/QaInterestContractFlowTest`.
+- Counting (`PhraseService.flash` → `QuestService.recordFlash`): phrase FOR SHARE → users row FOR UPDATE → marks read
+  before the answer → `phrase_answer_log` (ms) → counted only when ≥ `min-answer-interval-ms` (1500) after the previous
+  answer; each entry once per quest (`user_quest_items`); progress ≤ target; "Bỏ đánh dấu" changes nothing. The flash
+  answer keeps `{learning, learned}` and the old message, plus `quests` (QuestChange) and " Xong nhiệm vụ “…” · +10 xu.".
+- Xu (`CoinLedger`, `coin_transactions`, `users.coins` ≥ 0; never rank points): +10 a quest, +20 when all are done,
+  together ≤ 50 a Japan day (the quest is still completed with what it got); every 7th day in a row +50 outside the cap
+  and a notification QUEST_STREAK ("Bạn đã học 7 ngày liên tiếp. +50 xu.", ref_type QUEST → link `/quests`). Unique key
+  (user, reason, ref_type, ref_id) pays each quest, bonus and milestone once. Streak: `user_quest_days` (all_done_at,
+  streak kept when the day is done; best = MAX).
+- "Đổi" (`CoinService`, `POST /api/me/coins/exchange {points}`): 50 xu = 1 rank point, ≤ 10 points a Japan month
+  (sum of point lines COIN_EXCHANGE of the month), users row locked first; checks in order: whole number ≥ 1 → month
+  cap reached → rest of the cap → enough xu (400 on `data.points`, numbers with a thousands dot). Point line
+  COIN_EXCHANGE / ref COIN (= the EXCHANGE row) reads "Đổi 150 xu" → `/quests` in "Lịch sử điểm". Why separate:
+  rank points give real privileges (featured bonus, Senpai answers first, pins without a Moderator at 300).
+- APIs: `GET /api/me/quests/today`, `POST /api/me/quests/events {type: LISTEN, phraseId}` (idempotent; another phrase
+  → 200 nothing changed; 30 a minute in memory → 429), `GET /api/me/coins?page=` (20 a page), the exchange; additive:
+  `quests` + `phrase.id` on `/api/me/home` (read only: `generated` false until made), `phrase.id` on `/api/home`,
+  `coins` on `/api/me/profile`. Live event `quest` after every change. The web has no quest page: `/quests` answers
+  301 to `/phrases` (`CleanUrls`); the Home's "Nghe" sends LISTEN (Members) and shows "Xong nhiệm vụ …" in the header's
+  notice box (`showSiteNotice` of `site-header.js`); a QUEST_STREAK notification pops up like a scan result.
+- "Câu tiếng Nhật hôm nay" = `PhraseOfDayService` (`daily_phrases`, chosen once a day by the old rule and kept, so the
+  Home and PHRASE_OF_DAY agree all day even when phrases are added or deleted). It joins the caller's transaction
+  (never REQUIRES_NEW: requests holding one connection and waiting for a second stalled the pool under 16 parallel
+  Homes); `HomeController` keeps the day's row before the Home's read-only transaction. `MemberGuard.lockUserRow`
+  re-checks role and status under the lock, so a flash answer queued behind "Xóa tài khoản" writes nothing. LISTEN
+  reads the phrase FOR SHARE before the users row (the order of flash and of a phrase report). `PointService.add`,
+  `CoinLedger.add` and the quest timestamps cut instants to the second before writing DATETIME: MySQL rounds .5 s up,
+  which put an exchange at 23:59:59.6 of a month's last day into the next month's cap.
+- "Xóa tài khoản" sets coins to 0 with points, deletes quests, done days and the answer log; the book of xu stays.
+- Test-only API (`feature/quest/dev`, for the mobile team's live and end-to-end tests): `DELETE|PUT
+  /api/dev/quests/today` (clear today's quests, xu and done day / clear and force `{codes}`), `POST
+  /api/dev/quests/history {doneDays}` (N done days before today, streak 1…N, no xu), `PUT /api/dev/coins {coins,
+  clearMonthExchanges}` (one DEV_ADJUST row; undo this month's exchanges); Members only, users row locked first. With
+  sample marks of `user@gmail.com` (`DevSampleMarks`, after DevDataSeeder, only when the account has none). Only with
+  `app.quests.dev-api.enabled=true` AND `spring.datasource.url` (and a Hikari `jdbc-url`, if set) on exactly one
+  local host: localhost, 127.0.0.1 or [::1] (`DevApiGuard`); otherwise `DevApiClosedFilter` (before Spring Security)
+  answers 404 to every `/api/dev/**` for every method and role, and a WARN says when only the database kept it off.
+  Never tied to profile `local`, which is the default profile and points at the shared database the live site reads.
+  A developer's own `application-local.properties` may set `app.quests.min-answer-interval-ms=0` for tapping on an
+  emulator; tests force 1500.
+- Tests: `feature/quest/*FlowTest` (base `QuestTestSupport`: `asvsj_quest_test`, `MovableClock`, random far-future
+  Japan day per test, `isolateLibrary()`), `feature/coin/*FlowTest` (`asvsj_coin_test`), `HomeQuestFlowTest`
+  (`asvsj_quest_home_test`), `feature/quest/dev/*`, `feature/quest/contract/*` (black-box against the contract).
+
 ## Places from OpenStreetMap (feature/place)
 - Why not Google Maps: Vietnam is a Google Maps Platform prohibited territory (every Places request from a
   Vietnamese IP gets a bare 403 "The caller does not have permission", and the terms forbid distributing a Google
@@ -1038,6 +1140,13 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   a `V<n>__…sql`, apply it to the shared database with Flyway (same files, out-of-order on), never by hand-written SQL,
   so its history row and checksum stay right. Tests turn Flyway on for their own local databases
   (`src/test/resources/config/application-local.properties`).
+- Use case tests (`src/test/java/com/sep490/vsa/usecase/`, JUnit tag `usecase`, run with `-Dgroups=usecase`): one
+  class per Member use case of the SRS (Report 3, 07/11; numbered as the team's list: 1.1 Browse Personalized Feed …
+  1.11 Submit Content Report, 1.12 Add Item to Favorites, 1.13 Browse Favorites, 1.14 Submit Question … 1.21 Delete
+  Answer), each test named `TC-1.x-NN [flow]`, through MockMvc on their own database `asvsj_uc_test`. Where CLAUDE.md
+  records a later decision than the SRS, the test follows CLAUDE.md and says so. `UseCaseTestBase` holds the only
+  `@MockBean` (the photo scanner) so all classes share one Spring context; rows are scoped by `token()`, and tests that
+  read whole-database rankings ("Senpai viết nhiều", "Senpai giải đáp nhiều") lock their accounts at the end.
 - `common/web/ProxiedHttpsRedirect` (before Spring Security): a GET/HEAD that a proxy or tunnel marks
   `X-Forwarded-Proto: http` answers 301 to the same page at `https://<host>` (the http port dropped), because Web Crypto,
   the microphone and Web Push only work on https pages; requests straight to the server (localhost, the LAN address)

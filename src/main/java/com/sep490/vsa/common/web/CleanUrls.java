@@ -103,6 +103,14 @@ public final class CleanUrls {
     /** The old FAQ page counted pages from 0 (?page=1 = second page); Hỏi-Đáp counts from 1. */
     private static final Pattern ZERO_BASED_PAGE = Pattern.compile("(^|&)page=(\\d{1,9})(?=&|$)");
 
+    /**
+     * "Nhiệm vụ hằng ngày" has no page on the web yet: the links "/quests" of "Lịch sử xu", "Lịch sử điểm" and the
+     * streak notifications answer 301 to "Nhật ngữ", where the flash cards that make the quests are. The mobile app
+     * opens its own quest screen for that address.
+     */
+    private static final Pattern QUESTS_PAGE = Pattern.compile("/quests/?");
+    static final String QUESTS_TARGET = "/phrases";
+
     private CleanUrls() {
     }
 
@@ -160,6 +168,9 @@ public final class CleanUrls {
             String rest = ZERO_BASED_PAGE.matcher(q)
                     .replaceAll(m -> m.group(1) + "page=" + (Long.parseLong(m.group(2)) + 1));
             return rest.isEmpty() ? FAQ_TAB : FAQ_TAB + "&" + rest;
+        }
+        if (QUESTS_PAGE.matcher(path).matches()) {
+            return QUESTS_TARGET;
         }
         // Keep event links with a trailing slash on the canonical route, including the moderator desk.
         if (path.matches("/(?:events(?:/\\d+(?:/review)?)?|moderator/events)/")) {

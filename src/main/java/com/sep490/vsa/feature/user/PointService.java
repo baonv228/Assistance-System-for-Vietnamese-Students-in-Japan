@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Adds and withdraws points. Every change is a row in {@code point_transactions};
@@ -47,7 +48,10 @@ public class PointService {
         }
         jdbc.update("""
                 INSERT INTO point_transactions (user_id, delta, reason, ref_type, ref_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)""", userId, delta, reason, refType, refId, Timestamp.from(clock.instant()));
+                VALUES (?, ?, ?, ?, ?, ?)""", userId, delta, reason, refType, refId,
+                // created_at is DATETIME in seconds: cut, so MySQL never rounds 23:59:59.6 of a month's last day into the
+                // next month (the monthly cap of "xu" exchanges reads these lines by Japan month)
+                Timestamp.from(clock.instant().truncatedTo(ChronoUnit.SECONDS)));
         jdbc.update("UPDATE users SET points = GREATEST(0, points + ?) WHERE id = ?", delta, userId);
     }
 

@@ -41,7 +41,9 @@ import java.nio.charset.StandardCharsets;
  *       users.role / users.status on every request.</li>
  *   <li>CSRF: the page reads the token from GET /api/auth/csrf and sends it in the X-XSRF-TOKEN header.</li>
  *   <li>GET /api/** is public (guests can view); other API calls need a signed-in user.</li>
- *   <li>Google/Facebook login is switched on only when their client ids are configured.</li>
+ *   <li>Google/Facebook login is switched on only when their client ids are configured. The mobile app uses the same
+ *       flow in the phone's browser and gets a one-time code back instead of a browser session
+ *       ({@link AppSocialLogin}).</li>
  * </ul>
  */
 @Configuration
@@ -155,9 +157,12 @@ public class SecurityConfig {
         if (registrations != null) {
             http.oauth2Login(oauth -> oauth
                     .loginPage("/login")
-                    // The redirect_uri comes from app.public-url on a server (see SocialRedirectUri)
+                    // The redirect_uri comes from app.public-url on a server (see SocialRedirectUri); the mobile app
+                    // starts the same flow with ?app_challenge= and gets a one-time code back (see AppSocialLogin)
                     .authorizationEndpoint(endpoint -> endpoint
-                            .authorizationRequestResolver(SocialRedirectUri.resolver(registrations, publicUrl)))
+                            .authorizationRequestResolver(
+                                    AppSocialLogin.resolver(SocialRedirectUri.resolver(registrations, publicUrl)))
+                            .authorizationRequestRepository(AppSocialLogin.authorizationRequests(contextRepository)))
                     .successHandler(socialLoginSuccessHandler)
                     .failureHandler(socialLoginFailureHandler));
         }

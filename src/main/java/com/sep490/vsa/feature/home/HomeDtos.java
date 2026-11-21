@@ -1,5 +1,7 @@
 package com.sep490.vsa.feature.home;
 
+import com.sep490.vsa.feature.quest.QuestDtos.HomeQuests;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -12,9 +14,13 @@ public final class HomeDtos {
     public record Tag(String name, String color) {
     }
 
-    /** {@code topicId}: one learning topic of the phrase (null when it has none), for "Học thêm chủ đề này". */
-    public record Phrase(String japanese, String romaji, String meaningVi, String categoryId, String categoryName,
-                         String categoryIcon, String topicId) {
+    /**
+     * "Câu tiếng Nhật hôm nay" ({@code PhraseOfDayService}): the same phrase for everyone all Japan day. {@code id} is
+     * the phrase's id, the one the quest PHRASE_OF_DAY listens for ("Nghe" sends it); {@code topicId}: one learning
+     * topic of the phrase (null when it has none), for "Học thêm chủ đề này".
+     */
+    public record Phrase(long id, String japanese, String romaji, String meaningVi, String categoryId,
+                         String categoryName, String categoryIcon, String topicId) {
     }
 
     public record Stats(long placesWithReviews, long reviews, long phrases) {
@@ -95,12 +101,13 @@ public final class HomeDtos {
      * {@code interests}: the topics "Dành cho bạn" reads, those the user chose first, then those learnt from what the
      * user liked, saved, commented on or wrote; {@code chosenInterests}: the chosen ones among them;
      * {@code stageGuides}: up to 3 guides of the user's own stage not done yet, in progress first, never the one
-     * "Việc tiếp theo" shows (empty without a stage).
+     * "Việc tiếp theo" shows (empty without a stage); {@code quests}: today's "Nhiệm vụ hằng ngày" in short
+     * ({@code QuestService.homeSummary}, read only: the Home never makes the day's quests).
      */
     public record MemberHome(String displayName, String stage, Long areaId, String areaName, int points, String rankName,
                              Phrase phrase, GuideProgress guide, List<EventItem> events, List<ReviewItem> reviews,
                              Featured featured, List<FeedPost> forYou, List<String> interests,
-                             List<String> chosenInterests, List<GuideCard> stageGuides) {
+                             List<String> chosenInterests, List<GuideCard> stageGuides, HomeQuests quests) {
     }
 
     /**
