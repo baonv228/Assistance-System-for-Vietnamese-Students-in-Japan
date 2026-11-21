@@ -2,10 +2,11 @@
 // Without this script the first slide shows and the controls stay hidden.
 // Tabbed carousel as in the WAI-ARIA Authoring Practices: the bars are tabs (one Tab stop, arrow keys move between
 // them), a pause/play button, rotation waits while the pointer is over a photo or something in a slide has focus and
-// stops for good once the keyboard enters the carousel (until "Phát").
+// stops for good once the keyboard enters the carousel (until "Phát"). Phones swipe left/right on the photo.
 
 const DURATION_MS = 6500;
 const FADE_MS = 950;
+const SWIPE_PX = 40;
 
 const PLAY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M4.5 2.6v10.8c0 .5.5.8.9.5l8.2-5.4a.6.6 0 0 0 0-1L5.4 2.1c-.4-.3-.9 0-.9.5z"/></svg>';
 const PAUSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.4" height="12" rx="1" fill="currentColor"/><rect x="9.6" y="2" width="3.4" height="12" rx="1" fill="currentColor"/></svg>';
@@ -138,6 +139,25 @@ export function setupSlides(root) {
         }
     });
     track.addEventListener("pointerleave", () => hold("hover", false));
+
+    let swipe = null;
+    track.addEventListener("pointerdown", (event) => {
+        swipe = event.pointerType === "mouse" ? null : { id: event.pointerId, x: event.clientX, y: event.clientY };
+    });
+    track.addEventListener("pointerup", (event) => {
+        if (!swipe || swipe.id !== event.pointerId) {
+            return;
+        }
+        const dx = event.clientX - swipe.x;
+        const dy = event.clientY - swipe.y;
+        swipe = null;
+        if (Math.abs(dx) >= SWIPE_PX && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+            show(index + (dx < 0 ? 1 : -1));
+        }
+    });
+    track.addEventListener("pointercancel", () => {
+        swipe = null;
+    });
 
     document.addEventListener("visibilitychange", () => hold("hidden", document.hidden));
 

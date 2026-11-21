@@ -81,7 +81,7 @@ body.auth-page {
     width: 100%;
     margin-block: auto;
 }
-.hero-track { display: grid; }
+.hero-track { display: grid; touch-action: pan-y; }
 .hero-slide { grid-area: 1 / 1; min-width: 0; visibility: hidden; }
 .hero-slide.is-active, .hero-slide.is-leaving { visibility: visible; }
 .hero-slide.is-active { z-index: 2; }
