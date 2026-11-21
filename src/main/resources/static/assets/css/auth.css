@@ -66,9 +66,9 @@ body.auth-page {
 .auth-brand .brand-points li::before { content: "✿"; color: #fff; }
 .auth-brand > small { position: relative; z-index: 1; color: var(--sakura-ink-2); }
 
-/* ----- Sign-in page: slides of Japan -----
-   All slides sit in one grid cell, so the track is as tall as the tallest one and nothing below it moves; only the
-   slide marked is-active shows. */
+/* ----- Sign-in page: slides of Japan (components/auth-slides.js) -----
+   All slides sit in one grid cell, so the track is as tall as the tallest one and nothing below it moves. Without
+   the script the first slide shows and the controls stay hidden. */
 .auth-brand--slides {
     justify-content: flex-start;
     gap: 32px;
@@ -105,7 +105,7 @@ body.auth-page {
     height: 100%;
     object-fit: cover;
 }
-/* shades at the top and the bottom of the photo, under what is drawn over it */
+/* shades for the bars at the top and the labels at the bottom */
 .hero-photo::before, .hero-photo::after {
     content: "";
     position: absolute;
@@ -179,6 +179,77 @@ body.auth-page {
 .hero-copy h2 br { display: none; }
 @media (min-width: 1280px) { .hero-copy h2 br { display: inline; } }
 .hero-text { margin: 0; max-width: 500px; color: var(--sakura-ink-2); font-size: 15.5px; text-wrap: pretty; }
+
+/* bars (one per slide, the current one fills while it is shown) and the pause button, over the top of the photo */
+.hero-controls {
+    position: absolute;
+    z-index: 3;
+    top: 12px;
+    left: 16px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.hero-controls[hidden] { display: none; }
+.hero-dots { flex: 1; display: flex; gap: 6px; }
+.hero-dot {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+.hero-dot-bar {
+    position: relative;
+    flex: 1;
+    height: 3px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, .42);
+    overflow: hidden;
+    transition: height .15s;
+}
+.hero-dot:hover .hero-dot-bar { height: 5px; }
+.hero-dot-fill {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    transform: scaleX(0);
+    transform-origin: left;
+}
+.hero-dot.is-past .hero-dot-fill,
+.hero-slides.is-stopped .hero-dot[aria-selected="true"] .hero-dot-fill { transform: none; }
+.hero-slides.is-playing .hero-dot[aria-selected="true"] .hero-dot-fill {
+    animation: hero-fill var(--hero-duration, 6500ms) linear both;
+}
+.hero-slides.is-held .hero-dot[aria-selected="true"] .hero-dot-fill { animation-play-state: paused; }
+@keyframes hero-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.hero-toggle {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(20, 6, 14, .45);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    cursor: pointer;
+}
+.hero-toggle:hover { background: rgba(20, 6, 14, .65); }
+.hero-toggle svg { width: 14px; height: 14px; }
+.hero-dot:focus-visible, .hero-toggle:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px rgba(61, 21, 48, .7);
+}
 
 @media (max-width: 1100px) {
     .auth-brand { padding: 40px; }
@@ -406,4 +477,6 @@ body.auth-page {
         pointer-events: none;
     }
     .hero-copy h2 { margin: 0; max-width: none; color: #fff; font-family: var(--font-body); font-size: 16px; font-weight: 700; line-height: 1.3; }
+    .hero-controls { top: 6px; left: 12px; right: 6px; gap: 8px; }
+    .hero-toggle { width: 30px; height: 30px; }
 }
