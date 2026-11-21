@@ -1169,9 +1169,13 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   server with its own https address is much faster than the tunnel.
 - Transfer (application.properties): `server.compression` gzips HTML, CSS, JS, JSON, SVG and the manifest above 1 KB
   (map.js 89 → 24 KB, messages.js 117 → 32 KB, site.css 26 → 6 KB; photos, videos and the SSE stream are left alone).
-  `spring.web.resources.cache.cachecontrol.no-cache=true`: files in static/ are kept by the browser and checked again
-  with Last-Modified (304) on every use, instead of Spring Security's "no-store" that made every page download every
-  file again; API answers keep "no-store" and /media its own header (`StaticCacheFlowTest`).
+  `spring.web.resources.cache.cachecontrol.no-cache=true`: files in static/ (and the clean page addresses forwarding
+  to them) are kept by the browser and checked again on every use, instead of Spring Security's "no-store" that made
+  every page download every file again; API answers keep "no-store" and /media its own header. The check is a weak ETag
+  of the file's bytes (`common/web/StaticResourceEtags`, SHA-256, weak so Tomcat still gzips) with
+  `use-last-modified=false`: the jar on senpaioi.com dates every file 1980-02-01 on every deploy, so "changed since
+  <date>?" was always 304 and browsers and Cloudflare kept old pages and CSS after a deploy (11/21). After a deploy that
+  changes static files, Cloudflare still needs "Purge Everything" for copies it took before this fix (`StaticCacheFlowTest`).
 - The JDBC URL sets `forceConnectionTimeZoneToSession=true` so MySQL `DEFAULT CURRENT_TIMESTAMP` values are UTC
   like the ones the app writes (before, on a UTC+7 PC new accounts looked 7 hours younger). Add the same flag
   to `DB_URL` on the server.
