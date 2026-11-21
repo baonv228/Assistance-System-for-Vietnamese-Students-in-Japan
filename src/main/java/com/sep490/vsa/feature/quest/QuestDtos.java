@@ -15,17 +15,35 @@ public final class QuestDtos {
     private QuestDtos() {
     }
 
-    /** GET /api/me/quests/today (5.1). */
+    /**
+     * GET /api/me/quests/today (5.1). {@code interests} (added 21/11/2026, QUEST_INTERESTS.md): the Member's interests
+     * the quests follow now, strongest first (read on every call: a change of "Chủ đề quan tâm" shows at once, the
+     * quests follow it from the next day); empty when there is none.
+     */
     public record Today(LocalDate date, Instant resetAt, List<Quest> quests, Bonus bonus, Streak streak,
-                        List<Day> recentDays, int coinsToday, int dailyCap, Wallet wallet) {
+                        List<Day> recentDays, int coinsToday, int dailyCap, Wallet wallet,
+                        List<InterestRef> interests) {
     }
 
     /**
      * One quest of the day. {@code coins}: what it will give while not completed, what it actually gave once completed
      * (0 under the daily cap). {@code progress} is never above {@code target}. {@code phrase} only for PHRASE_OF_DAY.
+     * {@code reason} (added 21/11/2026): why the quest is about its topic or place, null when it is not personal.
      */
     public record Quest(long id, String code, String title, String description, int target, int progress, int coins,
-                        boolean completed, Instant completedAt, Action action, PhraseRef phrase) {
+                        boolean completed, Instant completedAt, Action action, PhraseRef phrase, Reason reason) {
+    }
+
+    /**
+     * Why a quest is about its group, in the shape of the feed's reasons ({@code FeedReason}): {@code code} INTEREST
+     * ({@code label} "Chủ đề bạn quan tâm", {@code detail} the interest's name, e.g. "Y tế") or STAGE ("Hợp giai đoạn
+     * của bạn", {@code detail} null).
+     */
+    public record Reason(String code, String label, String detail) {
+    }
+
+    /** One interest of the Member: its name, and whether the Member chose it ("Chủ đề quan tâm") or it was learnt. */
+    public record InterestRef(String name, boolean chosen) {
     }
 
     /**

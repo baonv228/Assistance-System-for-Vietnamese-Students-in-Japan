@@ -14,8 +14,10 @@ import com.sep490.vsa.feature.quest.QuestDtos.Day;
 import com.sep490.vsa.feature.quest.QuestDtos.EventRequest;
 import com.sep490.vsa.feature.quest.QuestDtos.HomeQuests;
 import com.sep490.vsa.feature.quest.QuestDtos.PhraseRef;
+import com.sep490.vsa.feature.quest.QuestDtos.InterestRef;
 import com.sep490.vsa.feature.quest.QuestDtos.Quest;
 import com.sep490.vsa.feature.quest.QuestDtos.QuestChange;
+import com.sep490.vsa.feature.quest.QuestDtos.Reason;
 import com.sep490.vsa.feature.quest.QuestDtos.Streak;
 import com.sep490.vsa.feature.quest.QuestDtos.StreakBrief;
 import com.sep490.vsa.feature.quest.QuestDtos.StreakMilestone;
@@ -70,10 +72,14 @@ public class QuestService {
     static final String NO_PHRASE = "Hãy gửi mã câu đã nghe.";
     static final String TOO_FAST = "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
     static final String STREAK_NOTIFICATION = "QUEST_STREAK";
+    /** Labels of {@code quests[].reason}, the same words as the reasons of "Dành cho bạn". */
+    static final String REASON_INTEREST = "Chủ đề bạn quan tâm";
+    static final String REASON_STAGE = "Hợp giai đoạn của bạn";
     private static final DateTimeFormatter DAY_MONTH = DateTimeFormatter.ofPattern("dd/MM");
 
     private final QuestRepository repository;
     private final QuestGenerator generator;
+    private final QuestInterests interests;
     private final Map<String, QuestRule> rules;
     private final QuestSettings settings;
     private final CoinLedger coins;
@@ -84,11 +90,12 @@ public class QuestService {
     /** Recent events per Member (clock millis), for {@code events-per-minute}; in memory like the Map's search limit. */
     private final Map<Long, Deque<Long>> recentEvents = new ConcurrentHashMap<>();
 
-    public QuestService(QuestRepository repository, QuestGenerator generator, List<QuestRule> rules,
-                        QuestSettings settings, CoinLedger coins, MemberGuard guard,
+    public QuestService(QuestRepository repository, QuestGenerator generator, QuestInterests interests,
+                        List<QuestRule> rules, QuestSettings settings, CoinLedger coins, MemberGuard guard,
                         NotificationService notifications, LiveEvents live, Clock clock) {
         this.repository = repository;
         this.generator = generator;
+        this.interests = interests;
         this.rules = QuestRules.byCode(rules);
         this.settings = settings;
         this.coins = coins;
@@ -126,10 +133,12 @@ public class QuestService {
             LocalDate date = day.minusDays(back);
             recent.add(new Day(date, streak.done().containsKey(date)));
         }
+        List<InterestRef> interestRefs = interests.of(userId).stream()
+                .map(i -> new InterestRef(i.name(), i.chosen())).toList();
         return new Today(day, resetAt(day), rows.stream().map(row -> quest(userId, row)).toList(), bonus,
                 new Streak(streak.current(), repository.bestStreak(userId), streak.todayDone(),
                         settings.getStreakEvery(), settings.getStreakCoins()),
-                recent, coins.questCoinsOn(userId, day), settings.getDailyCap(), coins.wallet(userId));
+                recent, coins.questCoinsOn(userId, day), settings.getDailyCap(), coins.wallet(userId), interestRefs);
     }
 
     // ---------------------------------------------------------------- flash card answers
@@ -251,8 +260,17 @@ public class QuestService {
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Today forceToday(AppUserPrincipal me, List<String> codes) {
+        return forceToday(me, codes, false);
+    }
+
+    /**
+     * {@link #forceToday(AppUserPrincipal, List)}: as for a Member without interests (the default, the contract's
+     * "bỏ qua random"), or with {@code followInterests} following the Member's interests strongest first.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Today forceToday(AppUserPrincipal me, List<String> codes, boolean followInterests) {
         long userId = guard.lockMember(me);
-        generator.force(userId, dayOf(clock.instant()), codes);
+        generator.force(userId, dayOf(clock.instant()), codes, followInterests);
         changed(userId);
         return today(me);
     }
@@ -354,7 +372,21 @@ public class QuestService {
         PhraseRef phrase = phraseId == null ? null : repository.phrase(phraseId).orElse(null);
         return new Quest(row.id(), row.code(), row.title(), description, row.target(), row.progress(),
                 row.completed() ? row.coins() : settings.getCoinsPerQuest(), row.completed(), row.completedAt(),
-                action, phrase);
+                action, phrase, reason(row.params()));
+    }
+
+    /**
+     * Why the quest is about its group, as kept when the day was made ({@link QuestGenerator#REASON}); null for a
+     * quest that is not personal and for rows made before reasons existed.
+     */
+    static Reason reason(Map<String, Object> params) {
+        String code = QuestRule.textParam(params, QuestGenerator.REASON);
+        String detail = QuestRule.textParam(params, QuestGenerator.REASON_DETAIL);
+        return switch (code) {
+            case QuestGenerator.REASON_INTEREST -> new Reason(code, REASON_INTEREST, detail.isEmpty() ? null : detail);
+            case QuestGenerator.REASON_STAGE -> new Reason(code, REASON_STAGE, null);
+            default -> null;
+        };
     }
 
     /**

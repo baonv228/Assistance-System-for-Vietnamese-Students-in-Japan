@@ -49,10 +49,11 @@ abstract class QaContractSupport extends QuestTestSupport {
     /** Time left between two answers that must both count (min-answer-interval-ms is 1500 in tests). */
     static final Duration GAP = Duration.ofSeconds(2);
 
+    // "interests" and "reason" were added on 21/11/2026 (QUEST_INTERESTS.md): additive, the app reads both if present
     static final String[] TODAY_KEYS = {"date", "resetAt", "quests", "bonus", "streak", "recentDays", "coinsToday",
-            "dailyCap", "wallet"};
+            "dailyCap", "wallet", "interests"};
     static final String[] QUEST_KEYS = {"id", "code", "title", "description", "target", "progress", "coins",
-            "completed", "completedAt", "action", "phrase"};
+            "completed", "completedAt", "action", "phrase", "reason"};
     static final String[] ACTION_KEYS = {"type", "by", "group", "groupName", "kind", "status"};
     static final String[] WALLET_KEYS = {"coins", "rate", "monthCap", "exchangedThisMonth", "exchangeableNow",
             "monthResetAt", "points", "rankName"};

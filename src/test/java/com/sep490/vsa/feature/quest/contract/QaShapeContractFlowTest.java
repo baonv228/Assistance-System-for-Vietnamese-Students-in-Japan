@@ -30,6 +30,21 @@ class QaShapeContractFlowTest extends QaContractSupport {
 
         SoftAssertions s = new SoftAssertions();
         exactKeys(s, "today", t, TODAY_KEYS);
+        s.assertThat(t.get("interests") != null && t.get("interests").isArray()).as("today.interests is a list")
+                .isTrue();
+        s.assertThat(t.path("interests").size()).as("no interests: a Member who did nothing yet").isZero();
+        for (JsonNode q : t.path("quests")) {
+            String code = q.path("code").asText();
+            if ("TOPIC".equals(code)) {
+                // stage ARR → app.quests.stage-topics[ARR] starts with "pay": the topic comes from the stage
+                exactKeys(s, "TOPIC.reason", q.get("reason"), "code", "label", "detail");
+                s.assertThat(q.path("reason").path("code").asText()).isEqualTo("STAGE");
+                s.assertThat(q.path("reason").path("label").asText()).isEqualTo("Hợp giai đoạn của bạn");
+                isNullValue(s, "TOPIC.reason.detail", q.path("reason").get("detail"));
+            } else {
+                s.assertThat(q.has("reason") && q.get("reason").isNull()).as(code + ".reason null").isTrue();
+            }
+        }
         isDate(s, "today.date", t.get("date"));
         s.assertThat(t.path("date").asText()).as("date").isEqualTo(day.toString());
         isInstant(s, "today.resetAt", t.get("resetAt"));

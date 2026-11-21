@@ -789,6 +789,30 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   day and 491 Members of 500 never saw one code in 30 days), only feasible ones (tiny library → lowered targets, fewer
   quests); a choice equal to yesterday's set swaps its last code for another feasible one (codes of yesterday may come
   back, so every pair turns up). Library = phrases with `deleted_at IS NULL`.
+- Quests follow the Member's interests (user decision 21/11/2026, mobile repo `design/QUEST_INTERESTS.md`; still
+  flash cards only, no reading quests): `QuestInterests` + `QuestInterestRepository` read, plain SQL, the blog topics
+  chosen in "Chủ đề quan tâm" (`chosen-weight` 4, never expire) and, in the last `days` (90), likes 1, saves 2,
+  published comments 2 (once per post), own published posts/questions 3 (blog topics, "Khác" and inactive ones never)
+  and saved 2 / checklist-ticked 2 (once per guide) / done 1 guides (guide topics, published and not deleted); a blog
+  topic and a guide topic of the same name are one interest; it counts when chosen or ≥ `min-weight` (2) and when it
+  maps (`app.quests.interest.blog-topics[<VietnameseText.squash(name)>]`, `guide-topics[<code>]`) to a "Luyện tập"
+  group holding at least the smallest target of TOPIC / LEARN_NEW / REVIEW_LEARNING (3) (`QuestGroup`:
+  `topic:<learning_topics.id>` | `category:<place_categories.id>`); the `top` (3) strongest are kept (ties by folded
+  name). The sample account user@gmail.com has two (its question "Mua SIM…": Mua sắm, Ngân hàng và tiền). TOPIC, LEARN_NEW, REVIEW_LEARNING `followsGroups`: a code "follows an interest" when a group
+  of an interest holds its full target (`QuestRepository.groupStats`); such codes count as feasible, at least
+  `min-per-day` (1) of the rotating quests follow one when possible (replacing the last chosen one that does not;
+  avoid-yesterday keeps that), then groups are assigned TOPIC first, interests in the day's order
+  (`QuestInterests.dayOrder`: first drawn by weight with the (Member, day) seed) and an interest no other quest of the
+  day follows first. Params `{by, group, groupName, reason: INTEREST|STAGE, reasonDetail}`, plus `topicId`,
+  `topicName` for a learning topic so a rollback to the build before still counts the day's TOPIC (old TOPIC rows
+  `{topicId, topicName}` still read). `PUT /api/dev/quests/today` makes the codes as without interests unless
+  `"followInterests": true` (then strongest interest first, no draw, the same every day); titles "Ôn 5 thẻ chủ đề “…”" / "… địa điểm “…”", "Thuộc 3 mục mới chủ đề
+  “…”", "Luyện lại 5 thẻ “Chưa thuộc” chủ đề “…”"; a scoped quest counts only entries of its group. Additive JSON:
+  `quests[].reason` `{code, label, detail}` (INTEREST "Chủ đề bạn quan tâm" + interest name, STAGE "Hợp giai đoạn
+  của bạn" + null, else null) and `interests` `[{name, chosen}]` on GET today (read on every call; the day's quests
+  follow a change from the next day). A Member without interests gets quests as before (TOPIC with reason STAGE when it
+  comes from the stage; only the mixed seed changes the day's order). Tests: `QuestInterestFlowTest`,
+  `QuestInterestsUnitTest`, `contract/QaInterestContractFlowTest`.
 - Counting (`PhraseService.flash` → `QuestService.recordFlash`): phrase FOR SHARE → users row FOR UPDATE → marks read
   before the answer → `phrase_answer_log` (ms) → counted only when ≥ `min-answer-interval-ms` (1500) after the previous
   answer; each entry once per quest (`user_quest_items`); progress ≤ target; "Bỏ đánh dấu" changes nothing. The flash
