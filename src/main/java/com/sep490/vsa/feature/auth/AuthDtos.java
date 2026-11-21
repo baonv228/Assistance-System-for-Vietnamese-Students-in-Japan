@@ -4,6 +4,7 @@ import com.sep490.vsa.feature.user.User;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -82,6 +83,34 @@ public final class AuthDtos {
     }
 
     public record PendingSocialResponse(String provider, String email, String displayName) {
+    }
+
+    /**
+     * The app's Google/Facebook sign-in: the one-time code it got through senpaioi://auth and its PKCE verifier
+     * (RFC 7636: 43–128 characters of A–Z a–z 0–9 . _ ~ -).
+     */
+    public record SocialAppExchangeRequest(
+            @NotBlank(message = "Thiếu mã đăng nhập")
+            @Size(max = 100, message = "Mã đăng nhập không hợp lệ")
+            String code,
+            @NotNull(message = "Thiếu mã xác minh")
+            @Pattern(regexp = "[A-Za-z0-9._~-]{43,128}", message = "Mã xác minh không hợp lệ")
+            String verifier) {
+    }
+
+    /**
+     * {@code status} SIGNED_IN: {@code user} is signed in on this session, {@code pending} null. SIGNUP_REQUIRED:
+     * {@code user} null, {@code pending} waits in this session for POST /api/auth/social/complete.
+     */
+    public record SocialAppExchangeResponse(String status, CurrentUserResponse user, PendingSocialResponse pending) {
+
+        public static SocialAppExchangeResponse signedIn(CurrentUserResponse user) {
+            return new SocialAppExchangeResponse("SIGNED_IN", user, null);
+        }
+
+        public static SocialAppExchangeResponse signupRequired(PendingSocialResponse pending) {
+            return new SocialAppExchangeResponse("SIGNUP_REQUIRED", null, pending);
+        }
     }
 
     /** Which social sign-in buttons the login page should enable. */

@@ -130,6 +130,17 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   disallowed_useragent"; `lib/device.js googleSignInBlocked`): there the Google button points to a note under the
   buttons ("Mở bằng Chrome" intent link on Android, "Sao chép liên kết"), `auth-ui.js inAppNote`. Test:
   `SocialLoginOAuthFlowTest` (whole flow against a fake Google/Facebook on a local port), `SocialRedirectUriTest`.
+- Google/Facebook in the mobile app (contract: `design/SOCIAL_LOGIN.md` of the app repo; no change at Google/Facebook):
+  the app opens `/oauth2/authorization/{id}?app_challenge=<PKCE S256 challenge, 43 chars base64url>` in a Chrome
+  Custom Tab, the website's flow with the same redirect_uri (a malformed challenge → 404, never the website's flow).
+  `common/security/AppSocialLogin` keeps the challenge in the saved authorization request; on the callback the browser
+  keeps the sign-in it had (a member signed in to the website there stays so), gets no pending sign-up, nothing is read
+  or written in the database, and goes to `app.mobile.social-callback` (default `senpaioi://auth`, never from the
+  request) `?code=` or `?error=social_no_email|social_cancelled|social`. Codes (`SocialAppCodes`): 32 random bytes, in
+  memory, 5 minutes, one use, at most 5000 waiting. `POST /api/auth/social/app/exchange {code, verifier}` (the app's
+  session and CSRF) takes the code out first (a wrong verifier burns it), checks S256, then `findOrLink`: SIGNED_IN (app
+  session signed in), SIGNUP_REQUIRED (`pending` in the app's session for `/social/complete`, nobody signed in), 403
+  locked/deleted, 400 "…đã hết hạn…" otherwise. Test: `SocialAppLoginFlowTest`, `SocialAppCodesTest`, `AppSocialLoginTest`.
 - Sign-up limits (`RegistrationService`, `AuthRules`; "cần chốt" ones marked there): per mailbox one code per
   `email_code_resend_seconds` and 10 in 24 h (`AuthRules.mailbox`: "+tag" dropped for every domain, dots too for
   gmail.com/googlemail.com; only for counting, the account keeps the email as typed), 5 codes an hour per client address
