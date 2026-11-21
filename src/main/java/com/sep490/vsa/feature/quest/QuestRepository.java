@@ -61,6 +61,20 @@ class QuestRepository {
     record TopicStat(String id, String name, int entries, int notLearned) {
     }
 
+    /**
+     * A "Luyện tập" group (learning topic or place category) holding entries, counted for one Member: {@code entries}
+     * of the library, {@code learning} kept as "Chưa thuộc", {@code freshNotCounted} without any answer and
+     * {@code learningNotCounted} "Chưa thuộc", both never counted for LEARN_NEW on any day.
+     */
+    record GroupStat(QuestGroup group, String name, int entries, int learning, int freshNotCounted,
+                     int learningNotCounted) {
+
+        /** Entries LEARN_NEW could still count: not "Đã thuộc" and never counted for it. */
+        int learnNewEligible() {
+            return freshNotCounted + learningNotCounted;
+        }
+    }
+
     /** A day on which every quest was completed, with the streak kept for it. */
     record DoneDay(long id, LocalDate date, int streak) {
     }
@@ -142,6 +156,19 @@ class QuestRepository {
      * "Chưa thuộc", false = no mark ("new").
      */
     int notCountedFor(long userId, String code, boolean learning) {
+        return notCountedFor(userId, code, learning, null);
+    }
+
+    /** {@link #notCountedFor(long, String, boolean)} within one group ({@code null} = the whole library). */
+    int notCountedFor(long userId, String code, boolean learning, QuestGroup group) {
+        List<Object> args = new java.util.ArrayList<>(List.of(userId, learning, userId, code));
+        String inGroup = "";
+        if (group != null) {
+            inGroup = group.isTopic()
+                    ? " AND EXISTS (SELECT 1 FROM phrase_topic_links l WHERE l.phrase_id = ph.id AND l.topic_id = ?)"
+                    : " AND ph.category_id = ?";
+            args.add(group.id());
+        }
         return count("""
                 SELECT COUNT(*) FROM phrases ph
                 %s
@@ -149,8 +176,79 @@ class QuestRepository {
                   AND COALESCE(m.is_learning, FALSE) = ?
                   AND NOT EXISTS (SELECT 1 FROM user_quest_items i
                                   JOIN user_daily_quests q ON q.id = i.user_daily_quest_id
-                                  WHERE i.phrase_id = ph.id AND q.user_id = ? AND q.code = ?)""".formatted(MARK_JOIN),
-                userId, learning, userId, code);
+                                  WHERE i.phrase_id = ph.id AND q.user_id = ? AND q.code = ?)%s""".formatted(MARK_JOIN,
+                inGroup), args.toArray());
+    }
+
+    /**
+     * Every "Luyện tập" group holding at least one entry (learning topics, then place categories), with the Member's
+     * counts ({@link GroupStat}). Two grouped reads of the library, made when a day's quests are made and for the
+     * interests shown with them.
+     */
+    Map<QuestGroup, GroupStat> groupStats(long userId) {
+        String counts = """
+                COUNT(*),
+                SUM(CASE WHEN COALESCE(m.is_learning, FALSE) THEN 1 ELSE 0 END),
+                SUM(CASE WHEN NOT COALESCE(m.is_learning, FALSE) AND NOT COALESCE(m.is_learned, FALSE)
+                          AND ln.phrase_id IS NULL THEN 1 ELSE 0 END),
+                SUM(CASE WHEN COALESCE(m.is_learning, FALSE) AND NOT COALESCE(m.is_learned, FALSE)
+                          AND ln.phrase_id IS NULL THEN 1 ELSE 0 END)""";
+        String marks = MARK_JOIN + """
+
+                LEFT JOIN (SELECT DISTINCT i.phrase_id FROM user_quest_items i
+                           JOIN user_daily_quests q ON q.id = i.user_daily_quest_id
+                           WHERE q.user_id = ? AND q.code = 'LEARN_NEW') ln ON ln.phrase_id = ph.id""";
+        Map<QuestGroup, GroupStat> stats = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT t.id, t.name, %s
+                FROM learning_topics t
+                JOIN phrase_topic_links l ON l.topic_id = t.id
+                JOIN phrases ph ON ph.id = l.phrase_id AND ph.deleted_at IS NULL
+                %s
+                GROUP BY t.id, t.name
+                ORDER BY t.id""".formatted(counts, marks),
+                (ResultSet rs) -> {
+                    QuestGroup group = new QuestGroup(QuestGroup.TOPIC, rs.getString(1));
+                    stats.put(group, groupStat(group, rs));
+                }, userId, userId);
+        jdbc.query("""
+                SELECT c.id, c.name_vi, %s
+                FROM place_categories c
+                JOIN phrases ph ON ph.category_id = c.id AND ph.deleted_at IS NULL
+                %s
+                GROUP BY c.id, c.name_vi
+                ORDER BY c.id""".formatted(counts, marks),
+                (ResultSet rs) -> {
+                    QuestGroup group = new QuestGroup(QuestGroup.CATEGORY, rs.getString(1));
+                    stats.put(group, groupStat(group, rs));
+                }, userId, userId);
+        return stats;
+    }
+
+    /**
+     * The entries of every "Luyện tập" group holding at least one (learning topics and place categories), the same for
+     * every Member: what the interests shown with GET today need, without the Member's marks.
+     */
+    Map<QuestGroup, Integer> groupEntries() {
+        Map<QuestGroup, Integer> entries = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT l.topic_id, COUNT(*) FROM phrase_topic_links l
+                JOIN phrases ph ON ph.id = l.phrase_id AND ph.deleted_at IS NULL
+                GROUP BY l.topic_id""",
+                (ResultSet rs) -> {
+                    entries.put(new QuestGroup(QuestGroup.TOPIC, rs.getString(1)), rs.getInt(2));
+                });
+        jdbc.query("""
+                SELECT ph.category_id, COUNT(*) FROM phrases ph WHERE ph.deleted_at IS NULL
+                GROUP BY ph.category_id""",
+                (ResultSet rs) -> {
+                    entries.put(new QuestGroup(QuestGroup.CATEGORY, rs.getString(1)), rs.getInt(2));
+                });
+        return entries;
+    }
+
+    private static GroupStat groupStat(QuestGroup group, ResultSet rs) throws SQLException {
+        return new GroupStat(group, rs.getString(2), rs.getInt(3), rs.getInt(4), rs.getInt(5), rs.getInt(6));
     }
 
     /** Entries the Member keeps as "Chưa thuộc" (status "learning" of "Luyện tập"). */
@@ -202,6 +300,12 @@ class QuestRepository {
     boolean inTopic(long phraseId, String topicId) {
         return count("SELECT COUNT(*) FROM phrase_topic_links WHERE phrase_id = ? AND topic_id = ?",
                 phraseId, topicId) > 0;
+    }
+
+    /** Whether the entry belongs to the group: linked to the learning topic, or of the place category. */
+    boolean inGroup(long phraseId, QuestGroup group) {
+        return group.isTopic() ? inTopic(phraseId, group.id())
+                : count("SELECT COUNT(*) FROM phrases WHERE id = ? AND category_id = ?", phraseId, group.id()) > 0;
     }
 
     /** Counts the entry for the quest; false when it was counted already (each entry once per quest). */
