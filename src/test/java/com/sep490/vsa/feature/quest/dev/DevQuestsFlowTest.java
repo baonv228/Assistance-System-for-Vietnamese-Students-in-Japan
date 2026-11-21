@@ -296,6 +296,57 @@ class DevQuestsFlowTest extends DevApiTestSupport {
         assertThat(codes(data(forceToday(user, "TOPIC").andExpect(status().isOk())))).containsExactly("TOPIC");
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.sep490.vsa.feature.quest.QuestSettings questSettings;
+
+    /**
+     * The forced codes are made as for a Member without interests (the contract's "bỏ qua random"), so the mobile
+     * app's tests of the quests never depend on what the sample account is interested in; only
+     * {@code "followInterests": true} makes them follow the interests (QUEST_INTERESTS.md).
+     */
+    @Test
+    void forcedCodesFollowTheInterestsOnlyWhenAsked() throws Exception {
+        freshDay();
+        isolateLibrary();
+        String mine = topic("Sở thích ép");
+        String other = topic("Nhiều thẻ hơn");
+        phrases(5, mine);
+        phrases(8, other);
+        long user = member();
+        String name = "Dev quan tâm " + java.util.UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("INSERT INTO blog_topics (name, is_other, sort_order, is_active) VALUES (?, FALSE, 70, TRUE)", name);
+        long topicId = jdbc.queryForObject("SELECT id FROM blog_topics WHERE name = ?", Long.class, name);
+        Map<String, List<String>> before = new java.util.LinkedHashMap<>(questSettings.getInterest().getBlogTopics());
+        Map<String, List<String>> mapping = new java.util.LinkedHashMap<>(before);
+        mapping.put(name, List.of("topic:" + mine));
+        questSettings.getInterest().setBlogTopics(mapping);
+        try {
+            jdbc.update("INSERT INTO user_interest_topics (user_id, topic_id) VALUES (?, ?)", user, topicId);
+
+            JsonNode plain = data(forceToday(user, "TOPIC").andExpect(status().isOk()));
+            assertThat(quest(plain, "TOPIC").path("action").path("group").asText()).as("the most to learn")
+                    .isEqualTo(other);
+            assertThat(quest(plain, "TOPIC").get("reason").isNull()).isTrue();
+            assertThat(plain.path("interests").path(0).path("name").asText()).as("interests still listed")
+                    .isEqualTo(name);
+
+            JsonNode following = data(call(HttpMethod.PUT, "/api/dev/quests/today", user, "USER",
+                    "{\"codes\":[\"TOPIC\"],\"followInterests\":true}").andExpect(status().isOk()));
+            assertThat(quest(following, "TOPIC").path("action").path("group").asText()).isEqualTo(mine);
+            assertThat(quest(following, "TOPIC").path("reason").path("code").asText()).isEqualTo("INTEREST");
+
+            for (String value : List.of("false", "\"true\"", "1", "null")) {
+                JsonNode other2 = data(call(HttpMethod.PUT, "/api/dev/quests/today", user, "USER",
+                        "{\"codes\":[\"TOPIC\"],\"followInterests\":" + value + "}").andExpect(status().isOk()));
+                assertThat(quest(other2, "TOPIC").path("action").path("group").asText()).as(value).isEqualTo(other);
+            }
+        } finally {
+            questSettings.getInterest().setBlogTopics(before);
+            jdbc.update("DELETE FROM user_interest_topics WHERE topic_id = ?", topicId);
+            jdbc.update("DELETE FROM blog_topics WHERE id = ?", topicId);
+        }
+    }
+
     @Test
     void forcingReplacesTodaysSetAndTheXuItPaid() throws Exception {
         freshDay();

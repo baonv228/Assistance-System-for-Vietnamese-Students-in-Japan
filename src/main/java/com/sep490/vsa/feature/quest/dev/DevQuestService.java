@@ -135,10 +135,16 @@ public class DevQuestService {
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Today forceToday(AppUserPrincipal me, JsonNode codesValue) {
+        return forceToday(me, codesValue, false);
+    }
+
+    /** {@link #forceToday(AppUserPrincipal, JsonNode)}; {@code followInterests}: the strongest interests first. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Today forceToday(AppUserPrincipal me, JsonNode codesValue, boolean followInterests) {
         long userId = guard.lockMember(me);
         clearDay(userId, today());
         // forceToday joins this transaction and answers the day as GET /api/me/quests/today does (QuestService.today)
-        return quests.forceToday(me, codes(codesValue));
+        return quests.forceToday(me, codes(codesValue), followInterests);
     }
 
     // ---------------------------------------------------------------- PUT /api/dev/coins

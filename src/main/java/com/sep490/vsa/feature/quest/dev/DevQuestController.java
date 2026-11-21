@@ -53,11 +53,19 @@ public class DevQuestController {
         return ApiResponse.ok(message, history);
     }
 
-    /** {@code {"codes": ["FLASH_REVIEW", "TOPIC", "PHRASE_OF_DAY"]}}: today's quests made from exactly these codes. */
+    /**
+     * {@code {"codes": ["FLASH_REVIEW", "TOPIC", "PHRASE_OF_DAY"]}}: today's quests made from exactly these codes, as
+     * for a Member without interests (so a test of the quests themselves never depends on the account's interests).
+     * {@code "followInterests": true} (optional) makes the codes that can follow the Member's interests do so, the
+     * strongest interest first, the same every day (QUEST_INTERESTS.md).
+     */
     @PutMapping("/quests/today")
     public ApiResponse<Today> forceToday(@AuthenticationPrincipal AppUserPrincipal me,
                                          @RequestBody(required = false) JsonNode body) {
-        return ApiResponse.ok("Đã đặt nhiệm vụ hôm nay.", service.forceToday(me, field(body, "codes")));
+        JsonNode follow = field(body, "followInterests");
+        boolean followInterests = follow != null && follow.isBoolean() && follow.asBoolean();
+        return ApiResponse.ok("Đã đặt nhiệm vụ hôm nay.",
+                service.forceToday(me, field(body, "codes"), followInterests));
     }
 
     /** {@code {"coins": 600, "clearMonthExchanges": true}}: the balance set by one DEV_ADJUST row. */
