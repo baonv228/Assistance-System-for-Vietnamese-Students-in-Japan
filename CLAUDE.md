@@ -108,7 +108,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   (Bản đồ, Hỏi-Đáp, Cẩm nang, Sự kiện). Photos from Wikimedia Commons in `assets/img/auth/` (640/960/1200 px, CC BY,
   CC BY-SA, CC0): every slide keeps its credit link (author + licence), required by the licences. Tabbed carousel:
   6.5 s a slide (the bar's fill animation is the timer), pause button, arrow keys on the bars, swipe on phones, waits
-  while hovered, stops once the keyboard enters. Phones: a short photo strip with the headline over it.
+  while hovered, stops once the keyboard enters. Photos 2–5 load only when next (`data-src`). Phones: a short photo
+  strip with the headline over it.
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
   "complete" sent twice with one ticket (or meeting the email's unique key) answers 409 "Email này đã được đăng ký.
   Hãy đăng nhập." to the second. Without `spring.mail.host` the code is printed in the server console.

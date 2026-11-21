@@ -43,9 +43,25 @@ export function setupSlides(root) {
         dot.setAttribute("aria-label", `Ảnh ${i + 1}: ${slide.dataset.label || ""}`.trim().replace(/:$/, ""));
         dot.innerHTML = '<span class="hero-dot-bar"><span class="hero-dot-fill"></span></span>';
         dot.addEventListener("click", () => show(i));
+        dot.addEventListener("pointerenter", () => loadPhoto(i));
         dotsBox.append(dot);
         return dot;
     });
+
+    // Only the first photo is in the page's own download; the others (data-src) are fetched when they are next or
+    // about to be chosen, so a visitor who signs in at once never pays for them.
+    function loadPhoto(i) {
+        const img = slides[(i + slides.length) % slides.length].querySelector("img[data-src]");
+        if (!img) {
+            return;
+        }
+        if (img.dataset.srcset) {
+            img.srcset = img.dataset.srcset;
+        }
+        img.src = img.dataset.src;
+        img.removeAttribute("data-srcset");
+        img.removeAttribute("data-src");
+    }
 
     function show(next, focusDot = false) {
         next = (next + slides.length) % slides.length;
@@ -64,6 +80,8 @@ export function setupSlides(root) {
     }
 
     function render() {
+        loadPhoto(index);
+        loadPhoto(index + 1);
         slides.forEach((slide, i) => {
             const shown = i === index;
             slide.classList.toggle("is-active", shown);
