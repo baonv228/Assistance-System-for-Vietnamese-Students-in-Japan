@@ -785,9 +785,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   else the topic with most entries not learned), `PHRASE_OF_DAY` (LISTEN event with today's phrase). One strategy per
   code (`QuestRule`, `QuestRules`), so a new code (QUIZ) is one more bean. LEARN_NEW's `action.status` is worked out
   on every read against what is left (`actionNow`): "new" when enough unmarked entries, else "learning", else "". Rotating codes: a `Random` seeded by
-  (Member, day), only feasible ones (tiny library → lowered targets, fewer quests); a choice equal to yesterday's set
-  swaps its last code for another feasible one (codes of yesterday may come back, so every pair turns up). Library =
-  phrases with `deleted_at IS NULL`.
+  (Member, day) mixed by SplitMix64 (`QuestGenerator.seed`; unmixed, nearby seeds gave almost the same order every
+  day and 491 Members of 500 never saw one code in 30 days), only feasible ones (tiny library → lowered targets, fewer
+  quests); a choice equal to yesterday's set swaps its last code for another feasible one (codes of yesterday may come
+  back, so every pair turns up). Library = phrases with `deleted_at IS NULL`.
 - Counting (`PhraseService.flash` → `QuestService.recordFlash`): phrase FOR SHARE → users row FOR UPDATE → marks read
   before the answer → `phrase_answer_log` (ms) → counted only when ≥ `min-answer-interval-ms` (1500) after the previous
   answer; each entry once per quest (`user_quest_items`); progress ≤ target; "Bỏ đánh dấu" changes nothing. The flash

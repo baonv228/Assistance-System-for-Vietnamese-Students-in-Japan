@@ -177,8 +177,17 @@ class QuestGenerator {
         return shuffled;
     }
 
+    /**
+     * The seed of a (Member, day), mixed by SplitMix64's finalizer. {@link Random} alone keeps the first draws of
+     * nearby seeds alike, and the seeds of two days in a row differ only in their last bits: the shuffled order then
+     * hardly moved from day to day (for 491 Members out of 500, one code never came in the first two places in 30
+     * days; found 21/11/2026). Mixed, every code turns up.
+     */
     static long seed(long userId, LocalDate day) {
-        return userId * 0x9E3779B97F4A7C15L ^ day.toEpochDay();
+        long z = userId * 0x9E3779B97F4A7C15L ^ day.toEpochDay();
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
     }
 
     private Plan plan(String code, long userId, LocalDate day, Map<String, Plan> cache) {
