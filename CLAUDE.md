@@ -102,6 +102,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   survives closing the browser (`server.servlet.session.timeout` / `cookie.max-age`, env `SESSION_TIMEOUT`, "cần chốt").
 - Login and sign-up forms are `method="post"` and their scripts attach the submit handlers before any `await`
   (`currentUser().catch(() => null)`), so an early Enter never puts the email or password in the URL.
+- The left panel of the sign-in pages is sakura pink `#F08DAE` (`--sakura`, text in the plum inks `--sakura-ink*` of
+  tokens.css, theme colour too).
 - Email sign-up: send-code → verify-code (returns a one-time ticket) → complete (name, password, 18+, terms).
   "complete" sent twice with one ticket (or meeting the email's unique key) answers 409 "Email này đã được đăng ký.
   Hãy đăng nhập." to the second. Without `spring.mail.host` the code is printed in the server console.

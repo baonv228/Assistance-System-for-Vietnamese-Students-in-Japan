@@ -18,40 +18,40 @@ body.auth-page {
     min-height: 100vh;
 }
 
-/* ----- Left: brand panel ----- */
+/* ----- Left: brand panel (sakura pink; text in the plum inks of tokens.css) ----- */
 .auth-brand {
     position: relative;
     overflow: hidden;
-    background: var(--ink);
-    color: #fff;
+    background:
+        radial-gradient(120% 70% at 100% 100%, rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 60%),
+        radial-gradient(90% 60% at 0 0, rgba(214, 92, 136, .26), rgba(214, 92, 136, 0) 70%),
+        var(--sakura);
+    color: var(--sakura-ink);
     padding: 48px 56px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
 }
-.auth-brand::after {
-    /* soft sakura glow */
-    content: "";
-    position: absolute;
-    width: 520px;
-    height: 520px;
-    right: -180px;
-    bottom: -200px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(194, 69, 110, .55), rgba(194, 69, 110, 0) 70%);
-}
 .brand-mark {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
+    align-self: flex-start;
     align-items: center;
     gap: 10px;
-    color: #fff;
+    color: var(--sakura-ink);
     text-decoration: none;
     font-family: var(--font-display);
     font-size: 22px;
     font-weight: 700;
+    border-radius: 10px;
 }
+.brand-mark:focus-visible { outline: 2px solid var(--sakura-ink); outline-offset: 4px; }
 .brand-mark svg { width: 34px; height: 34px; }
-.auth-brand h2 {
+/* the pink flower of the logo would vanish on the pink panel: white petals, deep pink heart */
+.brand-mark svg g { fill: #fff; }
+.brand-mark svg > circle { fill: #D9507F; }
+.auth-brand > div > h2 {
     position: relative;
     z-index: 1;
     font-family: var(--font-display);
@@ -60,11 +60,15 @@ body.auth-page {
     margin: 0 0 16px;
     max-width: 440px;
 }
-.auth-brand p { position: relative; z-index: 1; color: #D6DBEE; max-width: 420px; margin: 0; }
+.auth-brand > div > p { position: relative; z-index: 1; color: var(--sakura-ink-2); max-width: 420px; margin: 0; }
 .auth-brand .brand-points { position: relative; z-index: 1; list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 12px; }
-.auth-brand .brand-points li { display: flex; gap: 10px; align-items: flex-start; color: #E6E9F4; }
-.auth-brand .brand-points li::before { content: "✿"; color: #F08DAE; }
-.auth-brand small { position: relative; z-index: 1; color: #A9B1D3; }
+.auth-brand .brand-points li { display: flex; gap: 10px; align-items: flex-start; color: var(--sakura-ink); }
+.auth-brand .brand-points li::before { content: "✿"; color: #fff; }
+.auth-brand > small { position: relative; z-index: 1; color: var(--sakura-ink-2); }
+
+@media (max-width: 1100px) {
+    .auth-brand { padding: 40px; }
+}
 
 /* ----- Right: form ----- */
 .auth-main {
@@ -253,7 +257,7 @@ body.auth-page {
 @media (max-width: 860px) {
     .auth-shell { grid-template-columns: 1fr; }
     .auth-brand { padding: 24px 20px; }
-    .auth-brand h2, .auth-brand p, .auth-brand .brand-points, .auth-brand small { display: none; }
+    .auth-brand > div, .auth-brand > small { display: none; }
     .auth-main { padding: 28px 16px 40px; align-items: flex-start; }
     .social-row { grid-template-columns: 1fr; }
 }

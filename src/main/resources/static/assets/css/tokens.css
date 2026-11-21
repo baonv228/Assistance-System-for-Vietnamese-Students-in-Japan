@@ -14,6 +14,10 @@
     --brand-soft: #FCE9EF;
     --brand-text: #8E2B4E;
     --ai-soft: #E6E9F4;
+    /* sakura panel of the sign-in pages (auth.css): text on --sakura uses the two plum inks (≥ 5:1) */
+    --sakura: #F08DAE;
+    --sakura-ink: #3D1530;
+    --sakura-ink-2: #5E2343;
     --lantern: #E8A33C;
     --lantern-soft: #FDF0D8;
     --lantern-text: #7A4E00;
