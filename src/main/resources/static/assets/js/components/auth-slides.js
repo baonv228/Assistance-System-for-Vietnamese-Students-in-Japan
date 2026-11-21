@@ -3,6 +3,8 @@
 // Tabbed carousel as in the WAI-ARIA Authoring Practices: the bars are tabs (one Tab stop, arrow keys move between
 // them), a pause/play button, rotation waits while the pointer is over a photo or something in a slide has focus and
 // stops for good once the keyboard enters the carousel (until "Phát"). Phones swipe left/right on the photo.
+// Reduced motion (asked by the system, e.g. Windows "Animation effects" off) keeps the rotation but drops the zoom,
+// the sliding text and the petals (auth.css): a plain cross-fade every few seconds.
 
 const DURATION_MS = 6500;
 const FADE_MS = 950;
@@ -22,6 +24,7 @@ export function setupSlides(root) {
     if (slides.length < 2 || !track || !controls || !dotsBox || !toggle) {
         return;
     }
+    const panel = root.closest(".auth-brand");
 
     let index = Math.max(0, slides.findIndex((slide) => slide.classList.contains("is-active")));
     let stopped = false; // set by the pause button or by the keyboard entering the carousel
@@ -100,6 +103,7 @@ export function setupSlides(root) {
         root.classList.toggle("is-playing", !stopped);
         root.classList.toggle("is-stopped", stopped);
         root.classList.toggle("is-held", holds.size > 0);
+        panel?.classList.toggle("is-calm", stopped);
         toggle.innerHTML = stopped ? PLAY_ICON : PAUSE_ICON;
         toggle.setAttribute("aria-label", stopped ? "Phát trình chiếu ảnh" : "Tạm dừng trình chiếu ảnh");
         // a slide changed by the visitor is read out; one changed by the timer is not
