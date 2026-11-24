@@ -830,15 +830,19 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-057 Sửa nghĩa: được lưu")
+        @DisplayName("UTC-057 Sửa nghĩa: được lưu, người tạo giữ nguyên")
         void utc057_updatePhrase_validChange_saved() {
+            // The entry was written by another editor (id 4); editor 3 edits it
+            when(repository.lockPhrase(PHRASE_ID)).thenReturn(Optional.of(new PhraseRow(PHRASE_ID, "konbini", "PHRASE",
+                    "領収書をください。", "Ryōshūsho o kudasai.", "Cho tôi xin hóa đơn.", 4L)));
+
             SaveResult result = service.updatePhrase(EDITOR_ID, PHRASE_ID, changedMeaning(null));
 
             ArgumentCaptor<PhraseRow> row = ArgumentCaptor.forClass(PhraseRow.class);
             verify(repository).updatePhrase(row.capture(), eq(NOW));
             assertThat(row.getValue().id()).isEqualTo(PHRASE_ID);
             assertThat(row.getValue().meaningVi()).isEqualTo("Làm ơn cho tôi hóa đơn.");
-            assertThat(row.getValue().createdBy()).isEqualTo(EDITOR_ID);
+            assertThat(row.getValue().createdBy()).isEqualTo(4L);
             verify(repository).setTopics(PHRASE_ID, List.of("pay"));
             assertThat(result.saved()).isTrue();
             assertThat(result.changed()).isTrue();
@@ -1120,9 +1124,10 @@ class AcademicServiceTest {
         void utc079_phraseReports_reasonsCountedMostFirst() {
             var head = new AcademicRepository.CaseHead(CASE_ID, PHRASE_ID, "NORMAL", 3, NOW);
             when(repository.openPhraseCases()).thenReturn(List.of(head));
+            // The least common reason comes first, so only sorting puts "Sai nghĩa" first
             when(repository.reportersOf(List.of(CASE_ID))).thenReturn(Map.of(CASE_ID, List.of(
-                    new AcademicDtos.Reporter("A", "Sai nghĩa", null, NOW),
                     new AcademicDtos.Reporter("B", "Sai tiếng Nhật", "ghi chú", NOW),
+                    new AcademicDtos.Reporter("A", "Sai nghĩa", null, NOW),
                     new AcademicDtos.Reporter("C", "Sai nghĩa", null, NOW))));
 
             var cases = service.reports();

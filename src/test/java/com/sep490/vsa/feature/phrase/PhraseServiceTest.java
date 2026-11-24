@@ -303,7 +303,8 @@ class PhraseServiceTest {
                     "Ryōshūsho o kudasai.", "Cho tôi xin hóa đơn.", new PhraseDtos.CategoryRef("konbini",
                     "Cửa hàng tiện lợi", "store"), List.of(new PhraseDtos.TopicRef("pay", "Thanh toán")), false, false,
                     false);
-            when(repository.phrases(any(), eq(-1L))).thenReturn(List.of(card));
+            // The database answers this card only for the keyword "hóa đơn" (matching itself is done in SQL)
+            when(repository.phrases(new Filter(null, null, null, "hóa đơn"), -1L)).thenReturn(List.of(card));
 
             assertThat(service.list(null, null, null, null, "hóa đơn")).containsExactly(card);
         }
