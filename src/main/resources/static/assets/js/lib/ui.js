@@ -55,9 +55,10 @@ export function osmUrl(place) {
  * Maps app when installed, else the website. Uses the position, else the name and address.
  */
 export function googleDirectionsUrl(place) {
-    const destination = place.lat != null && place.lng != null
-        ? `${place.lat},${place.lng}`
-        : [place.name, place.address].filter(Boolean).join(", ");
+    const destination =
+        place.lat != null && place.lng != null
+            ? `${place.lat},${place.lng}`
+            : [place.name, place.address].filter(Boolean).join(", ");
     return `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", destination })}`;
 }
 
@@ -81,8 +82,8 @@ export function eventWhen(event) {
 export const dmy = (isoDate) => isoDate.split("-").reverse().join("/");
 
 /** "03/10/2026 – 05/10/2026", or one date for a one-day event. */
-export const eventRange = (event) => (event.startDate === event.endDate
-    ? dmy(event.startDate) : `${dmy(event.startDate)} – ${dmy(event.endDate)}`);
+export const eventRange = (event) =>
+    event.startDate === event.endDate ? dmy(event.startDate) : `${dmy(event.startDate)} – ${dmy(event.endDate)}`;
 
 /** Label of an event card from the API (state NOW | UPCOMING | PAST): "Đang diễn ra", "Còn 12 ngày", "Đã qua". */
 export function eventStateLabel(event) {

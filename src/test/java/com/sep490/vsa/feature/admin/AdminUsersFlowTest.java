@@ -218,6 +218,139 @@ class AdminUsersFlowTest {
                 "SELECT setting_value FROM system_settings WHERE setting_key = 'max_moderators'", String.class)));
     }
 
+    @Test
+    void userListCombinesKeywordRoleStatusAndPagingFilters() throws Exception {
+        MockHttpSession admin = signIn(user("ADMIN", "ACTIVE"));
+        String marker = "filter-" + tag;
+        mvc.perform(get("/api/admin/users").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(15));
+        long activeUser = user("USER", "ACTIVE");
+        long lockedUser = user("USER", "LOCKED");
+        long activeModerator = user("MODERATOR", "ACTIVE");
+        long deletedUser = user("USER", "DELETED");
+        jdbc.update("UPDATE users SET display_name = ? WHERE id IN (?, ?, ?, ?)", marker,
+                activeUser, lockedUser, activeModerator, deletedUser);
+
+        String active = mvc.perform(get("/api/admin/users").param("keyword", marker).param("role", " user ")
+                        .param("status", "active").param("page", "1").param("size", "1").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(1)).andExpect(jsonPath("$.data.total").value(1))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(JsonPath.<Number>read(active, "$.data.items[0].id").longValue()).isEqualTo(activeUser);
+
+        String locked = mvc.perform(get("/api/admin/users").param("keyword", marker).param("role", "USER")
+                        .param("status", "LOCKED").param("size", "0").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.size").value(1))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(JsonPath.<Number>read(locked, "$.data.items[0].id").longValue()).isEqualTo(lockedUser);
+
+        mvc.perform(get("/api/admin/users").param("keyword", marker).param("role", "MODERATOR")
+                        .param("status", "ACTIVE").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(activeModerator));
+        mvc.perform(get("/api/admin/users").param("keyword", marker).param("role", "USER")
+                        .param("status", "DELETED").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(deletedUser));
+        mvc.perform(get("/api/admin/users").param("keyword", marker).param("role", "ADMIN").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.items").isEmpty());
+
+        mvc.perform(get("/api/admin/users").param("keyword", marker).param("role", "ALL")
+                        .param("status", "ALL").param("page", "-2").session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.total").value(4));
+    }
+
+    @Test
+    void roleChangeIsAuditedAndDuplicateOrStaleUpdatesDoNotOverwriteIt() throws Exception {
+        long adminId = user("ADMIN", "ACTIVE");
+        long targetId = user("USER", "ACTIVE");
+        MockHttpSession admin = signIn(adminId);
+
+        changeRole(admin, targetId, "ACADEMIC_MANAGER").andExpect(status().isOk());
+        assertThat(roleOf(targetId)).isEqualTo("ACADEMIC_MANAGER");
+        Map<String, Object> audit = jdbc.queryForMap("SELECT actor_id, action, target_id, old_value, new_value "
+                + "FROM activity_logs WHERE target_type = 'USER' AND target_id = ? AND action = 'USER_ROLE_CHANGE' "
+                + "ORDER BY id DESC LIMIT 1", targetId);
+        assertThat(((Number) audit.get("actor_id")).longValue()).isEqualTo(adminId);
+        assertThat(((Number) audit.get("target_id")).longValue()).isEqualTo(targetId);
+        assertThat(json.readTree(audit.get("old_value").toString()).path("role").asText()).isEqualTo("USER");
+        assertThat(json.readTree(audit.get("new_value").toString()).path("role").asText()).isEqualTo("ACADEMIC_MANAGER");
+        changeRole(admin, targetId, "ACADEMIC_MANAGER").andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value(AdminUserController.NO_CHANGE));
+        mvc.perform(withCsrf(put("/api/admin/users/" + targetId + "/role"), admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"role\":\"MODERATOR\",\"expectedRole\":\"USER\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(withCsrf(put("/api/admin/users/" + targetId + "/role"), admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"NOT_A_ROLE\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(roleOf(targetId)).isEqualTo("ACADEMIC_MANAGER");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE target_type = 'USER' "
+                + "AND target_id = ? AND action = 'USER_ROLE_CHANGE'", Long.class, targetId)).isEqualTo(1);
+    }
+
+    @Test
+    void roleAndStatusAuditChangesCarryOneCorrectActorAndOldNewValues() throws Exception {
+        long adminId = user("ADMIN", "ACTIVE");
+        long target = user("USER", "ACTIVE");
+        MockHttpSession admin = signIn(adminId);
+        changeRole(admin, target, "ACADEMIC_MANAGER").andExpect(status().isOk());
+        changeStatus(admin, target, "LOCKED").andExpect(status().isOk());
+
+        Map<String, Object> roleLog = jdbc.queryForMap("SELECT actor_id, target_type, target_id, old_value, new_value "
+                + "FROM activity_logs WHERE action = 'USER_ROLE_CHANGE' AND target_id = ? ORDER BY id DESC LIMIT 1", target);
+        assertThat(((Number) roleLog.get("actor_id")).longValue()).isEqualTo(adminId);
+        assertThat(roleLog.get("target_type")).isEqualTo("USER");
+        assertThat(((Number) roleLog.get("target_id")).longValue()).isEqualTo(target);
+        assertThat(json.readTree(roleLog.get("old_value").toString()).path("role").asText()).isEqualTo("USER");
+        assertThat(json.readTree(roleLog.get("new_value").toString()).path("role").asText()).isEqualTo("ACADEMIC_MANAGER");
+
+        Map<String, Object> statusLog = jdbc.queryForMap("SELECT actor_id, target_type, target_id, old_value, new_value "
+                + "FROM activity_logs WHERE action = 'USER_STATUS_CHANGE' AND target_id = ? ORDER BY id DESC LIMIT 1", target);
+        assertThat(((Number) statusLog.get("actor_id")).longValue()).isEqualTo(adminId);
+        assertThat(statusLog.get("target_type")).isEqualTo("USER");
+        assertThat(((Number) statusLog.get("target_id")).longValue()).isEqualTo(target);
+        assertThat(json.readTree(statusLog.get("old_value").toString()).path("status").asText()).isEqualTo("ACTIVE");
+        assertThat(json.readTree(statusLog.get("new_value").toString()).path("status").asText()).isEqualTo("LOCKED");
+    }
+
+    @Test
+    void dashboardReturnsTheTenNewestActivityRows() throws Exception {
+        long adminId = user("ADMIN", "ACTIVE");
+        MockHttpSession admin = signIn(adminId);
+        String action = "DASH_" + tag;
+        for (int i = 0; i < 12; i++) {
+            jdbc.update("INSERT INTO activity_logs (actor_id, action, target_type, description) "
+                            + "VALUES (?, ?, 'TEST', ?)", adminId, action, "dashboard-log-" + i);
+        }
+
+        String body = mvc.perform(get("/api/admin/dashboard/stats").session(admin))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        List<String> descriptions = JsonPath.read(body, "$.data.recentLogs[*].description");
+        assertThat(descriptions).hasSize(10);
+        assertThat(descriptions.get(0)).isEqualTo("dashboard-log-11");
+    }
+
+    @Test
+    @Transactional
+    void dashboardReturnsValidZeroAndEmptyValuesWithoutOptionalActivityRows() throws Exception {
+        MockHttpSession admin = signIn(user("ADMIN", "ACTIVE"));
+        jdbc.update("DELETE FROM activity_logs");
+        jdbc.update("UPDATE users SET false_report_count = 0");
+
+        mvc.perform(get("/api/admin/dashboard/stats").session(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalUsers").isNumber())
+                .andExpect(jsonPath("$.data.falseReportUsersCount").value(0))
+                .andExpect(jsonPath("$.data.recentLogs").isEmpty());
+    }
+
     // ---------------------------------------------------------------- A15: paging, search, 404
 
     @Test
@@ -231,6 +364,10 @@ class AdminUsersFlowTest {
             mvc.perform(get(path).param("page", "-5").param("size", "1").session(admin))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.page").value(1));
+            mvc.perform(get(path).param("size", "0").session(admin)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.size").value(1));
+            mvc.perform(get(path).param("size", "101").session(admin)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.size").value(100));
             mvc.perform(get(path).param("page", "99999999999").session(admin)).andExpect(status().isBadRequest());
         }
     }
@@ -268,12 +405,14 @@ class AdminUsersFlowTest {
         named("us" + tag + "_x");
         named("us" + tag + "Yx");
         named("bs" + tag + "\\path");
+        named("việt-nam-日本語-" + tag);
 
         assertThat(search(admin, "pct" + tag + "%")).isEqualTo(1);
         assertThat(search(admin, "pct" + tag + "_done")).isZero();
         assertThat(search(admin, "us" + tag + "_")).isEqualTo(1);
         assertThat(search(admin, "bs" + tag + "\\")).isEqualTo(1);
         assertThat(search(admin, "pct" + tag)).isEqualTo(2);
+        assertThat(search(admin, "VIỆT-NAM-日本語-" + tag)).isEqualTo(1);
 
         // The keyword search of the banned-keyword list too
         long withPercent = jdbc.queryForObject("SELECT COUNT(*) FROM banned_keywords WHERE LOCATE('%', keyword) > 0",
@@ -286,6 +425,14 @@ class AdminUsersFlowTest {
     @Test
     void aMissingUserAnswers404() throws Exception {
         MockHttpSession admin = signIn(user("ADMIN", "ACTIVE"));
+        long existing = user("USER", "ACTIVE");
+        String email = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, existing);
+        String detail = mvc.perform(get("/api/admin/users/" + existing).session(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(existing))
+                .andExpect(jsonPath("$.data.email").value(email))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(detail).doesNotContain("passwordHash", "password_hash");
         long missing = jdbc.queryForObject("SELECT MAX(id) FROM users", Long.class) + 1000;
         String message = "Không tìm thấy người dùng với ID: " + missing;
         mvc.perform(get("/api/admin/users/" + missing).session(admin))
@@ -381,6 +528,10 @@ class AdminUsersFlowTest {
 
     private String statusOf(long id) {
         return jdbc.queryForObject("SELECT status FROM users WHERE id = ?", String.class, id);
+    }
+
+    private String roleOf(long id) {
+        return jdbc.queryForObject("SELECT role FROM users WHERE id = ?", String.class, id);
     }
 
     private long user(String role, String status) {

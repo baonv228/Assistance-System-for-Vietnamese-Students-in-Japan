@@ -76,8 +76,8 @@ public class ActivityLogService {
     @Transactional
     public void recordLog(Long actorId, String action, String targetType, Long targetId,
                           Map<String, ?> oldValue, Map<String, ?> newValue, String description) {
-        ActivityLog log = new ActivityLog(actorId, action, targetType, targetId, toJson(oldValue), toJson(newValue),
-                cut(description, DESCRIPTION_MAX));
+        ActivityLog log = new ActivityLog(actorId, action, targetType, targetId,
+                jsonValue(oldValue, objectMapper), jsonValue(newValue, objectMapper), cut(description, DESCRIPTION_MAX));
         logRepository.save(log);
     }
 
@@ -198,7 +198,7 @@ public class ActivityLogService {
         return text.substring(0, end);
     }
 
-    private String toJson(Map<String, ?> value) {
+    static String jsonValue(Map<String, ?> value, ObjectMapper objectMapper) {
         if (value == null) {
             return null;
         }

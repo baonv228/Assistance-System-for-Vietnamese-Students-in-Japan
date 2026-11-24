@@ -16,10 +16,12 @@ import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -193,6 +195,26 @@ class ReportCaseFlowTest {
         act(report("BLOG", blog("POST", "PUBLISHED"), "NORMAL"), "dismiss", "").andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT report_muted_until > UTC_TIMESTAMP() FROM users WHERE id = ?", Boolean.class, reporter)).isTrue();
         assertThat(jdbc.queryForObject("SELECT false_report_count FROM users WHERE id = ?", Integer.class, reporter)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'REPORT_MUTED'",
+                Integer.class, reporter)).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional
+    void falseReportMuteDurationUsesTheCurrentSystemSetting() throws Exception {
+        jdbc.update("UPDATE system_settings SET setting_value = '1' WHERE setting_key = 'false_report_max'");
+        jdbc.update("UPDATE system_settings SET setting_value = '3' WHERE setting_key = 'mute_days'");
+        jdbc.update("UPDATE users SET false_report_count = 1 WHERE id = ?", reporter);
+        long kase = report("BLOG", blog("POST", "PUBLISHED"), "NORMAL");
+        Instant before = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        act(kase, "dismiss", "").andExpect(status().isOk());
+
+        Instant mutedUntil = jdbc.queryForObject("SELECT report_muted_until FROM users WHERE id = ?",
+                Timestamp.class, reporter).toInstant();
+        assertThat(mutedUntil).isBetween(before.plus(Duration.ofDays(3)), Instant.now().plus(Duration.ofDays(3)));
+        assertThat(jdbc.queryForObject("SELECT false_report_count FROM users WHERE id = ?", Integer.class, reporter))
+                .isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'REPORT_MUTED'",
                 Integer.class, reporter)).isEqualTo(1);
     }

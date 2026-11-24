@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -105,7 +106,8 @@ public class AdminUserService {
         }
 
         if (tagId != null) {
-            whereClause.append(" AND EXISTS (SELECT 1 FROM user_tags ut WHERE ut.user_id = u.id"
+            whereClause.append(" AND EXISTS (SELECT 1 FROM user_tags ut JOIN tag_types tt"
+                    + " ON tt.id = ut.tag_type_id AND tt.is_active WHERE ut.user_id = u.id"
                     + " AND ut.tag_type_id = ? AND ut.revoked_at IS NULL) ");
             params.add(tagId);
         }
@@ -218,16 +220,9 @@ public class AdminUserService {
         if (targetUserId == null) {
             throw ApiException.badRequest("Mã người dùng không hợp lệ.");
         }
-        if (me != null && targetUserId.equals(me.id())) {
-            throw ApiException.badRequest("Không thể tự thay đổi vai trò của chính tài khoản đang đăng nhập.");
-        }
-
-        Role newRole;
-        try {
-            newRole = Role.valueOf(newRoleStr.trim().toUpperCase());
-        } catch (Exception e) {
-            throw ApiException.badRequest("Vai trò không hợp lệ: " + newRoleStr);
-        }
+        assertNotSelf(targetUserId, me != null ? me.id() : null,
+                "Không thể tự thay đổi vai trò của chính tài khoản đang đăng nhập.");
+        Role newRole = parseRole(newRoleStr);
 
         // Các lần đổi vai trò/trạng thái chạy lần lượt từ đây
         int maxModerators = lockModeratorLimit();
@@ -271,16 +266,44 @@ public class AdminUserService {
     }
 
     /** 409 khi trang đang hiển thị giá trị khác giá trị hiện tại: một Admin khác đã đổi tài khoản trước. */
-    private static void assertNotStale(String expected, String current) {
+    static void assertNotStale(String expected, String current) {
         if (expected != null && !expected.isBlank() && !expected.trim().equalsIgnoreCase(current)) {
             throw ApiException.conflict(STALE_ACCOUNT);
         }
     }
 
     /** 400 khi đích là một Admin đang hoạt động (người thực hiện không bao giờ là chính họ, đã chặn ở trên). */
-    private static void assertNotActiveAdmin(UserItem target) {
+    static void assertNotActiveAdmin(UserItem target) {
         if (Role.ADMIN.name().equals(target.role()) && UserStatus.ACTIVE.name().equals(target.status())) {
             throw ApiException.badRequest(ADMIN_PROTECTED);
+        }
+    }
+
+    static Role parseRole(String raw) {
+        try {
+            return Role.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw ApiException.badRequest("Vai trò không hợp lệ: " + raw);
+        }
+    }
+
+    static UserStatus parseMutableStatus(String raw) {
+        UserStatus status;
+        try {
+            status = UserStatus.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw ApiException.badRequest("Trạng thái không hợp lệ: " + raw);
+        }
+        if (status != UserStatus.ACTIVE && status != UserStatus.LOCKED) {
+            throw ApiException.badRequest("Trạng thái không hợp lệ: " + raw
+                    + ". Chỉ có thể khóa (LOCKED) hoặc mở khóa (ACTIVE) tài khoản.");
+        }
+        return status;
+    }
+
+    static void assertNotSelf(Long targetUserId, Long actorId, String message) {
+        if (targetUserId != null && targetUserId.equals(actorId)) {
+            throw ApiException.badRequest(message);
         }
     }
 
@@ -307,20 +330,9 @@ public class AdminUserService {
         if (targetUserId == null) {
             throw ApiException.badRequest("Mã người dùng không hợp lệ.");
         }
-        if (me != null && targetUserId.equals(me.id())) {
-            throw ApiException.badRequest("Không thể tự thay đổi trạng thái của chính tài khoản đang đăng nhập.");
-        }
-
-        UserStatus newStatus;
-        try {
-            newStatus = UserStatus.valueOf(newStatusStr.trim().toUpperCase());
-        } catch (Exception e) {
-            throw ApiException.badRequest("Trạng thái không hợp lệ: " + newStatusStr);
-        }
-        if (newStatus != UserStatus.ACTIVE && newStatus != UserStatus.LOCKED) {
-            throw ApiException.badRequest("Trạng thái không hợp lệ: " + newStatusStr
-                    + ". Chỉ có thể khóa (LOCKED) hoặc mở khóa (ACTIVE) tài khoản.");
-        }
+        assertNotSelf(targetUserId, me != null ? me.id() : null,
+                "Không thể tự thay đổi trạng thái của chính tài khoản đang đăng nhập.");
+        UserStatus newStatus = parseMutableStatus(newStatusStr);
 
         // Các lần đổi vai trò/trạng thái chạy lần lượt từ đây
         int maxModerators = lockModeratorLimit();
@@ -393,8 +405,8 @@ public class AdminUserService {
         }
         UserStatus target;
         try {
-            target = UserStatus.valueOf(targetStatusStr.trim().toUpperCase());
-        } catch (Exception e) {
+            target = UserStatus.valueOf(targetStatusStr.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
             throw ApiException.badRequest("Trạng thái không hợp lệ: " + targetStatusStr);
         }
         if (target != UserStatus.ACTIVE && target != UserStatus.LOCKED) {

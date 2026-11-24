@@ -265,11 +265,7 @@ public class AdminConfigService {
         if (current.isEmpty()) {
             throw ApiException.badRequest("Không tìm thấy cấu hình với mã: " + settingKey);
         }
-        SettingMeta meta = SETTING_METADATA.get(settingKey);
-        if (meta == null || !meta.wired()) {
-            throw ApiException.badRequest(NOT_APPLIED);
-        }
-        String value = checkedValue(newValue, meta);
+        String value = checkedValue(settingKey, newValue);
 
         String oldValue = current.get(0);
         if (oldValue.equals(value)) {
@@ -288,7 +284,7 @@ public class AdminConfigService {
                 null,
                 Map.of(settingKey, oldValue),
                 Map.of(settingKey, value),
-                "Cập nhật cấu hình [" + meta.label() + "] từ \"" + oldValue + "\" thành \"" + value + "\""
+                "Cập nhật cấu hình [" + labelOf(settingKey) + "] từ \"" + oldValue + "\" thành \"" + value + "\""
         );
     }
 
@@ -296,7 +292,11 @@ public class AdminConfigService {
      * Giá trị mới đã kiểm tra, ở dạng chuẩn ("007" → "7"): bỏ khoảng trắng hai đầu, chỉ chữ số ASCII (không "+", không
      * chữ số toàn chiều rộng), trong khoảng cho phép; sai thì 400 nêu khoảng đó.
      */
-    private static String checkedValue(String raw, SettingMeta meta) {
+    static String checkedValue(String settingKey, String raw) {
+        SettingMeta meta = SETTING_METADATA.get(settingKey);
+        if (meta == null || !meta.wired()) {
+            throw ApiException.badRequest(NOT_APPLIED);
+        }
         String text = raw == null ? "" : raw.trim();
         if (text.isEmpty()) {
             throw ApiException.badRequest("Giá trị cấu hình không được để trống.");
@@ -386,11 +386,12 @@ public class AdminConfigService {
         }
 
         BannedKeyword kw = keywordRepository.findById(id)
-                .orElseThrow(() -> ApiException.badRequest("Không tìm thấy từ khóa cấm với ID: " + id));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "Không tìm thấy từ khóa cấm với ID: " + id));
 
         // Một Admin khác (hoặc tab khác) có thể vừa xóa đúng từ này: khi đó không còn gì để xóa, báo như từ không có
         if (jdbc.update("DELETE FROM banned_keywords WHERE id = ?", id) == 0) {
-            throw ApiException.badRequest("Không tìm thấy từ khóa cấm với ID: " + id);
+            throw new ApiException(HttpStatus.NOT_FOUND, "Không tìm thấy từ khóa cấm với ID: " + id);
         }
         contentFilter.keywordsChanged();
 
@@ -451,7 +452,7 @@ public class AdminConfigService {
      * Từ khóa đã kiểm tra, ở dạng lưu (cắt khoảng trắng đầu cuối, chữ thường): không rỗng, không quá
      * {@value #KEYWORD_MAX_LENGTH} ký tự, có đủ chữ cái/chữ số để không chặn nhầm. Sai thì 400.
      */
-    private static String checkedKeyword(String rawKeyword) {
+    static String checkedKeyword(String rawKeyword) {
         if (rawKeyword == null || rawKeyword.isBlank()) {
             throw ApiException.badRequest("Từ khóa không được để trống.");
         }

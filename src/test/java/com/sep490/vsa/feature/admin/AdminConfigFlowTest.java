@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.admin;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
+import com.sep490.vsa.common.settings.SystemSettings;
 import com.sep490.vsa.feature.auth.EmailCodeCleanup;
 import com.sep490.vsa.feature.moderation.ContentFilter;
 import jakarta.servlet.http.Cookie;
@@ -20,11 +21,15 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,8 +48,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * System settings, banned keywords, the activity log and the daily clean-up, against MySQL ({@code asvsj_test}), with
- * sessions from the real login API.
+ * System settings, banned keywords, the activity log and the daily clean-up, against the isolated MySQL database
+ * {@code asvsj_admin_config_test}, with sessions from the real login API.
  * <ul>
  *   <li>A5/A7: only the settings the system reads can be changed, each to a whole number in its range; the others
  *       answer 400 and show as "Chưa áp dụng".</li>
@@ -57,7 +62,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * removed.
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:mysql://localhost:3306/asvsj_test?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
+        "spring.datasource.url=jdbc:mysql://localhost:3306/asvsj_admin_config_test?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true",
         "app.media.local-dir=target/test-uploads",
         "app.moderation.retry-initial-delay-ms=3600000",
         "app.places.osm.enabled=false"
@@ -108,6 +113,12 @@ class AdminConfigFlowTest {
     private ObjectMapper json;
     @Autowired
     private ActivityLogService logService;
+    @Autowired
+    private ActivityLogRepository logRepository;
+    @Autowired
+    private SystemSettings systemSettings;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
     @Autowired
     private EmailCodeCleanup codeCleanup;
     @Autowired
@@ -168,18 +179,37 @@ class AdminConfigFlowTest {
 
     @Test
     void everyAppliedSettingTakesOnlyAWholeNumberInItsRange() throws Exception {
-        MockHttpSession admin = signIn(user("ADMIN", "ACTIVE"));
+        long adminId = user("ADMIN", "ACTIVE");
+        MockHttpSession admin = signIn(adminId);
         for (Map.Entry<String, int[]> entry : APPLIED.entrySet()) {
             String key = entry.getKey();
             int min = entry.getValue()[0];
             int max = entry.getValue()[1];
             String range = "phải là số nguyên từ " + min + " đến " + max + ".";
 
+            long logsBeforeMinimum = logsBy(adminId);
+            String valueBeforeMinimum = value(key);
             refused(admin, key, Integer.toString(min - 1), range);
             setting(admin, key, Integer.toString(min)).andExpect(status().isOk());
             assertThat(value(key)).as(key).isEqualTo(Integer.toString(min));
+            boolean minimumChanged = !Integer.toString(min).equals(valueBeforeMinimum);
+            assertThat(logsBy(adminId)).as(key + " minimum audit")
+                    .isEqualTo(logsBeforeMinimum + (minimumChanged ? 1 : 0));
+            if (minimumChanged) {
+                assertThat(jdbc.queryForObject("SELECT updated_by FROM system_settings WHERE setting_key = ?",
+                        Long.class, key)).as(key + " minimum updater").isEqualTo(adminId);
+                Map<String, Object> minimumAudit = logRow(adminId, "SETTING_UPDATE");
+                assertThat(jsonOf(minimumAudit.get("new_value"))).containsExactly(Map.entry(key, Integer.toString(min)));
+            }
+            long logsBeforeMax = logsBy(adminId);
             setting(admin, key, Integer.toString(max)).andExpect(status().isOk());
             assertThat(value(key)).as(key).isEqualTo(Integer.toString(max));
+            assertThat(jdbc.queryForObject("SELECT updated_by FROM system_settings WHERE setting_key = ?",
+                    Long.class, key)).as(key + " updater").isEqualTo(adminId);
+            assertThat(logsBy(adminId)).as(key + " audit row").isEqualTo(logsBeforeMax + 1);
+            Map<String, Object> audit = logRow(adminId, "SETTING_UPDATE");
+            assertThat(jsonOf(audit.get("old_value"))).containsExactly(Map.entry(key, Integer.toString(min)));
+            assertThat(jsonOf(audit.get("new_value"))).containsExactly(Map.entry(key, Integer.toString(max)));
             refused(admin, key, Integer.toString(max + 1), range);
             refused(admin, key, "abc", range);
             refused(admin, key, "+5", range);
@@ -187,6 +217,7 @@ class AdminConfigFlowTest {
             refused(admin, key, "9".repeat(256), range);
             refused(admin, key, "1.5", range);
             assertThat(value(key)).as(key + " after refused values").isEqualTo(Integer.toString(max));
+            assertThat(logsBy(adminId)).as(key + " refusals must not audit").isEqualTo(logsBeforeMax + 1);
         }
         // Spaces around the number are dropped and leading zeros too
         setting(admin, "posts_per_day", "  007 ").andExpect(status().isOk());
@@ -202,9 +233,11 @@ class AdminConfigFlowTest {
         MockHttpSession admin = signIn(adminId);
         for (String key : NOT_APPLIED) {
             String before = value(key);
+            long logsBefore = logsBy(adminId);
             setting(admin, key, "5").andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value(AdminConfigService.NOT_APPLIED));
             assertThat(value(key)).as(key).isEqualTo(before);
+            assertThat(logsBy(adminId)).as(key + " refused audit").isEqualTo(logsBefore);
         }
         setting(admin, "no_such_setting", "5").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Không tìm thấy cấu hình với mã: no_such_setting"));
@@ -286,6 +319,22 @@ class AdminConfigFlowTest {
         String first = "kiếm tiền " + tag;
         long id = keywordId(addKeyword(admin, "  Kiếm Tiền " + tag.toUpperCase() + "  ").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.keyword").value(first)));
+        String allKeywords = mvc.perform(get("/api/admin/keywords").session(admin)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        List<Map<String, Object>> listed = JsonPath.read(allKeywords, "$.data");
+        Map<String, Object> listedFirst = listed.stream().filter(item -> first.equals(item.get("keyword")))
+                .findFirst().orElseThrow();
+        assertThat(listedFirst.get("creatorName")).isEqualTo(jdbc.queryForObject(
+                "SELECT display_name FROM users WHERE id = ?", String.class, adminId));
+        assertThat(allKeywords).doesNotContain("passwordHash", "password_hash");
+        String filteredKeywords = mvc.perform(get("/api/admin/keywords").param("search", tag).session(admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(JsonPath.<List<Map<String, Object>>>read(filteredKeywords, "$.data"))
+                .extracting(item -> item.get("keyword")).contains(first);
+        mvc.perform(get("/api/admin/keywords").param("search", "no-match-" + tag).session(admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
+        String firstSentence = "Từ khóa kiểm tra " + first + " ở đây.";
+        assertThat(contentFilter.bannedKeyword(firstSentence)).contains(first);
         addKeyword(admin, "Kiếm-Tiền-" + tag.toUpperCase()).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Từ khóa này trùng với “" + first + "” đã có."));
         // Fullwidth letters: the database treats them as the same word too
@@ -301,10 +350,15 @@ class AdminConfigFlowTest {
 
         // Deleted, the same words can be added again in another spelling
         mvc.perform(withCsrf(delete("/api/admin/keywords/" + id), admin)).andExpect(status().isOk());
-        addKeyword(admin, "kiếm-tiền " + tag).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.keyword").value("kiếm-tiền " + tag));
-        // The filter uses new keywords at once
-        assertThat(contentFilter.bannedKeyword("Hôm nay kiếm tiền " + tag + " dễ lắm")).contains("kiếm-tiền " + tag);
+        assertThat(contentFilter.bannedKeyword(firstSentence)).isEmpty();
+        mvc.perform(withCsrf(delete("/api/admin/keywords/999999999"), admin)).andExpect(status().isNotFound());
+        String second = "kiếm-tiền " + tag;
+        long recreatedId = keywordId(addKeyword(admin, second).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.keyword").value(second)));
+        assertThat(contentFilter.bannedKeyword("Hôm nay kiếm tiền " + tag + " dễ lắm")).contains(second);
+        mvc.perform(withCsrf(delete("/api/admin/keywords/" + recreatedId), admin)).andExpect(status().isOk());
+        assertThat(contentFilter.bannedKeyword("Hôm nay kiếm tiền " + tag + " dễ lắm")).isEmpty();
+        assertThat(contentFilter.bannedKeyword(firstSentence)).isEmpty();
         assertThat(contentFilter.bannedKeyword("これは詐欺です")).contains("詐欺");
     }
 
@@ -341,6 +395,13 @@ class AdminConfigFlowTest {
         // (MySQL's JSON type keeps the keys in its own order)
         assertThat(jsonOf(locked.get("new_value"))).containsOnly(Map.entry("status", "LOCKED"), Map.entry("reason", kept));
         assertThat((String) locked.get("description")).endsWith(". Lý do: " + kept).contains("thành LOCKED.");
+
+        mvc.perform(withCsrf(put("/api/admin/users/" + target + "/status"), admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("status", "LOCKED", "reason", "ignored no-op"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.message").value(AdminUserController.NO_CHANGE));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE actor_id = ? AND action = 'USER_STATUS_CHANGE' "
+                + "AND target_type = 'USER' AND target_id = ?", Integer.class, adminId, target)).isEqualTo(1);
 
         // Read back through the log API as the page does
         String page = mvc.perform(get("/api/admin/logs").param("action", "USER_STATUS_CHANGE").param("size", "100")
@@ -399,6 +460,39 @@ class AdminConfigFlowTest {
         assertThat(codeExists(ticketOpen)).as("ticket still valid").isTrue();
         assertThat(codeExists(codeOpen)).as("code still valid").isTrue();
         assertThat(codeExists(youngUsed)).as("younger than 7 days").isTrue();
+    }
+
+    @Test
+    void logRetentionUsesTheExactCutoffAndProcessesMultipleDeleteBatches() {
+        jdbc.update("UPDATE system_settings SET setting_value = '30' WHERE setting_key = 'log_keep_days'");
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Instant cutoff = now.minus(Duration.ofDays(30));
+        Instant expired = cutoff.minusSeconds(10);
+        Instant retained = cutoff.plusSeconds(10);
+        String prefix = "BATCH_RETENTION_" + tag + "_";
+        List<Object[]> oldRows = new ArrayList<>();
+        for (int i = 0; i < 1001; i++) {
+            oldRows.add(new Object[] {prefix + i, Timestamp.from(expired)});
+        }
+        jdbc.batchUpdate("INSERT INTO activity_logs (action, target_type, description, created_at) "
+                + "VALUES ('TEST_RETENTION', 'TEST', ?, ?)", oldRows);
+        jdbc.update("INSERT INTO activity_logs (action, target_type, description, created_at) "
+                + "VALUES ('TEST_RETENTION', 'TEST', ?, ?)", prefix + "retained", Timestamp.from(retained));
+        jdbc.update("INSERT INTO activity_logs (action, target_type, description, created_at) "
+                + "VALUES ('TEST_RETENTION', 'TEST', ?, ?)", prefix + "exact", Timestamp.from(cutoff));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE description LIKE ?", Long.class,
+                prefix + "%")).isEqualTo(1003);
+
+        ActivityLogService fixedClockPurge = new ActivityLogService(logRepository, jdbc, json, systemSettings,
+                transactionManager, Clock.fixed(now, ZoneOffset.UTC));
+        fixedClockPurge.purgeOldLogs();
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE description LIKE ?", Long.class,
+                prefix + "%")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE description = ?", Long.class,
+                prefix + "retained")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE description = ?", Long.class,
+                prefix + "exact")).isEqualTo(1);
     }
 
     // ---------------------------------------------------------------- helpers

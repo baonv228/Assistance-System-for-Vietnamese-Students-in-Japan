@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 
 /** The signed-in user's own page ("Tôi"). /api/me/** requires login (see SecurityConfig). */
 @RestController
