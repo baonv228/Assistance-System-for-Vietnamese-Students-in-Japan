@@ -262,7 +262,7 @@ class EventReviewPublishServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("02. awardOnce, retryPending (UTC-184 → UTC-187)")
+    @DisplayName("02. awardOnce, retryPending (UTC-184 → UTC-188)")
     class AwardAndRetry {
 
         @Test
@@ -306,6 +306,23 @@ class EventReviewPublishServiceTest {
 
             verify(notifications).send(AUTHOR_ID, NotificationService.CONTENT_PUBLISHED,
                     "Bản sửa review “sự kiện” đã qua kiểm duyệt ảnh/video và đã được đăng.", "REVIEW", REVIEW_ID);
+        }
+
+        @Test
+        @DisplayName("UTC-188 AF2 Quét lại theo trang: trang đủ 20 thì lần sau đọc tiếp sau review cuối, trang ngắn thì quay về đầu")
+        void utc188_retryPending_pagesThroughWaitingReviews() {
+            List<Long> fullPage = java.util.stream.LongStream.rangeClosed(101, 120).boxed().toList();
+            when(repository.processingReviewIds(NOW.minusSeconds(60), 0L, 20)).thenReturn(fullPage);
+            when(repository.processingReviewIds(NOW.minusSeconds(60), 120L, 20)).thenReturn(List.of(121L));
+
+            service.retryPending();   // page 1: 20 reviews, a full page
+            service.retryPending();   // page 2 starts after review 120 and is short
+            service.retryPending();   // so the next run starts from the oldest again
+
+            var order = org.mockito.Mockito.inOrder(repository);
+            order.verify(repository).processingReviewIds(NOW.minusSeconds(60), 0L, 20);
+            order.verify(repository).processingReviewIds(NOW.minusSeconds(60), 120L, 20);
+            order.verify(repository).processingReviewIds(NOW.minusSeconds(60), 0L, 20);
         }
     }
 }

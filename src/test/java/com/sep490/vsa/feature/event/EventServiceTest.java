@@ -684,11 +684,12 @@ class EventServiceTest {
         @Test
         @DisplayName("UTC-041 Tọa độ được làm tròn 6 chữ số thập phân")
         void utc041_coordinatesRoundedTo6Decimals() {
-            service.create(MOD_ID, request("Hanabi", TODAY, TODAY, "Ueno", new BigDecimal("35.71480049"),
+            // Both values have a 6th decimal that rounding to fewer digits would lose
+            service.create(MOD_ID, request("Hanabi", TODAY, TODAY, "Ueno", new BigDecimal("35.7148005"),
                     new BigDecimal("139.79670051"), null, null), null);
 
             CleanEvent e = insertedEvent();
-            assertThat(e.lat()).isEqualByComparingTo("35.714800");
+            assertThat(e.lat()).isEqualByComparingTo("35.714801");
             assertThat(e.lng()).isEqualByComparingTo("139.796701");
         }
 
@@ -927,13 +928,15 @@ class EventServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-066 Postcondition: sự kiện vừa đăng nằm trong danh sách công khai")
-        void utc066_createdEventAppearsInList() {
-            service.create(MOD_ID, request(), null);
-            EventRow stored = repository.event(EVENT_ID).orElseThrow();
-            when(repository.events(null)).thenReturn(List.of(stored));
+        @DisplayName("UTC-066 Postcondition: thẻ trả về sau khi đăng được đọc lại từ CSDL")
+        void utc066_savedCardReadBackAfterInsert() {
+            ModSaved saved = service.create(MOD_ID, request(), null);
 
-            assertThat(service.list(null)).extracting(EventCard::id).containsExactly(EVENT_ID);
+            var order = org.mockito.Mockito.inOrder(repository);
+            order.verify(repository).insertEvent(any(), eq(MOD_ID), eq(NOW));
+            order.verify(repository).event(EVENT_ID);
+            assertThat(saved.event().id()).isEqualTo(EVENT_ID);
+            assertThat(saved.event().title()).isEqualTo("Lễ hội " + EVENT_ID);
         }
     }
 

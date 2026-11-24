@@ -892,12 +892,13 @@ class EventReviewServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-144 Giữ ảnh theo thứ tự mới người dùng chọn")
+        @DisplayName("UTC-144 Giữ ảnh theo thứ tự mới người dùng chọn, id lặp lại chỉ tính một lần")
         void utc144_keptPhotosReordered() {
-            update(4, CONTENT, List.of(2L, 1L), null, null);
+            update(4, CONTENT, List.of(2L, 1L, 2L), null, null);
 
             verify(repository).setMediaOrder(REVIEW_ID, 2L, 0);
             verify(repository).setMediaOrder(REVIEW_ID, 1L, 1);
+            verify(repository, never()).setMediaOrder(REVIEW_ID, 2L, 2);
             verify(repository).unlinkMedia(REVIEW_ID, List.of());
         }
 
