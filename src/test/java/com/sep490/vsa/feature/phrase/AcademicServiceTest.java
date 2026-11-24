@@ -136,15 +136,27 @@ class AcademicServiceTest {
         verify(activityLog, never()).recordLog(any(), anyString(), anyString(), any(), any(), any(), any());
     }
 
+    /** The editor's topic action is in the activity log with this description (GBR-17). */
+    private void verifyTopicLogged(String action, String description) {
+        verify(activityLog).recordLog(eq(EDITOR_ID), eq(action), eq("LEARNING_TOPIC"), isNull(), any(), any(),
+                eq(description));
+    }
+
+    /** The editor's action on phrase 501 is in the activity log with this description (GBR-17). */
+    private void verifyPhraseLogged(String action, String description) {
+        verify(activityLog).recordLog(eq(EDITOR_ID), eq(action), eq("PHRASE"), eq(PHRASE_ID), any(), any(),
+                eq(description));
+    }
+
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("01. createTopic – UC 9 Tạo chủ đề học tiếng Nhật (UTC-051 → UTC-062)")
+    @DisplayName("01. createTopic – UC 9 Tạo chủ đề học tiếng Nhật (UTC-001 → UTC-012)")
     class CreateTopic {
 
         @Test
-        @DisplayName("UTC-051 Dữ liệu hợp lệ: chủ đề được lưu")
-        void utc051_createTopic_validData_saved() {
+        @DisplayName("UTC-001 Dữ liệu hợp lệ: chủ đề được lưu")
+        void utc001_createTopic_validData_saved() {
             service.createTopic(EDITOR_ID, new TopicRequest("Ở nhà trọ", "home"));
 
             String expectedId = "t" + Long.toString(NOW.toEpochMilli(), 36);
@@ -152,8 +164,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-052 Thêm chủ đề: ghi nhật ký")
-        void utc052_createTopic_writesActivityLog() {
+        @DisplayName("UTC-002 Thêm chủ đề: ghi nhật ký")
+        void utc002_createTopic_writesActivityLog() {
             service.createTopic(EDITOR_ID, new TopicRequest("Ở nhà trọ", "home"));
 
             verify(activityLog).recordLog(eq(EDITOR_ID), eq("LEARNING_TOPIC_CREATED"), eq("LEARNING_TOPIC"), isNull(),
@@ -161,27 +173,32 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-053 Không chọn biểu tượng: dùng mặc định")
-        void utc053_createTopic_noIcon_usesDefaultLabel() {
+        @DisplayName("UTC-003 Không chọn biểu tượng: dùng mặc định")
+        void utc003_createTopic_noIcon_usesDefaultLabel() {
             service.createTopic(EDITOR_ID, new TopicRequest("Ở nhà trọ", null));
             service.createTopic(EDITOR_ID, new TopicRequest("Đi ngân hàng", "  "));
 
             verify(repository).insertTopic(anyString(), eq("Ở nhà trọ"), eq("label"));
             verify(repository).insertTopic(anyString(), eq("Đi ngân hàng"), eq("label"));
+
+            verifyTopicLogged("LEARNING_TOPIC_CREATED", "Thêm chủ đề học \"Ở nhà trọ\"");
+            verifyTopicLogged("LEARNING_TOPIC_CREATED", "Thêm chủ đề học \"Đi ngân hàng\"");
         }
 
         @Test
-        @DisplayName("UTC-054 Tên có khoảng trắng thừa: được làm gọn")
-        void utc054_createTopic_extraSpaces_trimmedAndMerged() {
+        @DisplayName("UTC-004 Tên có khoảng trắng thừa: được làm gọn")
+        void utc004_createTopic_extraSpaces_trimmedAndMerged() {
             service.createTopic(EDITOR_ID, new TopicRequest("   Ở   nhà    trọ  ", "home"));
 
             verify(repository).insertTopic(anyString(), eq("Ở nhà trọ"), eq("home"));
+
+            verifyTopicLogged("LEARNING_TOPIC_CREATED", "Thêm chủ đề học \"Ở nhà trọ\"");
         }
 
         @ParameterizedTest(name = "[{index}] tên \"{0}\"")
         @ValueSource(strings = {"", "   ", "\t\n"})
-        @DisplayName("UTC-055 Tên trống: báo lỗi")
-        void utc055_createTopic_emptyName_400(String name) {
+        @DisplayName("UTC-005 Tên trống: báo lỗi")
+        void utc005_createTopic_emptyName_400(String name) {
             ApiException e = apiError(() -> service.createTopic(EDITOR_ID, new TopicRequest(name, "home")));
 
             assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -192,25 +209,27 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-056 Không gửi dữ liệu: báo lỗi")
-        void utc056_createTopic_noData_400() {
+        @DisplayName("UTC-006 Không gửi dữ liệu: báo lỗi")
+        void utc006_createTopic_noData_400() {
             assertApiError(() -> service.createTopic(EDITOR_ID, null), HttpStatus.BAD_REQUEST,
                     "Hãy nhập tên chủ đề học.");
         }
 
         @Test
-        @DisplayName("UTC-057 Tên 60 ký tự: được lưu")
-        void utc057_createTopic_name60Chars_saved() {
+        @DisplayName("UTC-007 Tên 60 ký tự: được lưu")
+        void utc007_createTopic_name60Chars_saved() {
             String name = "a".repeat(60);
 
             service.createTopic(EDITOR_ID, new TopicRequest(name, "home"));
 
             verify(repository).insertTopic(anyString(), eq(name), eq("home"));
+
+            verifyTopicLogged("LEARNING_TOPIC_CREATED", "Thêm chủ đề học \"" + name + "\"");
         }
 
         @Test
-        @DisplayName("UTC-058 Tên 61 ký tự: báo lỗi")
-        void utc058_createTopic_name61Chars_400() {
+        @DisplayName("UTC-008 Tên 61 ký tự: báo lỗi")
+        void utc008_createTopic_name61Chars_400() {
             ApiException e = apiError(() -> service.createTopic(EDITOR_ID, new TopicRequest("a".repeat(61), "home")));
 
             assertThat(e.getMessage()).isEqualTo("Tên chủ đề học tối đa 60 ký tự.");
@@ -220,8 +239,8 @@ class AcademicServiceTest {
 
         @ParameterizedTest(name = "[{index}] tên \"{0}\" trùng \"Thanh toán\"")
         @ValueSource(strings = {"Thanh toán", "thanh toan", "THANH TOÁN", "Thanh  toán", "ThanhToán", "thanh-toán"})
-        @DisplayName("UTC-059 Tên trùng (kể cả khác dấu): báo lỗi")
-        void utc059_createTopic_duplicateName_400(String name) {
+        @DisplayName("UTC-009 Tên trùng (kể cả khác dấu): báo lỗi")
+        void utc009_createTopic_duplicateName_400(String name) {
             ApiException e = apiError(() -> service.createTopic(EDITOR_ID, new TopicRequest(name, "home")));
 
             assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -232,17 +251,19 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-060 Tên gần giống: không bị coi là trùng")
-        void utc060_createTopic_similarName_saved() {
+        @DisplayName("UTC-010 Tên gần giống: không bị coi là trùng")
+        void utc010_createTopic_similarName_saved() {
             service.createTopic(EDITOR_ID, new TopicRequest("Thanh toán online", "payments"));
 
             verify(repository).insertTopic(anyString(), eq("Thanh toán online"), eq("payments"));
+
+            verifyTopicLogged("LEARNING_TOPIC_CREATED", "Thêm chủ đề học \"Thanh toán online\"");
         }
 
         @ParameterizedTest(name = "[{index}] biểu tượng \"{0}\"")
         @ValueSource(strings = {"rocket", "<script>", "LABEL"})
-        @DisplayName("UTC-061 Biểu tượng lạ: báo lỗi")
-        void utc061_createTopic_unknownIcon_400(String icon) {
+        @DisplayName("UTC-011 Biểu tượng lạ: báo lỗi")
+        void utc011_createTopic_unknownIcon_400(String icon) {
             ApiException e = apiError(() -> service.createTopic(EDITOR_ID, new TopicRequest("Ở nhà trọ", icon)));
 
             assertThat(e.getMessage()).isEqualTo("Hãy chọn một biểu tượng trong danh sách.");
@@ -251,8 +272,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-062 Mã trùng: dùng mã kế tiếp")
-        void utc062_createTopic_idTaken_nextIdUsed() {
+        @DisplayName("UTC-012 Mã trùng: dùng mã kế tiếp")
+        void utc012_createTopic_idTaken_nextIdUsed() {
             String taken = "t" + Long.toString(NOW.toEpochMilli(), 36);
             topicNames.put(taken, "Chủ đề cũ");
 
@@ -260,18 +281,20 @@ class AcademicServiceTest {
 
             verify(repository).insertTopic(eq("t" + Long.toString(NOW.toEpochMilli() + 1, 36)), anyString(),
                     anyString());
+
+            verifyTopicLogged("LEARNING_TOPIC_CREATED", "Thêm chủ đề học \"Ở nhà trọ\"");
         }
     }
 
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("02. updateTopic – UC 10 Cập nhật chủ đề học tiếng Nhật (UTC-063 → UTC-072)")
+    @DisplayName("02. updateTopic – UC 10 Cập nhật chủ đề học tiếng Nhật (UTC-013 → UTC-022)")
     class UpdateTopic {
 
         @Test
-        @DisplayName("UTC-063 Đổi tên: lưu và ghi nhật ký")
-        void utc063_updateTopic_rename_savedAndLogged() {
+        @DisplayName("UTC-013 Đổi tên: lưu và ghi nhật ký")
+        void utc013_updateTopic_rename_savedAndLogged() {
             boolean changed = service.updateTopic(EDITOR_ID, "pay", new TopicRequest("Trả tiền", "payments"));
 
             assertThat(changed).isTrue();
@@ -281,8 +304,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-064 Chỉ đổi biểu tượng: được lưu")
-        void utc064_updateTopic_iconOnly_saved() {
+        @DisplayName("UTC-014 Chỉ đổi biểu tượng: được lưu")
+        void utc014_updateTopic_iconOnly_saved() {
             boolean changed = service.updateTopic(EDITOR_ID, "pay", new TopicRequest("Thanh toán", "shopping_cart"));
 
             assertThat(changed).isTrue();
@@ -292,17 +315,19 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-065 Đổi hoa thường tên mình: không báo trùng")
-        void utc065_updateTopic_changeCaseOfOwnName_notDuplicate() {
+        @DisplayName("UTC-015 Đổi hoa thường tên mình: không báo trùng")
+        void utc015_updateTopic_changeCaseOfOwnName_notDuplicate() {
             boolean changed = service.updateTopic(EDITOR_ID, "pay", new TopicRequest("THANH TOÁN", "payments"));
 
             assertThat(changed).isTrue();
             verify(repository).updateTopic("pay", "THANH TOÁN", "payments");
+
+            verifyTopicLogged("LEARNING_TOPIC_UPDATED", "Sửa chủ đề học \"Thanh toán\" thành \"THANH TOÁN\"");
         }
 
         @Test
-        @DisplayName("UTC-066 Không sửa gì: không lưu, không ghi nhật ký")
-        void utc066_updateTopic_noChange_nothingSaved() {
+        @DisplayName("UTC-016 Không sửa gì: không lưu, không ghi nhật ký")
+        void utc016_updateTopic_noChange_nothingSaved() {
             boolean changed = service.updateTopic(EDITOR_ID, "pay", new TopicRequest("  Thanh   toán ", "payments"));
 
             assertThat(changed).isFalse();
@@ -311,23 +336,23 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-067 Sửa thành tên trống: báo lỗi")
-        void utc067_updateTopic_emptyName_400() {
+        @DisplayName("UTC-017 Sửa thành tên trống: báo lỗi")
+        void utc017_updateTopic_emptyName_400() {
             assertApiError(() -> service.updateTopic(EDITOR_ID, "pay", new TopicRequest(" ", "payments")),
                     HttpStatus.BAD_REQUEST, "Hãy nhập tên chủ đề học.");
             verify(repository, never()).updateTopic(anyString(), anyString(), anyString());
         }
 
         @Test
-        @DisplayName("UTC-068 Sửa tên quá 60 ký tự: báo lỗi")
-        void utc068_updateTopic_nameOver60_400() {
+        @DisplayName("UTC-018 Sửa tên quá 60 ký tự: báo lỗi")
+        void utc018_updateTopic_nameOver60_400() {
             assertApiError(() -> service.updateTopic(EDITOR_ID, "pay", new TopicRequest("x".repeat(61), "payments")),
                     HttpStatus.BAD_REQUEST, "Tên chủ đề học tối đa 60 ký tự.");
         }
 
         @Test
-        @DisplayName("UTC-069 Sửa trùng tên chủ đề khác: báo lỗi")
-        void utc069_updateTopic_nameOfAnotherTopic_400() {
+        @DisplayName("UTC-019 Sửa trùng tên chủ đề khác: báo lỗi")
+        void utc019_updateTopic_nameOfAnotherTopic_400() {
             assertApiError(() -> service.updateTopic(EDITOR_ID, "pay", new TopicRequest("goi mon", "payments")),
                     HttpStatus.BAD_REQUEST, "Chủ đề học này đã có.");
             verify(repository, never()).updateTopic(anyString(), anyString(), anyString());
@@ -335,15 +360,15 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-070 Sửa sang biểu tượng lạ: báo lỗi")
-        void utc070_updateTopic_unknownIcon_400() {
+        @DisplayName("UTC-020 Sửa sang biểu tượng lạ: báo lỗi")
+        void utc020_updateTopic_unknownIcon_400() {
             assertApiError(() -> service.updateTopic(EDITOR_ID, "pay", new TopicRequest("Thanh toán", "rocket")),
                     HttpStatus.BAD_REQUEST, "Hãy chọn một biểu tượng trong danh sách.");
         }
 
         @Test
-        @DisplayName("UTC-071 Sửa chủ đề đã xóa: không tìm thấy")
-        void utc071_updateTopic_deletedTopic_404() {
+        @DisplayName("UTC-021 Sửa chủ đề đã xóa: không tìm thấy")
+        void utc021_updateTopic_deletedTopic_404() {
             when(repository.lockTopic("gone")).thenReturn(Optional.empty());
 
             assertApiError(() -> service.updateTopic(EDITOR_ID, "gone", new TopicRequest("Tên mới", "home")),
@@ -352,24 +377,26 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-072 Sửa chủ đề: mẫu câu giữ nguyên")
-        void utc072_updateTopic_phrasesUntouched() {
+        @DisplayName("UTC-022 Sửa chủ đề: mẫu câu giữ nguyên")
+        void utc022_updateTopic_phrasesUntouched() {
             service.updateTopic(EDITOR_ID, "pay", new TopicRequest("Trả tiền", "payments"));
 
             verify(repository, never()).setTopics(anyLong(), anyList());
             verify(repository, never()).deleteTopic(anyString());
+
+            verifyTopicLogged("LEARNING_TOPIC_UPDATED", "Sửa chủ đề học \"Thanh toán\" thành \"Trả tiền\"");
         }
     }
 
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("03. deleteTopic – UC 11 Xóa chủ đề học tiếng Nhật (UTC-073 → UTC-076)")
+    @DisplayName("03. deleteTopic – UC 11 Xóa chủ đề học tiếng Nhật (UTC-023 → UTC-026)")
     class DeleteTopic {
 
         @Test
-        @DisplayName("UTC-073 Xóa chủ đề: chỉ gỡ nhãn khỏi mẫu câu")
-        void utc073_deleteTopic_removesLabelsOnly() {
+        @DisplayName("UTC-023 Xóa chủ đề: chỉ gỡ nhãn khỏi mẫu câu")
+        void utc023_deleteTopic_removesLabelsOnly() {
             when(repository.deleteTopic("pay")).thenReturn(4);
 
             service.deleteTopic(EDITOR_ID, "pay");
@@ -377,11 +404,13 @@ class AcademicServiceTest {
             verify(repository).deleteTopic("pay");
             verify(repository, never()).softDeletePhrase(anyLong(), any());
             verify(repository, never()).setTopics(anyLong(), anyList());
+
+            verifyTopicLogged("LEARNING_TOPIC_DELETED", "Xóa chủ đề học \"Thanh toán\"");
         }
 
         @Test
-        @DisplayName("UTC-074 Xóa chủ đề: ghi nhật ký")
-        void utc074_deleteTopic_writesActivityLog() {
+        @DisplayName("UTC-024 Xóa chủ đề: ghi nhật ký")
+        void utc024_deleteTopic_writesActivityLog() {
             when(repository.deleteTopic("pay")).thenReturn(4);
 
             service.deleteTopic(EDITOR_ID, "pay");
@@ -394,8 +423,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-075 Xóa chủ đề đã xóa: không tìm thấy")
-        void utc075_deleteTopic_alreadyDeleted_404() {
+        @DisplayName("UTC-025 Xóa chủ đề đã xóa: không tìm thấy")
+        void utc025_deleteTopic_alreadyDeleted_404() {
             when(repository.lockTopic("gone")).thenReturn(Optional.empty());
 
             assertApiError(() -> service.deleteTopic(EDITOR_ID, "gone"), HttpStatus.NOT_FOUND,
@@ -405,26 +434,28 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-076 Xóa chủ đề: khóa danh sách trước")
-        void utc076_deleteTopic_locksTopicListFirst() {
+        @DisplayName("UTC-026 Xóa chủ đề: khóa danh sách trước")
+        void utc026_deleteTopic_locksTopicListFirst() {
             service.deleteTopic(EDITOR_ID, "pay");
 
             var order = inOrder(repository);
             order.verify(repository).lockTopicNames();
             order.verify(repository).lockTopic("pay");
             order.verify(repository).deleteTopic("pay");
+
+            verifyTopicLogged("LEARNING_TOPIC_DELETED", "Xóa chủ đề học \"Thanh toán\"");
         }
     }
 
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("04. topics – UC 9 Bảng chủ đề học (UTC-077)")
+    @DisplayName("04. topics – UC 9 Bảng chủ đề học (UTC-027)")
     class Topics {
 
         @Test
-        @DisplayName("UTC-077 Bảng chủ đề: đọc đúng, không ghi nhật ký")
-        void utc077_topics_listsTopicsWithoutLog() {
+        @DisplayName("UTC-027 Bảng chủ đề: đọc đúng, không ghi nhật ký")
+        void utc027_topics_listsTopicsWithoutLog() {
             TopicRow pay = new TopicRow("pay", "Thanh toán", "payments", 5, List.of("konbini"));
             when(repository.topics()).thenReturn(List.of(pay));
 
@@ -436,12 +467,12 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("05. options – UC 9, UC 12 Lựa chọn của form (UTC-078)")
+    @DisplayName("05. options – UC 9, UC 12 Lựa chọn của form (UTC-028)")
     class Options {
 
         @Test
-        @DisplayName("UTC-078 Form có danh sách biểu tượng")
-        void utc078_options_listIcons() {
+        @DisplayName("UTC-028 Form có danh sách biểu tượng")
+        void utc028_options_listIcons() {
             assertThat(service.options().icons()).contains("label", "payments", "home", "train");
         }
     }
@@ -449,12 +480,12 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("06. library – UC 12 Thư viện mẫu câu (UTC-079 → UTC-081)")
+    @DisplayName("06. library – UC 12 Thư viện mẫu câu (UTC-029 → UTC-031)")
     class Library {
 
         @Test
-        @DisplayName("UTC-079 Lọc thư viện, 20 mục mỗi trang")
-        void utc079_library_filtersAndPageSize20() {
+        @DisplayName("UTC-029 Lọc thư viện, 20 mục mỗi trang")
+        void utc029_library_filtersAndPageSize20() {
             when(repository.libraryTotal(any(), any(), any(), any())).thenReturn(45L);
 
             var page = service.library(" konbini ", "", "VOCAB", "  ", 2);
@@ -466,8 +497,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-080 Số trang âm: về trang đầu")
-        void utc080_library_negativePage_firstPage() {
+        @DisplayName("UTC-030 Số trang âm: về trang đầu")
+        void utc030_library_negativePage_firstPage() {
             var page = service.library(null, null, null, null, -5);
 
             verify(repository).library(null, null, null, null, 0);
@@ -475,8 +506,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-081 Xem thư viện: không ghi nhật ký")
-        void utc081_library_writesNoActivityLog() {
+        @DisplayName("UTC-031 Xem thư viện: không ghi nhật ký")
+        void utc031_library_writesNoActivityLog() {
             service.library(null, null, null, null, 0);
 
             verifyNoInteractions(activityLog);
@@ -486,12 +517,12 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("07. phrase – UC 13 Mở một mục để sửa (UTC-082 → UTC-083)")
+    @DisplayName("07. phrase – UC 13 Mở một mục để sửa (UTC-032 → UTC-033)")
     class OpenPhrase {
 
         @Test
-        @DisplayName("UTC-082 Mở mục còn tồn tại: trả về dữ liệu")
-        void utc082_openPhrase_found_returnsRow() {
+        @DisplayName("UTC-032 Mở mục còn tồn tại: trả về dữ liệu")
+        void utc032_openPhrase_found_returnsRow() {
             LibraryRow row = service.phrase(PHRASE_ID);
 
             assertThat(row.id()).isEqualTo(PHRASE_ID);
@@ -499,8 +530,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-083 Mở mục đã xóa: không tìm thấy")
-        void utc083_openPhrase_notFound_404() {
+        @DisplayName("UTC-033 Mở mục đã xóa: không tìm thấy")
+        void utc033_openPhrase_notFound_404() {
             when(repository.libraryRow(999L)).thenReturn(null);
 
             assertApiError(() -> service.phrase(999L), HttpStatus.NOT_FOUND, "Không tìm thấy mẫu câu.");
@@ -510,12 +541,12 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("08. createPhrase – UC 12 Tạo mục từ vựng / mẫu câu (UTC-084 → UTC-106)")
+    @DisplayName("08. createPhrase – UC 12 Tạo mục từ vựng / mẫu câu (UTC-034 → UTC-056)")
     class CreatePhrase {
 
         @Test
-        @DisplayName("UTC-084 Dữ liệu hợp lệ: mục được lưu")
-        void utc084_createPhrase_validData_saved() {
+        @DisplayName("UTC-034 Dữ liệu hợp lệ: mục được lưu")
+        void utc034_createPhrase_validData_saved() {
             SaveResult result = service.createPhrase(EDITOR_ID, request());
 
             ArgumentCaptor<PhraseRow> row = ArgumentCaptor.forClass(PhraseRow.class);
@@ -531,20 +562,24 @@ class AcademicServiceTest {
             assertThat(result.changed()).isTrue();
             assertThat(result.message()).isEqualTo(
                     "Đã thêm. Mẫu câu hiện ở mọi địa điểm \"Cửa hàng tiện lợi\" và trong tab Nhật ngữ.");
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-085 Thêm Từ vựng: thông báo ghi \"Từ vựng\"")
-        void utc085_createVocab_messageSaysVocab() {
+        @DisplayName("UTC-035 Thêm Từ vựng: thông báo ghi \"Từ vựng\"")
+        void utc035_createVocab_messageSaysVocab() {
             SaveResult result = service.createPhrase(EDITOR_ID, request("konbini", "VOCAB", "領収書", "ryōshūsho",
                     "hóa đơn", List.of("pay"), false, null));
 
             assertThat(result.message()).startsWith("Đã thêm. Từ vựng hiện ở mọi địa điểm");
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: 領収書");
         }
 
         @Test
-        @DisplayName("UTC-086 Thêm mục: ghi nhật ký")
-        void utc086_createPhrase_writesActivityLog() {
+        @DisplayName("UTC-036 Thêm mục: ghi nhật ký")
+        void utc036_createPhrase_writesActivityLog() {
             service.createPhrase(EDITOR_ID, request());
 
             verify(activityLog).recordLog(eq(EDITOR_ID), eq("PHRASE_CREATED"), eq("PHRASE"), eq(PHRASE_ID), isNull(),
@@ -552,30 +587,34 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-087 Không chọn chủ đề: vẫn lưu")
-        void utc087_createPhrase_noTopic_savedPlaceOnlyMessage() {
+        @DisplayName("UTC-037 Không chọn chủ đề: vẫn lưu")
+        void utc037_createPhrase_noTopic_savedPlaceOnlyMessage() {
             SaveResult result = service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "領収書をください。", "",
                     "Cho tôi xin hóa đơn.", null, false, null));
 
             assertThat(result.saved()).isTrue();
             assertThat(result.message()).isEqualTo("Đã thêm. Mẫu câu hiện ở mọi địa điểm \"Cửa hàng tiện lợi\".");
             verify(repository).setTopics(PHRASE_ID, List.of());
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-088 Để trống romaji: vẫn lưu")
-        void utc088_createPhrase_noRomaji_saved() {
+        @DisplayName("UTC-038 Để trống romaji: vẫn lưu")
+        void utc038_createPhrase_noRomaji_saved() {
             service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "領収書をください。", null,
                     "Cho tôi xin hóa đơn.", List.of(), false, null));
 
             ArgumentCaptor<PhraseRow> row = ArgumentCaptor.forClass(PhraseRow.class);
             verify(repository).insertPhrase(row.capture(), any());
             assertThat(row.getValue().romaji()).isEmpty();
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-089 Khoảng trắng, chủ đề lặp: được làm gọn")
-        void utc089_createPhrase_extraSpacesAndRepeatedTopics_cleaned() {
+        @DisplayName("UTC-039 Khoảng trắng, chủ đề lặp: được làm gọn")
+        void utc039_createPhrase_extraSpacesAndRepeatedTopics_cleaned() {
             service.createPhrase(EDITOR_ID, request(" konbini ", " VOCAB ", "  レシート  ", "  reshiito ",
                     "  hóa đơn  ", List.of(" pay", "pay", "order"), false, null));
 
@@ -587,22 +626,26 @@ class AcademicServiceTest {
             assertThat(row.getValue().romaji()).isEqualTo("reshiito");
             assertThat(row.getValue().meaningVi()).isEqualTo("hóa đơn");
             verify(repository).setTopics(PHRASE_ID, List.of("order", "pay"));
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: レシート");
         }
 
         @ParameterizedTest(name = "[{index}] tiếng Nhật \"{0}\"")
         @ValueSource(strings = {"ください", "レシート", "領収書", "ﾚｼｰﾄ", "Suica カード", "々"})
-        @DisplayName("UTC-090 Hiragana, katakana, kanji: hợp lệ")
-        void utc090_createPhrase_japaneseScripts_accepted(String japanese) {
+        @DisplayName("UTC-040 Hiragana, katakana, kanji: hợp lệ")
+        void utc040_createPhrase_japaneseScripts_accepted(String japanese) {
             SaveResult result = service.createPhrase(EDITOR_ID, request("konbini", "VOCAB", japanese, "", "nghĩa",
                     List.of(), false, null));
 
             assertThat(result.saved()).isTrue();
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: " + japanese);
         }
 
         @ParameterizedTest(name = "[{index}] tiếng Nhật \"{0}\"")
         @ValueSource(strings = {"Ryoushuusho o kudasai", "hóa đơn", "12345", "   ", "!!!"})
-        @DisplayName("UTC-091 Không có chữ Nhật: báo lỗi")
-        void utc091_createPhrase_noJapaneseCharacter_400(String japanese) {
+        @DisplayName("UTC-041 Không có chữ Nhật: báo lỗi")
+        void utc041_createPhrase_noJapaneseCharacter_400(String japanese) {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", japanese, "",
                     "nghĩa", List.of(), false, null)));
 
@@ -614,8 +657,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-092 Không chọn danh mục: báo lỗi")
-        void utc092_createPhrase_noCategory_400() {
+        @DisplayName("UTC-042 Không chọn danh mục: báo lỗi")
+        void utc042_createPhrase_noCategory_400() {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request(null, "PHRASE", "ください", "",
                     "nghĩa", List.of(), false, null)));
 
@@ -623,8 +666,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-093 Danh mục không còn: báo lỗi")
-        void utc093_createPhrase_categoryGone_400() {
+        @DisplayName("UTC-043 Danh mục không còn: báo lỗi")
+        void utc043_createPhrase_categoryGone_400() {
             when(repository.categoryExists("gone")).thenReturn(false);
 
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("gone", "PHRASE", "ください", "",
@@ -636,8 +679,8 @@ class AcademicServiceTest {
 
         @ParameterizedTest(name = "[{index}] loại \"{0}\"")
         @ValueSource(strings = {"", "WORD", "phrase", "vocab"})
-        @DisplayName("UTC-094 Loại không hợp lệ: báo lỗi")
-        void utc094_createPhrase_invalidKind_400(String kind) {
+        @DisplayName("UTC-044 Loại không hợp lệ: báo lỗi")
+        void utc044_createPhrase_invalidKind_400(String kind) {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", kind, "ください", "",
                     "nghĩa", List.of(), false, null)));
 
@@ -645,8 +688,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-095 Không chọn loại: báo lỗi")
-        void utc095_createPhrase_noKind_400() {
+        @DisplayName("UTC-045 Không chọn loại: báo lỗi")
+        void utc045_createPhrase_noKind_400() {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", null, "ください", "",
                     "nghĩa", List.of(), false, null)));
 
@@ -655,8 +698,8 @@ class AcademicServiceTest {
 
         @ParameterizedTest(name = "[{index}] nghĩa \"{0}\"")
         @ValueSource(strings = {"", "   "})
-        @DisplayName("UTC-096 Nghĩa trống: báo lỗi")
-        void utc096_createPhrase_emptyMeaning_400(String meaning) {
+        @DisplayName("UTC-046 Nghĩa trống: báo lỗi")
+        void utc046_createPhrase_emptyMeaning_400(String meaning) {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "ください", "",
                     meaning, List.of(), false, null)));
 
@@ -664,17 +707,19 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-097 Độ dài tối đa (200/200/300): được lưu")
-        void utc097_createPhrase_maxLengths_saved() {
+        @DisplayName("UTC-047 Độ dài tối đa (200/200/300): được lưu")
+        void utc047_createPhrase_maxLengths_saved() {
             SaveResult result = service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "あ".repeat(200),
                     "a".repeat(200), "n".repeat(300), List.of(), false, null));
 
             assertThat(result.saved()).isTrue();
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: " + "あ".repeat(200));
         }
 
         @Test
-        @DisplayName("UTC-098 Tiếng Nhật 201 ký tự: báo lỗi")
-        void utc098_createPhrase_japanese201Chars_400() {
+        @DisplayName("UTC-048 Tiếng Nhật 201 ký tự: báo lỗi")
+        void utc048_createPhrase_japanese201Chars_400() {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", "PHRASE",
                     "あ".repeat(201), "", "nghĩa", List.of(), false, null)));
 
@@ -682,8 +727,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-099 Romaji 201 ký tự: báo lỗi")
-        void utc099_createPhrase_romaji201Chars_400() {
+        @DisplayName("UTC-049 Romaji 201 ký tự: báo lỗi")
+        void utc049_createPhrase_romaji201Chars_400() {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "ください",
                     "a".repeat(201), "nghĩa", List.of(), false, null)));
 
@@ -691,8 +736,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-100 Nghĩa 301 ký tự: báo lỗi")
-        void utc100_createPhrase_meaning301Chars_400() {
+        @DisplayName("UTC-050 Nghĩa 301 ký tự: báo lỗi")
+        void utc050_createPhrase_meaning301Chars_400() {
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "ください", "",
                     "n".repeat(301), List.of(), false, null)));
 
@@ -700,8 +745,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-101 Nhiều ô sai: báo đủ lỗi một lần")
-        void utc101_createPhrase_manyErrors_allReportedAtOnce() {
+        @DisplayName("UTC-051 Nhiều ô sai: báo đủ lỗi một lần")
+        void utc051_createPhrase_manyErrors_allReportedAtOnce() {
             when(repository.topicExists("gone")).thenReturn(false);
 
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("", "X", "abc", "a".repeat(201),
@@ -715,8 +760,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-102 Chủ đề không còn: báo lỗi")
-        void utc102_createPhrase_topicGone_400() {
+        @DisplayName("UTC-052 Chủ đề không còn: báo lỗi")
+        void utc052_createPhrase_topicGone_400() {
             when(repository.topicExists("gone")).thenReturn(false);
 
             ApiException e = apiError(() -> service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "ください", "",
@@ -727,14 +772,14 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-103 Không gửi dữ liệu: báo lỗi")
-        void utc103_createPhrase_noData_400() {
+        @DisplayName("UTC-053 Không gửi dữ liệu: báo lỗi")
+        void utc053_createPhrase_noData_400() {
             assertApiError(() -> service.createPhrase(EDITOR_ID, null), HttpStatus.BAD_REQUEST, "Thiếu dữ liệu.");
         }
 
         @Test
-        @DisplayName("UTC-104 Trùng câu trong danh mục: hỏi lại")
-        void utc104_createPhrase_sameJapaneseInCategory_asksFirst() {
+        @DisplayName("UTC-054 Trùng câu trong danh mục: hỏi lại")
+        void utc054_createPhrase_sameJapaneseInCategory_asksFirst() {
             LibraryRow other = libraryRow(400L, "PHRASE", "領収書をください。");
             when(repository.duplicate("konbini", "領収書をください。", null)).thenReturn(Optional.of(400L));
             when(repository.libraryRow(400L)).thenReturn(other);
@@ -749,30 +794,34 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-105 \"Vẫn lưu\" khi trùng: được lưu")
-        void utc105_createPhrase_duplicateConfirmed_saved() {
+        @DisplayName("UTC-055 \"Vẫn lưu\" khi trùng: được lưu")
+        void utc055_createPhrase_duplicateConfirmed_saved() {
             SaveResult result = service.createPhrase(EDITOR_ID, request("konbini", "PHRASE", "領収書をください。", "",
                     "Cho tôi xin hóa đơn.", List.of("pay"), true, null));
 
             assertThat(result.saved()).isTrue();
             verify(repository, never()).duplicate(anyString(), anyString(), any());
             verify(repository).insertPhrase(any(), eq(NOW));
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-106 Kiểm tra trùng đúng danh mục")
-        void utc106_createPhrase_duplicateCheckUsesCategoryAndTrimmedJapanese() {
+        @DisplayName("UTC-056 Kiểm tra trùng đúng danh mục")
+        void utc056_createPhrase_duplicateCheckUsesCategoryAndTrimmedJapanese() {
             service.createPhrase(EDITOR_ID, request("super", "PHRASE", " 領収書をください。 ", "", "nghĩa", List.of(),
                     false, null));
 
             verify(repository).duplicate("super", "領収書をください。", null);
+
+            verifyPhraseLogged("PHRASE_CREATED", "Thêm mẫu câu: 領収書をください。");
         }
     }
 
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("09. updatePhrase – UC 13 Cập nhật mục từ vựng / mẫu câu (UTC-107 → UTC-123)")
+    @DisplayName("09. updatePhrase – UC 13 Cập nhật mục từ vựng / mẫu câu (UTC-057 → UTC-073)")
     class UpdatePhrase {
 
         private PhraseRequest changedMeaning(Long caseId) {
@@ -781,8 +830,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-107 Sửa nghĩa: được lưu")
-        void utc107_updatePhrase_validChange_saved() {
+        @DisplayName("UTC-057 Sửa nghĩa: được lưu")
+        void utc057_updatePhrase_validChange_saved() {
             SaveResult result = service.updatePhrase(EDITOR_ID, PHRASE_ID, changedMeaning(null));
 
             ArgumentCaptor<PhraseRow> row = ArgumentCaptor.forClass(PhraseRow.class);
@@ -794,11 +843,13 @@ class AcademicServiceTest {
             assertThat(result.saved()).isTrue();
             assertThat(result.changed()).isTrue();
             assertThat(result.message()).isEqualTo("Đã lưu thay đổi.");
+
+            verifyPhraseLogged("PHRASE_UPDATED", "Sửa mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-108 Sửa mục: ghi nhật ký")
-        void utc108_updatePhrase_writesActivityLog() {
+        @DisplayName("UTC-058 Sửa mục: ghi nhật ký")
+        void utc058_updatePhrase_writesActivityLog() {
             service.updatePhrase(EDITOR_ID, PHRASE_ID, changedMeaning(null));
 
             @SuppressWarnings("unchecked")
@@ -810,19 +861,21 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-109 Chỉ đổi chủ đề: được lưu")
-        void utc109_updatePhrase_topicsOnly_saved() {
+        @DisplayName("UTC-059 Chỉ đổi chủ đề: được lưu")
+        void utc059_updatePhrase_topicsOnly_saved() {
             SaveResult result = service.updatePhrase(EDITOR_ID, PHRASE_ID, request("konbini", "PHRASE",
                     "領収書をください。", "Ryōshūsho o kudasai.", "Cho tôi xin hóa đơn.", List.of("pay", "order"), false,
                     null));
 
             assertThat(result.changed()).isTrue();
             verify(repository).setTopics(PHRASE_ID, List.of("order", "pay"));
+
+            verifyPhraseLogged("PHRASE_UPDATED", "Sửa mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-110 Không sửa gì: không lưu")
-        void utc110_updatePhrase_noChange_nothingSaved() {
+        @DisplayName("UTC-060 Không sửa gì: không lưu")
+        void utc060_updatePhrase_noChange_nothingSaved() {
             SaveResult result = service.updatePhrase(EDITOR_ID, PHRASE_ID, request());
 
             assertThat(result.saved()).isTrue();
@@ -834,8 +887,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-111 Chủ đề khác thứ tự: không tính là sửa")
-        void utc111_updatePhrase_sameTopicsOtherOrder_noChange() {
+        @DisplayName("UTC-061 Chủ đề khác thứ tự: không tính là sửa")
+        void utc061_updatePhrase_sameTopicsOtherOrder_noChange() {
             when(repository.topicIdsOf(PHRASE_ID)).thenReturn(List.of("order", "pay"));
 
             SaveResult result = service.updatePhrase(EDITOR_ID, PHRASE_ID, request("konbini", "PHRASE",
@@ -846,16 +899,18 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-112 Kiểm tra trùng bỏ qua chính mục")
-        void utc112_updatePhrase_duplicateCheckExcludesItself() {
+        @DisplayName("UTC-062 Kiểm tra trùng bỏ qua chính mục")
+        void utc062_updatePhrase_duplicateCheckExcludesItself() {
             service.updatePhrase(EDITOR_ID, PHRASE_ID, changedMeaning(null));
 
             verify(repository).duplicate("konbini", "領収書をください。", PHRASE_ID);
+
+            verifyPhraseLogged("PHRASE_UPDATED", "Sửa mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-113 Sửa thành câu trùng: hỏi lại")
-        void utc113_updatePhrase_sameJapaneseAsOther_asksFirst() {
+        @DisplayName("UTC-063 Sửa thành câu trùng: hỏi lại")
+        void utc063_updatePhrase_sameJapaneseAsOther_asksFirst() {
             when(repository.duplicate("konbini", "レシートください。", PHRASE_ID)).thenReturn(Optional.of(402L));
             when(repository.libraryRow(402L)).thenReturn(libraryRow(402L, "PHRASE", "レシートください。"));
 
@@ -869,19 +924,21 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-114 \"Vẫn lưu\" khi trùng: được lưu")
-        void utc114_updatePhrase_duplicateConfirmed_saved() {
+        @DisplayName("UTC-064 \"Vẫn lưu\" khi trùng: được lưu")
+        void utc064_updatePhrase_duplicateConfirmed_saved() {
             SaveResult result = service.updatePhrase(EDITOR_ID, PHRASE_ID, request("konbini", "PHRASE",
                     "レシートください。", "", "Cho tôi hóa đơn.", List.of("pay"), true, null));
 
             assertThat(result.saved()).isTrue();
             verify(repository, never()).duplicate(anyString(), anyString(), any());
             verify(repository).updatePhrase(any(), eq(NOW));
+
+            verifyPhraseLogged("PHRASE_UPDATED", "Sửa mẫu câu: レシートください。");
         }
 
         @Test
-        @DisplayName("UTC-115 Dữ liệu sai: báo lỗi, không sửa")
-        void utc115_updatePhrase_invalidData_400() {
+        @DisplayName("UTC-065 Dữ liệu sai: báo lỗi, không sửa")
+        void utc065_updatePhrase_invalidData_400() {
             ApiException e = apiError(() -> service.updatePhrase(EDITOR_ID, PHRASE_ID, request("konbini", "PHRASE",
                     "kudasai", "", "", List.of(), false, null)));
 
@@ -891,8 +948,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-116 Mục bị xóa khi đang sửa: không tìm thấy")
-        void utc116_updatePhrase_deletedMeanwhile_404() {
+        @DisplayName("UTC-066 Mục bị xóa khi đang sửa: không tìm thấy")
+        void utc066_updatePhrase_deletedMeanwhile_404() {
             when(repository.lockPhrase(999L)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.updatePhrase(EDITOR_ID, 999L, changedMeaning(null)), HttpStatus.NOT_FOUND,
@@ -901,17 +958,19 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-117 Sửa mục: nhãn của người dùng giữ nguyên")
-        void utc117_updatePhrase_keepsMembersMarks() {
+        @DisplayName("UTC-067 Sửa mục: nhãn của người dùng giữ nguyên")
+        void utc067_updatePhrase_keepsMembersMarks() {
             service.updatePhrase(EDITOR_ID, PHRASE_ID, changedMeaning(null));
 
             verify(repository, never()).softDeletePhrase(anyLong(), any());
             verify(repository, never()).closeCases(anyString(), anyList(), anyString(), anyString(), anyLong(), any());
+
+            verifyPhraseLogged("PHRASE_UPDATED", "Sửa mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-118 Sửa từ báo cáo: đóng báo cáo")
-        void utc118_updateFromReport_closesOpenReports() {
+        @DisplayName("UTC-068 Sửa từ báo cáo: đóng báo cáo")
+        void utc068_updateFromReport_closesOpenReports() {
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "PHRASE", PHRASE_ID,
                     "OPEN")));
 
@@ -924,8 +983,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-119 Sửa từ báo cáo: khóa mục trước")
-        void utc119_updateFromReport_locksPhraseBeforeCase() {
+        @DisplayName("UTC-069 Sửa từ báo cáo: khóa mục trước")
+        void utc069_updateFromReport_locksPhraseBeforeCase() {
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "PHRASE", PHRASE_ID,
                     "OPEN")));
 
@@ -934,11 +993,13 @@ class AcademicServiceTest {
             var order = inOrder(repository);
             order.verify(repository).lockPhrase(PHRASE_ID);
             order.verify(repository).lockOpenCase(CASE_ID);
+
+            verifyPhraseLogged("PHRASE_UPDATED", "Sửa mẫu câu theo báo cáo: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-120 Sửa từ báo cáo mà không đổi: báo cáo vẫn mở")
-        void utc120_updateFromReport_noChange_reportStaysOpen() {
+        @DisplayName("UTC-070 Sửa từ báo cáo mà không đổi: báo cáo vẫn mở")
+        void utc070_updateFromReport_noChange_reportStaysOpen() {
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "PHRASE", PHRASE_ID,
                     "OPEN")));
 
@@ -952,8 +1013,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-121 Báo cáo đã xử lý: bị từ chối")
-        void utc121_updateFromReport_caseHandled_409() {
+        @DisplayName("UTC-071 Báo cáo đã xử lý: bị từ chối")
+        void utc071_updateFromReport_caseHandled_409() {
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.updatePhrase(EDITOR_ID, PHRASE_ID, changedMeaning(CASE_ID)),
@@ -962,8 +1023,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-122 Báo cáo của mục khác: bị từ chối")
-        void utc122_updateFromReport_caseOfAnotherPhrase_409() {
+        @DisplayName("UTC-072 Báo cáo của mục khác: bị từ chối")
+        void utc072_updateFromReport_caseOfAnotherPhrase_409() {
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "PHRASE", 999L,
                     "OPEN")));
 
@@ -973,8 +1034,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-123 Hồ sơ không phải mẫu câu: bị từ chối")
-        void utc123_updateFromReport_caseNotPhrase_409() {
+        @DisplayName("UTC-073 Hồ sơ không phải mẫu câu: bị từ chối")
+        void utc073_updateFromReport_caseNotPhrase_409() {
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "BLOG", PHRASE_ID,
                     "OPEN")));
 
@@ -986,28 +1047,32 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("10. deletePhrase – UC 14 Xóa mục từ vựng / mẫu câu (UTC-124 → UTC-128)")
+    @DisplayName("10. deletePhrase – UC 14 Xóa mục từ vựng / mẫu câu (UTC-074 → UTC-078)")
     class DeletePhrase {
 
         @Test
-        @DisplayName("UTC-124 Xóa mục: ẩn đi, vẫn giữ dữ liệu")
-        void utc124_deletePhrase_softDelete() {
+        @DisplayName("UTC-074 Xóa mục: ẩn đi, vẫn giữ dữ liệu")
+        void utc074_deletePhrase_softDelete() {
             service.deletePhrase(EDITOR_ID, PHRASE_ID);
 
             verify(repository).softDeletePhrase(PHRASE_ID, NOW);
+
+            verifyPhraseLogged("PHRASE_DELETED", "Xóa mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-125 Xóa mục: đóng báo cáo đang mở")
-        void utc125_deletePhrase_closesOpenReports() {
+        @DisplayName("UTC-075 Xóa mục: đóng báo cáo đang mở")
+        void utc075_deletePhrase_closesOpenReports() {
             service.deletePhrase(EDITOR_ID, PHRASE_ID);
 
             verify(repository).closeCases("PHRASE", List.of(PHRASE_ID), "REMOVE", "Mẫu câu đã bị xóa.", EDITOR_ID, NOW);
+
+            verifyPhraseLogged("PHRASE_DELETED", "Xóa mẫu câu: 領収書をください。");
         }
 
         @Test
-        @DisplayName("UTC-126 Xóa mục: ghi nhật ký")
-        void utc126_deletePhrase_writesActivityLog() {
+        @DisplayName("UTC-076 Xóa mục: ghi nhật ký")
+        void utc076_deletePhrase_writesActivityLog() {
             service.deletePhrase(EDITOR_ID, PHRASE_ID);
 
             @SuppressWarnings("unchecked")
@@ -1019,8 +1084,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-127 Xóa mục đã xóa: không tìm thấy")
-        void utc127_deletePhrase_alreadyDeleted_404() {
+        @DisplayName("UTC-077 Xóa mục đã xóa: không tìm thấy")
+        void utc077_deletePhrase_alreadyDeleted_404() {
             when(repository.lockPhrase(999L)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.deletePhrase(EDITOR_ID, 999L), HttpStatus.NOT_FOUND,
@@ -1031,26 +1096,28 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-128 Xóa mục: khóa mục trước")
-        void utc128_deletePhrase_locksPhraseFirst() {
+        @DisplayName("UTC-078 Xóa mục: khóa mục trước")
+        void utc078_deletePhrase_locksPhraseFirst() {
             service.deletePhrase(EDITOR_ID, PHRASE_ID);
 
             var order = inOrder(repository);
             order.verify(repository).lockPhrase(PHRASE_ID);
             order.verify(repository).softDeletePhrase(PHRASE_ID, NOW);
             order.verify(repository).closeCases(anyString(), anyList(), anyString(), anyString(), anyLong(), any());
+
+            verifyPhraseLogged("PHRASE_DELETED", "Xóa mẫu câu: 領収書をください。");
         }
     }
 
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("11. reports – UC 13 AF1 Báo cáo mẫu câu (UTC-129 → UTC-130)")
+    @DisplayName("11. reports – UC 13 AF1 Báo cáo mẫu câu (UTC-079 → UTC-080)")
     class Reports {
 
         @Test
-        @DisplayName("UTC-129 Lý do được đếm, nhiều nhất trước")
-        void utc129_phraseReports_reasonsCountedMostFirst() {
+        @DisplayName("UTC-079 Lý do được đếm, nhiều nhất trước")
+        void utc079_phraseReports_reasonsCountedMostFirst() {
             var head = new AcademicRepository.CaseHead(CASE_ID, PHRASE_ID, "NORMAL", 3, NOW);
             when(repository.openPhraseCases()).thenReturn(List.of(head));
             when(repository.reportersOf(List.of(CASE_ID))).thenReturn(Map.of(CASE_ID, List.of(
@@ -1069,8 +1136,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-130 Xem báo cáo: không ghi nhật ký")
-        void utc130_reports_writesNoActivityLog() {
+        @DisplayName("UTC-080 Xem báo cáo: không ghi nhật ký")
+        void utc080_reports_writesNoActivityLog() {
             service.reports();
 
             verifyNoInteractions(activityLog);
@@ -1080,12 +1147,12 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("12. dismissReport – UC 13 AF2 Không sai, bỏ qua (UTC-131 → UTC-134)")
+    @DisplayName("12. dismissReport – UC 13 AF2 Không sai, bỏ qua (UTC-081 → UTC-084)")
     class DismissReport {
 
         @Test
-        @DisplayName("UTC-131 \"Không sai, bỏ qua\": đóng báo cáo")
-        void utc131_dismissReport_closesCaseKeepsPhrase() {
+        @DisplayName("UTC-081 \"Không sai, bỏ qua\": đóng báo cáo")
+        void utc081_dismissReport_closesCaseKeepsPhrase() {
             CaseRow open = new CaseRow(CASE_ID, "PHRASE", PHRASE_ID, "OPEN");
             when(repository.findCase(CASE_ID)).thenReturn(Optional.of(open));
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.of(open));
@@ -1100,8 +1167,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-132 Bỏ qua báo cáo đã đóng: bị từ chối")
-        void utc132_dismissReport_alreadyClosed_409() {
+        @DisplayName("UTC-082 Bỏ qua báo cáo đã đóng: bị từ chối")
+        void utc082_dismissReport_alreadyClosed_409() {
             when(repository.findCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "PHRASE", PHRASE_ID,
                     "CLOSED")));
 
@@ -1111,8 +1178,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-133 Bỏ qua hồ sơ khác loại: bị từ chối")
-        void utc133_dismissReport_notPhraseCase_409() {
+        @DisplayName("UTC-083 Bỏ qua hồ sơ khác loại: bị từ chối")
+        void utc083_dismissReport_notPhraseCase_409() {
             when(repository.findCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "BLOG", 1L, "OPEN")));
 
             assertApiError(() -> service.dismissReport(EDITOR_ID, CASE_ID), HttpStatus.CONFLICT,
@@ -1121,8 +1188,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-134 Người khác vừa xử lý: bị từ chối")
-        void utc134_dismissReport_handledMeanwhile_409() {
+        @DisplayName("UTC-084 Người khác vừa xử lý: bị từ chối")
+        void utc084_dismissReport_handledMeanwhile_409() {
             when(repository.findCase(CASE_ID)).thenReturn(Optional.of(new CaseRow(CASE_ID, "PHRASE", PHRASE_ID,
                     "OPEN")));
             when(repository.lockOpenCase(CASE_ID)).thenReturn(Optional.empty());
@@ -1137,12 +1204,12 @@ class AcademicServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("13. overview – Tổng quan (UTC-135 → UTC-136)")
+    @DisplayName("13. overview – Tổng quan (UTC-085 → UTC-086)")
     class OverviewPage {
 
         @Test
-        @DisplayName("UTC-135 Tổng quan: đủ số liệu")
-        void utc135_overview_showsCountsThinTopicsRecentActions() {
+        @DisplayName("UTC-085 Tổng quan: đủ số liệu")
+        void utc085_overview_showsCountsThinTopicsRecentActions() {
             when(repository.openPhraseReports()).thenReturn(2);
             when(repository.phrases("PHRASE")).thenReturn(40);
             when(repository.phrases("VOCAB")).thenReturn(60);
@@ -1157,8 +1224,8 @@ class AcademicServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-136 Tổng quan: không ghi nhật ký")
-        void utc136_overview_writesNoActivityLog() {
+        @DisplayName("UTC-086 Tổng quan: không ghi nhật ký")
+        void utc086_overview_writesNoActivityLog() {
             service.overview(EDITOR_ID);
 
             verifyNoInteractions(activityLog);

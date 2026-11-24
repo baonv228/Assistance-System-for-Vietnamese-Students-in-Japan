@@ -126,12 +126,12 @@ class PhraseServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("01. overview – UC 7 Duyệt chủ đề học tiếng Nhật (UTC-001 → UTC-010)")
+    @DisplayName("01. overview – UC 7 Duyệt chủ đề học tiếng Nhật (UTC-087 → UTC-096)")
     class OverviewPage {
 
         @Test
-        @DisplayName("UTC-001 Mở trang: có hai phần Mẫu câu và Từ vựng")
-        void utc001_overview_hasPhraseAndVocabParts() {
+        @DisplayName("UTC-087 Mở trang: có hai phần Mẫu câu và Từ vựng")
+        void utc087_overview_hasPhraseAndVocabParts() {
             Overview overview = service.overview(null);
 
             assertThat(overview.parts()).extracting(Part::kind).containsExactlyInAnyOrder("PHRASE", "VOCAB");
@@ -140,8 +140,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-002 Số mục, số đã thuộc tính riêng từng loại")
-        void utc002_overview_countsEntriesAndLearnedPerKind() {
+        @DisplayName("UTC-088 Số mục, số đã thuộc tính riêng từng loại")
+        void utc088_overview_countsEntriesAndLearnedPerKind() {
             when(repository.kindTotals(MEMBER_ID, "PHRASE")).thenReturn(new int[] {12, 4});
             when(repository.kindTotals(MEMBER_ID, "VOCAB")).thenReturn(new int[] {30, 7});
 
@@ -156,8 +156,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-003 Mỗi phần chỉ có chủ đề, danh mục có mục")
-        void utc003_overview_listsTopicsAndCategoriesOfThatKindOnly() {
+        @DisplayName("UTC-089 Mỗi phần chỉ có chủ đề, danh mục có mục")
+        void utc089_overview_listsTopicsAndCategoriesOfThatKindOnly() {
             Group pay = new Group("pay", "Thanh toán", "payments", 5, 2);
             Group konbini = new Group("konbini", "Cửa hàng tiện lợi", "store", 8, 1);
             when(repository.topics(MEMBER_ID, "VOCAB")).thenReturn(List.of(pay));
@@ -176,8 +176,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-004 Khách: không có tiến độ, không có \"Đã lưu\"")
-        void utc004_guestOpensPage_noProgressNoSavedCount() {
+        @DisplayName("UTC-090 Khách: không có tiến độ, không có \"Đã lưu\"")
+        void utc090_guestOpensPage_noProgressNoSavedCount() {
             Overview overview = service.overview(null);
 
             assertThat(overview.member()).isFalse();
@@ -188,8 +188,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-005 Thành viên: \"Đã lưu (n)\" đúng số mục")
-        void utc005_memberOpensPage_seesSavedCount() {
+        @DisplayName("UTC-091 Thành viên: \"Đã lưu (n)\" đúng số mục")
+        void utc091_memberOpensPage_seesSavedCount() {
             when(repository.savedCount(MEMBER_ID)).thenReturn(6);
 
             Overview overview = service.overview(MEMBER);
@@ -201,8 +201,8 @@ class PhraseServiceTest {
 
         @ParameterizedTest(name = "[{index}] vai trò {0}")
         @ValueSource(strings = {"MODERATOR", "ACADEMIC_MANAGER", "ADMIN"})
-        @DisplayName("UTC-006 Nhân viên: xem như Khách")
-        void utc006_staffOpensPage_treatedAsGuest(String role) {
+        @DisplayName("UTC-092 Nhân viên: xem như Khách")
+        void utc092_staffOpensPage_treatedAsGuest(String role) {
             AppUserPrincipal staff = switch (role) {
                 case "MODERATOR" -> MODERATOR;
                 case "ACADEMIC_MANAGER" -> EDITOR;
@@ -218,8 +218,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-007 Tài khoản bị khóa: xem như Khách")
-        void utc007_lockedAccountOpensPage_treatedAsGuest() {
+        @DisplayName("UTC-093 Tài khoản bị khóa: xem như Khách")
+        void utc093_lockedAccountOpensPage_treatedAsGuest() {
             account(MEMBER_ID, "USER", "LOCKED");
 
             Overview overview = service.overview(MEMBER);
@@ -229,8 +229,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-008 Có đủ 4 lý do báo lỗi")
-        void utc008_overview_offersPhraseReportReasons() {
+        @DisplayName("UTC-094 Có đủ 4 lý do báo lỗi")
+        void utc094_overview_offersPhraseReportReasons() {
             Overview overview = service.overview(null);
 
             assertThat(overview.reportReasons()).extracting(Reason::label)
@@ -240,14 +240,14 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-009 Giới hạn 1000 thẻ mỗi danh sách")
-        void utc009_overview_givesListLimit1000() {
+        @DisplayName("UTC-095 Giới hạn 1000 thẻ mỗi danh sách")
+        void utc095_overview_givesListLimit1000() {
             assertThat(service.overview(null).listMax()).isEqualTo(PhraseRepository.LIST_MAX).isEqualTo(1000);
         }
 
         @Test
-        @DisplayName("UTC-010 Mở trang không thay đổi dữ liệu")
-        void utc010_overview_changesNoData() {
+        @DisplayName("UTC-096 Mở trang không thay đổi dữ liệu")
+        void utc096_overview_changesNoData() {
             service.overview(MEMBER);
 
             verify(repository, never()).setFlash(anyLong(), anyLong(), anyBoolean());
@@ -260,12 +260,12 @@ class PhraseServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("02. list – UC 7 AF2 Tìm kiếm, UC 8 Xem chi tiết chủ đề (UTC-011 → UTC-024)")
+    @DisplayName("02. list – UC 7 AF2 Tìm kiếm, UC 8 Xem chi tiết chủ đề (UTC-097 → UTC-110)")
     class ListPhrases {
 
         @Test
-        @DisplayName("UTC-011 Từ khóa được bỏ khoảng trắng hai đầu")
-        void utc011_search_trimsKeyword() {
+        @DisplayName("UTC-097 Từ khóa được bỏ khoảng trắng hai đầu")
+        void utc097_search_trimsKeyword() {
             service.list(null, null, null, null, "  ryoushuusho  ");
 
             ArgumentCaptor<Filter> filter = ArgumentCaptor.forClass(Filter.class);
@@ -275,8 +275,8 @@ class PhraseServiceTest {
 
         @ParameterizedTest(name = "[{index}] từ khóa \"{0}\"")
         @ValueSource(strings = {"", "   ", "\t"})
-        @DisplayName("UTC-012 Ô tìm kiếm trống: không tìm")
-        void utc012_search_blankKeywordMeansNoSearch(String q) {
+        @DisplayName("UTC-098 Ô tìm kiếm trống: không tìm")
+        void utc098_search_blankKeywordMeansNoSearch(String q) {
             service.list(null, null, null, null, q);
 
             ArgumentCaptor<Filter> filter = ArgumentCaptor.forClass(Filter.class);
@@ -285,8 +285,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-013 Từ khóa quá 100 ký tự: cắt còn 100")
-        void utc013_search_keywordOver100CharsIsCut() {
+        @DisplayName("UTC-099 Từ khóa quá 100 ký tự: cắt còn 100")
+        void utc099_search_keywordOver100CharsIsCut() {
             String longText = "あ".repeat(150);
 
             service.list(null, null, null, null, longText);
@@ -297,8 +297,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-014 Khách tìm kiếm được")
-        void utc014_guestSearches_getsResults() {
+        @DisplayName("UTC-100 Khách tìm kiếm được")
+        void utc100_guestSearches_getsResults() {
             PhraseDtos.PhraseCard card = new PhraseDtos.PhraseCard(PHRASE_ID, "PHRASE", "領収書をください。",
                     "Ryōshūsho o kudasai.", "Cho tôi xin hóa đơn.", new PhraseDtos.CategoryRef("konbini",
                     "Cửa hàng tiện lợi", "store"), List.of(new PhraseDtos.TopicRef("pay", "Thanh toán")), false, false,
@@ -309,32 +309,32 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-015 Lọc đúng theo chủ đề")
-        void utc015_openTopic_filtersByTopicId() {
+        @DisplayName("UTC-101 Lọc đúng theo chủ đề")
+        void utc101_openTopic_filtersByTopicId() {
             service.list(null, " pay ", null, null, null);
 
             verify(repository).phrases(new Filter("pay", null, null, null), -1L);
         }
 
         @Test
-        @DisplayName("UTC-016 Lọc đúng theo danh mục địa điểm")
-        void utc016_openCategory_filtersByCategoryId() {
+        @DisplayName("UTC-102 Lọc đúng theo danh mục địa điểm")
+        void utc102_openCategory_filtersByCategoryId() {
             service.list(MEMBER, null, "konbini", null, null);
 
             verify(repository).phrases(new Filter(null, "konbini", null, null), MEMBER_ID);
         }
 
         @Test
-        @DisplayName("UTC-017 Thành viên thấy nhãn của mình trên thẻ")
-        void utc017_memberOpensTopic_seesOwnMarks() {
+        @DisplayName("UTC-103 Thành viên thấy nhãn của mình trên thẻ")
+        void utc103_memberOpensTopic_seesOwnMarks() {
             service.list(MEMBER, "pay", null, null, null);
 
             verify(repository).phrases(any(), eq(MEMBER_ID));
         }
 
         @Test
-        @DisplayName("UTC-018 Nhân viên xem như Khách, không có nhãn")
-        void utc018_staffOpensTopic_seesNoMarks() {
+        @DisplayName("UTC-104 Nhân viên xem như Khách, không có nhãn")
+        void utc104_staffOpensTopic_seesNoMarks() {
             service.list(MODERATOR, "pay", null, null, null);
 
             verify(repository).phrases(any(), eq(-1L));
@@ -342,8 +342,8 @@ class PhraseServiceTest {
 
         @ParameterizedTest(name = "[{index}] danh sách {0}")
         @ValueSource(strings = {"learning", "learned", "saved"})
-        @DisplayName("UTC-019 Thành viên mở được danh sách của mình")
-        void utc019_memberOpensOwnList_succeeds(String mine) {
+        @DisplayName("UTC-105 Thành viên mở được danh sách của mình")
+        void utc105_memberOpensOwnList_succeeds(String mine) {
             service.list(MEMBER, null, null, mine, null);
 
             verify(repository).phrases(new Filter(null, null, mine, null), MEMBER_ID);
@@ -351,38 +351,38 @@ class PhraseServiceTest {
 
         @ParameterizedTest(name = "[{index}] danh sách {0}")
         @ValueSource(strings = {"learning", "learned", "saved"})
-        @DisplayName("UTC-020 Khách mở danh sách riêng: phải đăng nhập")
-        void utc020_guestOpensOwnList_401(String mine) {
+        @DisplayName("UTC-106 Khách mở danh sách riêng: phải đăng nhập")
+        void utc106_guestOpensOwnList_401(String mine) {
             assertApiError(() -> service.list(null, null, null, mine, null), HttpStatus.UNAUTHORIZED, MSG_LOGIN);
             verify(repository, never()).phrases(any(), anyLong());
         }
 
         @Test
-        @DisplayName("UTC-021 Nhân viên mở danh sách riêng: bị từ chối")
-        void utc021_staffOpensOwnList_403() {
+        @DisplayName("UTC-107 Nhân viên mở danh sách riêng: bị từ chối")
+        void utc107_staffOpensOwnList_403() {
             assertApiError(() -> service.list(EDITOR, null, null, "saved", null), HttpStatus.FORBIDDEN, MSG18);
             verify(repository, never()).phrases(any(), anyLong());
         }
 
         @Test
-        @DisplayName("UTC-022 Tên danh sách sai: báo lỗi")
-        void utc022_unknownListName_400() {
+        @DisplayName("UTC-108 Tên danh sách sai: báo lỗi")
+        void utc108_unknownListName_400() {
             assertApiError(() -> service.list(MEMBER, null, null, "favorites", null), HttpStatus.BAD_REQUEST,
                     "Danh sách không hợp lệ.");
             verify(repository, never()).phrases(any(), anyLong());
         }
 
         @Test
-        @DisplayName("UTC-023 Bộ lọc để trống: không lọc")
-        void utc023_blankParameters_noFilter() {
+        @DisplayName("UTC-109 Bộ lọc để trống: không lọc")
+        void utc109_blankParameters_noFilter() {
             service.list(null, " ", "", "  ", null);
 
             verify(repository).phrases(new Filter(null, null, null, null), -1L);
         }
 
         @Test
-        @DisplayName("UTC-024 Xem danh sách không thay đổi dữ liệu")
-        void utc024_list_changesNoData() {
+        @DisplayName("UTC-110 Xem danh sách không thay đổi dữ liệu")
+        void utc110_list_changesNoData() {
             service.list(MEMBER, "pay", null, null, null);
 
             verify(repository, never()).setFlash(anyLong(), anyLong(), anyBoolean());
@@ -395,12 +395,12 @@ class PhraseServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("03. save – UC 8 AF1 Lưu / bỏ lưu mục (UTC-025 → UTC-031)")
+    @DisplayName("03. save – UC 8 AF1 Lưu / bỏ lưu mục (UTC-111 → UTC-117)")
     class Save {
 
         @Test
-        @DisplayName("UTC-025 Bấm \"Lưu\": mục được lưu")
-        void utc025_memberSaves_saved() {
+        @DisplayName("UTC-111 Bấm \"Lưu\": mục được lưu")
+        void utc111_memberSaves_saved() {
             PhraseDtos.SaveState state = service.save(MEMBER, PHRASE_ID, true);
 
             assertThat(state.saved()).isTrue();
@@ -409,8 +409,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-026 Bấm \"Đã lưu\": bỏ lưu")
-        void utc026_memberUnsaves_notSaved() {
+        @DisplayName("UTC-112 Bấm \"Đã lưu\": bỏ lưu")
+        void utc112_memberUnsaves_notSaved() {
             PhraseDtos.SaveState state = service.save(MEMBER, PHRASE_ID, false);
 
             assertThat(state.saved()).isFalse();
@@ -418,16 +418,16 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-027 Khách bấm \"Lưu\": phải đăng nhập")
-        void utc027_guestSaves_401() {
+        @DisplayName("UTC-113 Khách bấm \"Lưu\": phải đăng nhập")
+        void utc113_guestSaves_401() {
             assertApiError(() -> service.save(null, PHRASE_ID, true), HttpStatus.UNAUTHORIZED, MSG_LOGIN);
             verify(repository, never()).setSaved(anyLong(), anyLong(), anyBoolean());
         }
 
         @ParameterizedTest(name = "[{index}] vai trò {0}")
         @ValueSource(strings = {"MODERATOR", "ACADEMIC_MANAGER", "ADMIN"})
-        @DisplayName("UTC-028 Nhân viên bấm \"Lưu\": bị từ chối")
-        void utc028_staffSaves_403(String role) {
+        @DisplayName("UTC-114 Nhân viên bấm \"Lưu\": bị từ chối")
+        void utc114_staffSaves_403(String role) {
             AppUserPrincipal staff = "MODERATOR".equals(role) ? MODERATOR : "ADMIN".equals(role) ? ADMIN : EDITOR;
 
             assertApiError(() -> service.save(staff, PHRASE_ID, true), HttpStatus.FORBIDDEN, MSG18);
@@ -435,8 +435,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-029 Lưu mục đã xóa: không tìm thấy")
-        void utc029_saveDeletedPhrase_404() {
+        @DisplayName("UTC-115 Lưu mục đã xóa: không tìm thấy")
+        void utc115_saveDeletedPhrase_404() {
             when(repository.lockPhrase(PHRASE_ID, false)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.save(MEMBER, PHRASE_ID, true), HttpStatus.NOT_FOUND, MSG_NOT_FOUND);
@@ -444,8 +444,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-030 Tài khoản bị khóa bấm \"Lưu\": bị từ chối")
-        void utc030_lockedAccountSaves_403() {
+        @DisplayName("UTC-116 Tài khoản bị khóa bấm \"Lưu\": bị từ chối")
+        void utc116_lockedAccountSaves_403() {
             account(MEMBER_ID, "USER", "LOCKED");
 
             assertApiError(() -> service.save(MEMBER, PHRASE_ID, true), HttpStatus.FORBIDDEN, MSG18);
@@ -453,8 +453,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-031 Tài khoản không còn: phải đăng nhập")
-        void utc031_accountGoneSaves_401() {
+        @DisplayName("UTC-117 Tài khoản không còn: phải đăng nhập")
+        void utc117_accountGoneSaves_401() {
             when(repository.account(MEMBER_ID)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.save(MEMBER, PHRASE_ID, true), HttpStatus.UNAUTHORIZED, "Bạn chưa đăng nhập.");
@@ -464,12 +464,12 @@ class PhraseServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("04. flash – UC 8 AF3 Luyện thẻ ghi nhớ (UTC-032 → UTC-038)")
+    @DisplayName("04. flash – UC 8 AF3 Luyện thẻ ghi nhớ (UTC-118 → UTC-124)")
     class Flash {
 
         @Test
-        @DisplayName("UTC-032 Chọn \"Đã thuộc\": thẻ thành Đã thuộc")
-        void utc032_flashAnswerLearned_markedLearned() {
+        @DisplayName("UTC-118 Chọn \"Đã thuộc\": thẻ thành Đã thuộc")
+        void utc118_flashAnswerLearned_markedLearned() {
             when(repository.marks(MEMBER_ID, PHRASE_ID)).thenReturn(new boolean[] {false, true});
 
             Marks marks = service.flash(MEMBER, PHRASE_ID, true);
@@ -480,8 +480,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-033 Chọn \"Chưa thuộc\": thẻ thành Chưa thuộc")
-        void utc033_flashAnswerNotLearned_markedLearning() {
+        @DisplayName("UTC-119 Chọn \"Chưa thuộc\": thẻ thành Chưa thuộc")
+        void utc119_flashAnswerNotLearned_markedLearning() {
             when(repository.marks(MEMBER_ID, PHRASE_ID)).thenReturn(new boolean[] {true, false});
 
             Marks marks = service.flash(MEMBER, PHRASE_ID, false);
@@ -492,8 +492,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-034 Trả lời hai lần: giữ lần sau cùng")
-        void utc034_flashAnsweredTwice_lastAnswerCounts() {
+        @DisplayName("UTC-120 Trả lời hai lần: giữ lần sau cùng")
+        void utc120_flashAnsweredTwice_lastAnswerCounts() {
             service.flash(MEMBER, PHRASE_ID, true);
             service.flash(MEMBER, PHRASE_ID, false);
 
@@ -503,22 +503,22 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-035 Khách lật thẻ: phải đăng nhập")
-        void utc035_guestFlash_401NotSaved() {
+        @DisplayName("UTC-121 Khách lật thẻ: phải đăng nhập")
+        void utc121_guestFlash_401NotSaved() {
             assertApiError(() -> service.flash(null, PHRASE_ID, true), HttpStatus.UNAUTHORIZED, MSG_LOGIN);
             verify(repository, never()).setFlash(anyLong(), anyLong(), anyBoolean());
         }
 
         @Test
-        @DisplayName("UTC-036 Nhân viên lật thẻ: bị từ chối")
-        void utc036_staffFlash_403NotSaved() {
+        @DisplayName("UTC-122 Nhân viên lật thẻ: bị từ chối")
+        void utc122_staffFlash_403NotSaved() {
             assertApiError(() -> service.flash(EDITOR, PHRASE_ID, true), HttpStatus.FORBIDDEN, MSG18);
             verify(repository, never()).setFlash(anyLong(), anyLong(), anyBoolean());
         }
 
         @Test
-        @DisplayName("UTC-037 Lật thẻ mục đã xóa: không tìm thấy")
-        void utc037_flashDeletedPhrase_404() {
+        @DisplayName("UTC-123 Lật thẻ mục đã xóa: không tìm thấy")
+        void utc123_flashDeletedPhrase_404() {
             when(repository.lockPhrase(PHRASE_ID, false)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.flash(MEMBER, PHRASE_ID, true), HttpStatus.NOT_FOUND, MSG_NOT_FOUND);
@@ -526,8 +526,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-038 Không chọn kết quả lật thẻ: báo lỗi")
-        void utc038_flashWithoutAnswer_validationMessage() {
+        @DisplayName("UTC-124 Không chọn kết quả lật thẻ: báo lỗi")
+        void utc124_flashWithoutAnswer_validationMessage() {
             assertThat(validator.validate(new FlashRequest(true))).isEmpty();
             assertThat(validator.validate(new FlashRequest(false))).isEmpty();
             assertThat(validator.validate(new FlashRequest(null)))
@@ -539,12 +539,12 @@ class PhraseServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("05. clearFlash – UC 8 AF2 Bỏ đánh dấu (UTC-039 → UTC-042)")
+    @DisplayName("05. clearFlash – UC 8 AF2 Bỏ đánh dấu (UTC-125 → UTC-128)")
     class ClearFlash {
 
         @Test
-        @DisplayName("UTC-039 \"Bỏ đánh dấu\": thẻ về Chưa luyện")
-        void utc039_clearMarks_backToNotPractised() {
+        @DisplayName("UTC-125 \"Bỏ đánh dấu\": thẻ về Chưa luyện")
+        void utc125_clearMarks_backToNotPractised() {
             Marks marks = service.clearFlash(MEMBER, PHRASE_ID);
 
             verify(repository).clearFlash(MEMBER_ID, PHRASE_ID);
@@ -553,22 +553,22 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-040 Khách bỏ đánh dấu: phải đăng nhập")
-        void utc040_guestClearFlash_401() {
+        @DisplayName("UTC-126 Khách bỏ đánh dấu: phải đăng nhập")
+        void utc126_guestClearFlash_401() {
             assertApiError(() -> service.clearFlash(null, PHRASE_ID), HttpStatus.UNAUTHORIZED, MSG_LOGIN);
             verify(repository, never()).clearFlash(anyLong(), anyLong());
         }
 
         @Test
-        @DisplayName("UTC-041 Nhân viên bỏ đánh dấu: bị từ chối")
-        void utc041_staffClearFlash_403() {
+        @DisplayName("UTC-127 Nhân viên bỏ đánh dấu: bị từ chối")
+        void utc127_staffClearFlash_403() {
             assertApiError(() -> service.clearFlash(MODERATOR, PHRASE_ID), HttpStatus.FORBIDDEN, MSG18);
             verify(repository, never()).clearFlash(anyLong(), anyLong());
         }
 
         @Test
-        @DisplayName("UTC-042 Bỏ đánh dấu mục đã xóa: không tìm thấy")
-        void utc042_clearFlashDeletedPhrase_404() {
+        @DisplayName("UTC-128 Bỏ đánh dấu mục đã xóa: không tìm thấy")
+        void utc128_clearFlashDeletedPhrase_404() {
             when(repository.lockPhrase(PHRASE_ID, false)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.clearFlash(MEMBER, PHRASE_ID), HttpStatus.NOT_FOUND, MSG_NOT_FOUND);
@@ -579,12 +579,12 @@ class PhraseServiceTest {
     // =================================================================================================================
     @Nested
     @TestMethodOrder(MethodOrderer.DisplayName.class)
-    @DisplayName("06. reportPhrase – UC 8 AF5 Báo lỗi mẫu câu (UTC-043 → UTC-050)")
+    @DisplayName("06. reportPhrase – UC 8 AF5 Báo lỗi mẫu câu (UTC-129 → UTC-136)")
     class ReportPhrase {
 
         @Test
-        @DisplayName("UTC-043 Báo lỗi có lý do: tạo báo cáo")
-        void utc043_memberReports_reportCreatedForPhrase() {
+        @DisplayName("UTC-129 Báo lỗi có lý do: tạo báo cáo")
+        void utc129_memberReports_reportCreatedForPhrase() {
             service.reportPhrase(MEMBER, PHRASE_ID, new ReportRequest(2L, "Nghĩa chưa đúng"));
 
             verify(repository).lockPhrase(PHRASE_ID, true);
@@ -592,16 +592,16 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-044 Báo lỗi không ghi chú: vẫn gửi được")
-        void utc044_reportWithoutNote_accepted() {
+        @DisplayName("UTC-130 Báo lỗi không ghi chú: vẫn gửi được")
+        void utc130_reportWithoutNote_accepted() {
             service.reportPhrase(MEMBER, PHRASE_ID, new ReportRequest(1L, null));
 
             verify(reports).report(new Target("PHRASE", PHRASE_ID, EDITOR_ID), MEMBER_ID, 1L, null);
         }
 
         @Test
-        @DisplayName("UTC-045 Báo lỗi không chọn lý do: báo lỗi")
-        void utc045_reportWithoutReason_validationMessage() {
+        @DisplayName("UTC-131 Báo lỗi không chọn lý do: báo lỗi")
+        void utc131_reportWithoutReason_validationMessage() {
             assertThat(validator.validate(new ReportRequest(null, "ghi chú")))
                     .extracting(v -> v.getMessage())
                     .containsExactly("Hãy chọn lý do báo cáo.");
@@ -609,8 +609,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-046 Báo lỗi lần hai: bị từ chối")
-        void utc046_reportTwice_rejected() {
+        @DisplayName("UTC-132 Báo lỗi lần hai: bị từ chối")
+        void utc132_reportTwice_rejected() {
             when(reports.report(any(), anyLong(), any(), any()))
                     .thenThrow(ApiException.conflict("Bạn đã báo cáo nội dung này rồi."));
 
@@ -619,8 +619,8 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-047 Vượt ngưỡng báo cáo: mục vẫn hiện")
-        void utc047_reportOverThreshold_phraseNotHidden() {
+        @DisplayName("UTC-133 Vượt ngưỡng báo cáo: mục vẫn hiện")
+        void utc133_reportOverThreshold_phraseNotHidden() {
             when(reports.report(any(), anyLong(), any(), any())).thenReturn(new ContentReportService.Outcome(9, true));
 
             service.reportPhrase(MEMBER, PHRASE_ID, new ReportRequest(4L, null));
@@ -631,24 +631,24 @@ class PhraseServiceTest {
         }
 
         @Test
-        @DisplayName("UTC-048 Khách báo lỗi: phải đăng nhập")
-        void utc048_guestReports_401() {
+        @DisplayName("UTC-134 Khách báo lỗi: phải đăng nhập")
+        void utc134_guestReports_401() {
             assertApiError(() -> service.reportPhrase(null, PHRASE_ID, new ReportRequest(1L, null)),
                     HttpStatus.UNAUTHORIZED, MSG_LOGIN);
             verifyNoInteractions(reports);
         }
 
         @Test
-        @DisplayName("UTC-049 Nhân viên báo lỗi: bị từ chối")
-        void utc049_staffReports_403() {
+        @DisplayName("UTC-135 Nhân viên báo lỗi: bị từ chối")
+        void utc135_staffReports_403() {
             assertApiError(() -> service.reportPhrase(EDITOR, PHRASE_ID, new ReportRequest(1L, null)),
                     HttpStatus.FORBIDDEN, MSG18);
             verifyNoInteractions(reports);
         }
 
         @Test
-        @DisplayName("UTC-050 Báo lỗi mục đã xóa: không tìm thấy")
-        void utc050_reportDeletedPhrase_404() {
+        @DisplayName("UTC-136 Báo lỗi mục đã xóa: không tìm thấy")
+        void utc136_reportDeletedPhrase_404() {
             when(repository.lockPhrase(PHRASE_ID, true)).thenReturn(Optional.empty());
 
             assertApiError(() -> service.reportPhrase(MEMBER, PHRASE_ID, new ReportRequest(1L, null)),
