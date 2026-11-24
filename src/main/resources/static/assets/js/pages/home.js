@@ -2,7 +2,7 @@
 import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountInterestPicker } from "../components/interest-picker.js";
-import { mountSiteHeader } from "../components/site-header.js";
+import { mountSiteHeader, showSiteNotice } from "../components/site-header.js";
 import { interestChips, interestNote, postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
 import {
     areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
@@ -104,7 +104,7 @@ async function renderMember(notice = "") {
                     <span class="row">${esc(home.featured.authorName)} ${tagChips(home.featured.authorTags)}</span></a>` : ""}
             </div>
         </div>`;
-    bindSpeak();
+    bindSpeak(listenQuest(home.phrase));
     bindSearch();
     bindForYou(home);
 }
@@ -439,8 +439,11 @@ const phraseLink = (phrase) => (phrase.topicId
     ? `/phrases?topic=${encodeURIComponent(phrase.topicId)}`
     : `/phrases?category=${encodeURIComponent(phrase.categoryId)}`);
 
-/** Reads the Japanese phrase aloud with the browser's built-in voice (free, no API). */
-function bindSpeak() {
+/**
+ * Reads the Japanese phrase aloud with the browser's built-in voice (free, no API). `afterSpeak` (Members only, see
+ * `listenQuest`) runs once the speech has started, so it never holds the voice back.
+ */
+function bindSpeak(afterSpeak = null) {
     document.querySelectorAll("[data-speak]").forEach((button) => {
         if (!("speechSynthesis" in window)) {
             button.hidden = true;
@@ -452,8 +455,39 @@ function bindSpeak() {
             utterance.rate = 0.85;
             speechSynthesis.cancel();
             speechSynthesis.speak(utterance);
+            afterSpeak?.();
         });
     });
+}
+
+/**
+ * "Nhiệm vụ hằng ngày": "Nghe" on "Câu tiếng Nhật hôm nay" tells the server, which completes the quest PHRASE_OF_DAY
+ * ("Nghe câu tiếng Nhật hôm nay") when the phrase is still today's. Members only (role USER), never guests or staff
+ * (null). Errors are ignored; a quest just completed shows "Xong nhiệm vụ “…” · +10 xu." in the header's notice box
+ * (and the day's bonus, when this was the last quest). The server counts the quest once a day, so one call per page
+ * is enough; a failed one is sent again on the next press.
+ */
+function listenQuest(phrase) {
+    if (user?.role !== "USER" || phrase?.id == null) {
+        return null;
+    }
+    let sent = false;
+    return () => {
+        if (sent) {
+            return;
+        }
+        sent = true;
+        apiClient.questEvent({ type: "LISTEN", phraseId: phrase.id }).then((change) => {
+            (change?.justCompleted ?? []).forEach((quest) =>
+                showSiteNotice(`Xong nhiệm vụ${quest.title.includes("“") ? `: ${quest.title}` : ` “${quest.title}”`}`
+                    + ` · +${quest.coins} xu.`, "task_alt"));
+            if (change?.bonusJustCompleted) {
+                showSiteNotice(`Xong mọi nhiệm vụ hôm nay · +${change.bonusCoins} xu.`, "celebration");
+            }
+        }).catch(() => {
+            sent = false;
+        });
+    };
 }
 
 // Decorative map for the guest hero: streets, the JR line, a park and blooming review pins.

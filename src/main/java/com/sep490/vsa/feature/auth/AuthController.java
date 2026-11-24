@@ -11,6 +11,8 @@ import com.sep490.vsa.feature.auth.AuthDtos.PendingSocialResponse;
 import com.sep490.vsa.feature.auth.AuthDtos.ProvidersResponse;
 import com.sep490.vsa.feature.auth.AuthDtos.SendCodeRequest;
 import com.sep490.vsa.feature.auth.AuthDtos.SendCodeResponse;
+import com.sep490.vsa.feature.auth.AuthDtos.SocialAppExchangeRequest;
+import com.sep490.vsa.feature.auth.AuthDtos.SocialAppExchangeResponse;
 import com.sep490.vsa.feature.auth.AuthDtos.VerifyCodeRequest;
 import com.sep490.vsa.feature.auth.AuthDtos.VerifyCodeResponse;
 import com.sep490.vsa.feature.user.User;
@@ -21,8 +23,10 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,16 +46,21 @@ public class AuthController {
     private final RegistrationService registrationService;
     private final AuthService authService;
     private final SocialLoginService socialLoginService;
+    private final SocialAppLoginService socialAppLoginService;
     private final SessionSignIn sessionSignIn;
+    private final SecurityContextRepository contextRepository;
     private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
 
     public AuthController(RegistrationService registrationService, AuthService authService,
-                          SocialLoginService socialLoginService, SessionSignIn sessionSignIn,
+                          SocialLoginService socialLoginService, SocialAppLoginService socialAppLoginService,
+                          SessionSignIn sessionSignIn, SecurityContextRepository contextRepository,
                           ObjectProvider<ClientRegistrationRepository> clientRegistrations) {
         this.registrationService = registrationService;
         this.authService = authService;
         this.socialLoginService = socialLoginService;
+        this.socialAppLoginService = socialAppLoginService;
         this.sessionSignIn = sessionSignIn;
+        this.contextRepository = contextRepository;
         this.clientRegistrations = clientRegistrations;
     }
 
@@ -132,6 +141,35 @@ public class AuthController {
         session.removeAttribute(PendingSocialSignup.SESSION_KEY);
         sessionSignIn.signIn(user, request, response);
         return ApiResponse.ok("Đăng ký thành công.", CurrentUserResponse.of(user));
+    }
+
+    // ----- Google/Facebook sign-in of the mobile app (common/security/AppSocialLogin) -----
+
+    /**
+     * The app trades the one-time code it got through senpaioi://auth, with its PKCE verifier, for this session (the
+     * app's own cookies): SIGNED_IN (new session id and XSRF-TOKEN cleared, as at every sign-in), or SIGNUP_REQUIRED
+     * with the profile waiting in this session for /social/complete and nobody signed in, as after the website's round.
+     */
+    @PostMapping("/social/app/exchange")
+    public ApiResponse<SocialAppExchangeResponse> exchangeSocialApp(@Valid @RequestBody SocialAppExchangeRequest body,
+                                                                    HttpServletRequest request,
+                                                                    HttpServletResponse response) {
+        SocialAppLoginService.Outcome outcome = socialAppLoginService.exchange(body.code(), body.verifier());
+        if (outcome.user() != null) {
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.removeAttribute(PendingSocialSignup.SESSION_KEY);   // a sign-up left unfinished before
+            }
+            sessionSignIn.signIn(outcome.user(), request, response);
+            return ApiResponse.ok("Đăng nhập thành công.",
+                    SocialAppExchangeResponse.signedIn(CurrentUserResponse.of(outcome.user())));
+        }
+        PendingSocialSignup pending = outcome.pending();
+        SecurityContextHolder.clearContext();
+        contextRepository.saveContext(SecurityContextHolder.createEmptyContext(), request, response);
+        request.getSession(true).setAttribute(PendingSocialSignup.SESSION_KEY, pending);
+        return ApiResponse.ok("Hãy hoàn tất đăng ký.", SocialAppExchangeResponse.signupRequired(
+                new PendingSocialResponse(pending.provider(), pending.email(), pending.displayName())));
     }
 
     private static PendingSocialSignup pending(HttpSession session) {
