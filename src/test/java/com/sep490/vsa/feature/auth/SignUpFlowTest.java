@@ -6,10 +6,13 @@ import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.mail.EmailSender;
 import com.sep490.vsa.common.security.TokenHasher;
 import com.sep490.vsa.feature.media.MediaStorage;
+import com.sep490.vsa.feature.user.UserRepository;
 import jakarta.servlet.http.Cookie;
+import org.aopalliance.intercept.MethodInterceptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.Invocation;
+import org.springframework.aop.framework.Advised;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -99,6 +102,8 @@ class SignUpFlowTest {
     private ObjectMapper json;
     @Autowired
     private PlatformTransactionManager transactionManager;
+    @Autowired
+    private UserRepository users;
 
     /** In every address and email of this test, so its rows can be found and removed. */
     private final String tag = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
@@ -365,10 +370,25 @@ class SignUpFlowTest {
                 new PendingSocialSignup("GOOGLE", "g-race-" + tag, email, "Race Test", null));
         CountDownLatch inserted = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch emailChecked = new CountDownLatch(1);
+        CountDownLatch continueSignup = new CountDownLatch(1);
+        MethodInterceptor observeEmailCheck = invocation -> {
+            if (!invocation.getMethod().getName().equals("existsByEmailIgnoreCase")
+                    || !email.equals(invocation.getArguments()[0])) {
+                return invocation.proceed();
+            }
+            boolean exists = (boolean) invocation.proceed();
+            assertThat(exists).as("the uncommitted account is absent from the initial email check").isFalse();
+            emailChecked.countDown();
+            assertThat(continueSignup.await(30, TimeUnit.SECONDS)).isTrue();
+            return exists;
+        };
+        Advised repository = (Advised) users;
+        repository.addAdvice(0, observeEmailCheck);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
-            // Another tab is creating the same email: its row exists but is not committed yet, so the check before
-            // the INSERT does not see it and the request meets it at the email's unique key
+            // Pause after the initial check, then commit the other tab before this request inserts the same email.
+            // Both statements still use the real database, so the unique key must resolve the race.
             Future<?> otherTab = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(s -> {
                 jdbc.update("""
                         INSERT INTO users (email, password_hash, display_name, role, status, is_adult_confirmed)
@@ -383,9 +403,17 @@ class SignUpFlowTest {
             assertThat(inserted.await(30, TimeUnit.SECONDS)).isTrue();
             Future<MockHttpServletResponse> mine = pool.submit(() ->
                     completeSocial(session, "Race Test").andReturn().getResponse());
-            waitForTheInsert();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (!emailChecked.await(100, TimeUnit.MILLISECONDS)) {
+                if (mine.isDone()) {
+                    mine.get(1, TimeUnit.SECONDS);  // Surface a worker failure instead of hiding it behind a timeout.
+                    throw new AssertionError("The signup request ended before checking its email");
+                }
+                assertThat(System.nanoTime()).as("the second request reached the email check").isLessThan(deadline);
+            }
             release.countDown();
             otherTab.get(30, TimeUnit.SECONDS);
+            continueSignup.countDown();
 
             MockHttpServletResponse response = mine.get(30, TimeUnit.SECONDS);
             assertThat(response.getStatus()).isEqualTo(409);
@@ -393,27 +421,19 @@ class SignUpFlowTest {
                     .isEqualTo("Email này đã được đăng ký. Hãy đăng nhập.");
         } finally {
             release.countDown();
+            continueSignup.countDown();
             pool.shutdownNow();
+            try {
+                assertThat(pool.awaitTermination(30, TimeUnit.SECONDS))
+                        .as("signup workers have finished before cleanup").isTrue();
+            } finally {
+                repository.removeAdvice(observeEmailCheck);
+            }
         }
         assertThat(jdbc.queryForList("SELECT display_name FROM users WHERE email = ?", String.class, email))
                 .containsExactly("Other Tab");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM user_auth_providers WHERE provider_user_id = ?",
                 Long.class, "g-race-" + tag)).isZero();
-    }
-
-    /**
-     * Waits until the request runs its INSERT into users (so it has passed the check before it), which then waits for
-     * the other account's row; a row-lock wait counts too.
-     */
-    private void waitForTheInsert() throws InterruptedException {
-        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
-        while (jdbc.queryForObject("""
-                SELECT (SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE INFO LIKE 'insert into users%')
-                     + (SELECT COUNT(*) FROM information_schema.INNODB_TRX WHERE trx_state = 'LOCK WAIT')""",
-                Long.class) == 0) {
-            assertThat(System.nanoTime()).as("the request never reached its INSERT").isLessThan(until);
-            Thread.sleep(20);
-        }
     }
 
     // ---------------------------------------------------------------- password and display name (S9, S11, S7)

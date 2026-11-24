@@ -2,32 +2,34 @@ package com.sep490.vsa.feature.guide;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sep490.vsa.common.security.AppUserPrincipal;
+import com.sep490.vsa.feature.moderation.ImageModerator;
 import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.http.MediaType;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
-import java.util.UUID;
-import java.time.Instant;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import com.sep490.vsa.feature.moderation.ImageModerator;
-import org.springframework.mock.web.MockMultipartFile;
-import org.junit.jupiter.api.BeforeEach;
-import javax.imageio.ImageIO;
+
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import static org.mockito.Mockito.*;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import javax.imageio.ImageIO;
+
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -412,10 +414,14 @@ class GuideFlowTest {
                 .andExpect(jsonPath("$.data.total").value(1));
         mvc.perform(get("/api/guides/browse").param("q", title).param("topicCode", "LIVING"))
                 .andExpect(jsonPath("$.data.total").value(0));
+        // Seeded guides may share this topic; derive the expected count independently of the browse endpoint.
+        long proceduresCount = jdbc.queryForObject("SELECT COUNT(*) FROM guide_items WHERE deleted_at IS NULL "
+                + "AND published = TRUE AND stage_code = 'ARR' AND topic_code = 'PROCEDURES'", Long.class);
         String topicKeyword = "Subject-" + UUID.randomUUID();
         jdbc.update("UPDATE guide_topics SET title=? WHERE code='PROCEDURES'", topicKeyword);
         mvc.perform(get("/api/guides/browse").param("q", topicKeyword).param("category", "ARR"))
-                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(proceduresCount))
                 .andExpect(jsonPath("$.data.items[0].id").value(id))
                 .andExpect(jsonPath("$.data.items[0].coverImageUrl").value(cover));
     }

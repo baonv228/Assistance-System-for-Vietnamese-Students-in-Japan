@@ -4,9 +4,10 @@ import { adminClient } from "../api/admin-client.js";
 import { esc, ic } from "../lib/ui.js";
 
 let groups = [];
-let original = new Map();   // khóa → giá trị đã lưu gần nhất (chuỗi)
+let original = new Map(); // khóa → giá trị đã lưu gần nhất (chuỗi)
 let root = null;
-let discarded = false;      // người dùng đã chọn "Bỏ thay đổi" và đang rời trang
+let discarded = false; // người dùng đã chọn "Bỏ thay đổi" và đang rời trang
+let saving = false;
 
 /** Số ô đang khác giá trị đã lưu. Trang dùng để cảnh báo khi rời đi mà chưa lưu. */
 export function hasUnsavedChanges() {
@@ -34,7 +35,10 @@ function render() {
             </div>
         </form>`;
     const form = document.getElementById("safetyForm");
-    form.addEventListener("submit", (e) => { e.preventDefault(); save(); });
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        save();
+    });
     form.addEventListener("input", (e) => {
         // Lỗi của ô biến mất khi người dùng sửa ô đó
         if (e.target.matches("input[data-key]")) clearError(e.target);
@@ -82,6 +86,7 @@ function changedValues() {
 }
 
 async function save() {
+    if (saving) return;
     const button = document.getElementById("safetySave");
     const message = document.getElementById("safetyMessage");
     message.hidden = true;
@@ -91,7 +96,8 @@ async function save() {
         show(message, "Không có thay đổi nào để lưu.", false);
         return;
     }
-    button.disabled = true;      // chống bấm đôi
+    saving = true; // also guards Enter/requestSubmit while the request is pending
+    button.disabled = true;
     try {
         const result = await adminClient.saveSafetyConfig(Object.fromEntries(changed));
         groups = result.groups;
@@ -104,9 +110,10 @@ async function save() {
         if (err.status === 400 && keys.length > 0) {
             keys.forEach((key) => showError(key, fields[key]));
         } else {
-            toast("Đã xảy ra lỗi. Vui lòng thử lại sau.", "error");      // ô giữ nguyên nội dung đã nhập
+            toast("Đã xảy ra lỗi. Vui lòng thử lại sau.", "error"); // ô giữ nguyên nội dung đã nhập
         }
     } finally {
+        saving = false;
         const again = document.getElementById("safetySave");
         if (again) again.disabled = false;
     }
@@ -161,7 +168,7 @@ export function guardLeavingPage() {
             confirmText: "Bỏ thay đổi",
             confirmClass: "dan solid",
             onConfirm: async () => {
-                discarded = true;         // đã chọn bỏ thay đổi: cảnh báo của trình duyệt không hiện lần nữa
+                discarded = true; // đã chọn bỏ thay đổi: cảnh báo của trình duyệt không hiện lần nữa
                 window.location.assign(link.href);
                 return true;
             }

@@ -47,11 +47,13 @@ export async function initAdminPage(activeKey) {
         <div class="desk">
             <nav class="desk-side" aria-label="Menu quản trị">
                 <span class="side-title">Quản trị hệ thống</span>
-                ${NAV_ITEMS.map(item => `
-                    <a href="${item.path}" ${item.key === activeKey ? 'aria-current="page"' : ''}>
+                ${NAV_ITEMS.map(
+                    (item) => `
+                    <a href="${item.path}" ${item.key === activeKey ? 'aria-current="page"' : ""}>
                         ${ic(item.icon)}${esc(item.label)}
                     </a>
-                `).join("")}
+                `
+                ).join("")}
             </nav>
             <main class="desk-main" id="adminMainContent">
                 <p class="note">Đang tải dữ liệu…</p>
@@ -118,9 +120,14 @@ export function showModal({ title, bodyHtml, confirmText = "Lưu", confirmClass 
 
     document.body.appendChild(backdrop);
 
-    const close = () => closeModal();
-    backdrop.querySelector("#modalCloseBtn")?.addEventListener("click", close);
-    backdrop.querySelector("#modalCancelBtn")?.addEventListener("click", close);
+    let confirming = false;
+    const close = () => {
+        if (!confirming) backdrop.remove();
+    };
+    const closeBtn = backdrop.querySelector("#modalCloseBtn");
+    const cancelBtn = backdrop.querySelector("#modalCancelBtn");
+    closeBtn?.addEventListener("click", close);
+    cancelBtn?.addEventListener("click", close);
     backdrop.addEventListener("click", (e) => {
         if (e.target === backdrop) close();
     });
@@ -128,14 +135,21 @@ export function showModal({ title, bodyHtml, confirmText = "Lưu", confirmClass 
     const confirmBtn = backdrop.querySelector("#modalConfirmBtn");
     if (confirmBtn && onConfirm) {
         confirmBtn.addEventListener("click", async () => {
+            if (confirming) return;
+            confirming = true;
             confirmBtn.setAttribute("disabled", "true");
+            closeBtn?.setAttribute("disabled", "true");
+            cancelBtn?.setAttribute("disabled", "true");
             try {
                 const keepOpen = await onConfirm();
-                if (!keepOpen) closeModal();
+                if (!keepOpen) backdrop.remove();
             } catch (err) {
                 toast(err.message || "Đã xảy ra lỗi", "error");
             } finally {
+                confirming = false;
                 confirmBtn.removeAttribute("disabled");
+                closeBtn?.removeAttribute("disabled");
+                cancelBtn?.removeAttribute("disabled");
             }
         });
     }
