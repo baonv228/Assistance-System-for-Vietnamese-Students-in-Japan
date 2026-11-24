@@ -2,8 +2,12 @@ package com.sep490.vsa.feature.quest.contract;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sep490.vsa.feature.quest.QuestSettings;
 import com.sep490.vsa.feature.quest.QuestTestSupport;
 import org.assertj.core.api.SoftAssertions;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -63,6 +67,32 @@ abstract class QaContractSupport extends QuestTestSupport {
             "coinsToday", "dailyCap", "coins", "exchangeableNow"};
     static final String[] COIN_LINE_KEYS = {"id", "delta", "reason", "reasonLabel", "title", "link", "createdAt"};
 
+    /** The rotating quests offered before 23/11/2026, when TOPIC stopped being offered. */
+    static final List<String> ROTATING_WITH_TOPIC = List.of("LEARN_NEW", "REVIEW_LEARNING", "TOPIC", "PHRASE_OF_DAY");
+
+    @Autowired
+    private QuestSettings questSettings;
+    private List<String> rotating;
+
+    @BeforeEach
+    void keepRotating() {
+        rotating = new ArrayList<>(questSettings.getRotating());
+    }
+
+    @AfterEach
+    void putRotatingBack() {
+        questSettings.setRotating(rotating);
+    }
+
+    /**
+     * Offers TOPIC again, for this test only, as before 23/11/2026. The QA scenarios were written for days holding
+     * TOPIC; such days (made before TOPIC stopped being offered) still count, pay and answer as then, which is what
+     * they check. A test of what is offered now leaves the settings alone.
+     */
+    protected void offerTopicAsBefore() {
+        questSettings.setRotating(new ArrayList<>(ROTATING_WITH_TOPIC));
+    }
+
     // ---------------------------------------------------------------- days
 
     /**
@@ -90,10 +120,11 @@ abstract class QaContractSupport extends QuestTestSupport {
     /**
      * {@code count} entries (kind PHRASE, "Cửa hàng tiện lợi") of the sample topic "pay" ("Thanh toán"); every other
      * phrase hidden; each member gets stage ARR (whose first topic is "pay") and "Đã thuộc" on every entry, so
-     * LEARN_NEW (nothing left to learn) and REVIEW_LEARNING (no "Chưa thuộc") cannot be given: the day is
-     * FLASH_REVIEW + TOPIC "pay" + PHRASE_OF_DAY.
+     * LEARN_NEW (nothing left to learn) and REVIEW_LEARNING (no "Chưa thuộc") cannot be given: with TOPIC offered as
+     * before ({@link #offerTopicAsBefore}, done here) the day is FLASH_REVIEW + TOPIC "pay" + PHRASE_OF_DAY.
      */
     protected List<Long> payLibrary(int count, long... members) {
+        offerTopicAsBefore();
         List<Long> ids = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             ids.add(phrase("konbini", "PHRASE", "pay"));

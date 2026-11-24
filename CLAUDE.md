@@ -793,7 +793,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   changed that day (`QuestGenerator`): `FLASH_REVIEW` (fixed: "Ôn 10 thẻ ghi nhớ", any 10 different entries) + 2 of
   `LEARN_NEW` ("Đã thuộc" on an entry not "Đã thuộc" before and never counted for LEARN_NEW), `REVIEW_LEARNING` (the
   entry was "Chưa thuộc" right before), `TOPIC` (entries of one learning topic: `app.quests.stage-topics[<stage>]`,
-  else the topic with most entries not learned), `PHRASE_OF_DAY` (LISTEN event with today's phrase). One strategy per
+  else the topic with most entries not learned), `PHRASE_OF_DAY` (LISTEN event with today's phrase). TOPIC is no
+  longer offered (user decision 23/11/2026: `app.quests.rotating` = LEARN_NEW, REVIEW_LEARNING, PHRASE_OF_DAY); its
+  rule stays so days made before still show and count it and `PUT /api/dev/quests/today` can still make it. One strategy per
   code (`QuestRule`, `QuestRules`), so a new code (QUIZ) is one more bean. LEARN_NEW's `action.status` is worked out
   on every read against what is left (`actionNow`): "new" when enough unmarked entries, else "learning", else "". Rotating codes: a `Random` seeded by
   (Member, day) mixed by SplitMix64 (`QuestGenerator.seed`; unmixed, nearby seeds gave almost the same order every

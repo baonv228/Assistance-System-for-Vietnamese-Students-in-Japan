@@ -134,6 +134,8 @@ class QaInterestContractFlowTest extends QaContractSupport {
                 checked++;
             }
         }
-        assertThat(checked).as("quests about a group were met").isGreaterThanOrEqualTo(7);
+        // TOPIC is not offered any more (23/11/2026): LEARN_NEW about a group (3 of its 6 entries a day, every answer
+        // "Đã thuộc") is the quest about a group of days 1–4, then both groups are learnt
+        assertThat(checked).as("quests about a group were met").isGreaterThanOrEqualTo(4);
     }
 }

@@ -3,6 +3,7 @@ package com.sep490.vsa.feature.quest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.sep490.vsa.feature.phrase.PhraseOfDayService;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.Date;
 import java.time.Duration;
@@ -24,9 +25,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Making the day's quests (contract 3.2, 3.3): once per Member and Japan day, the same however often it is asked,
  * the fixed quest first, only quests the Member can do, targets lowered for a tiny library, a choice seeded by
- * (Member, day) that prefers codes not given yesterday, and the topic of TOPIC.
+ * (Member, day) that prefers codes not given yesterday, TOPIC never given any more (23/11/2026), and the topic of a
+ * TOPIC the test-only API still makes.
  */
 class QuestGenerationFlowTest extends QuestFlowSupport {
+
+    @Autowired
+    private QuestSettings settings;
 
     /** A library where every rotating quest is possible: 12 entries in one topic, 5 of them "Chưa thuộc". */
     private List<Long> everyQuestPossible(long user) {
@@ -82,7 +87,7 @@ class QuestGenerationFlowTest extends QuestFlowSupport {
             assertThat(today.path("quests").get(0).path("title").asText()).isEqualTo("Ôn 10 thẻ ghi nhớ");
             seen.addAll(codes);
         }
-        assertThat(seen).containsExactlyInAnyOrder("FLASH_REVIEW", "LEARN_NEW", "TOPIC", "PHRASE_OF_DAY");
+        assertThat(seen).containsExactlyInAnyOrder("FLASH_REVIEW", "LEARN_NEW", "PHRASE_OF_DAY");
     }
 
     @Test
@@ -170,8 +175,7 @@ class QuestGenerationFlowTest extends QuestFlowSupport {
         List<String> second = codes(today(user));
 
         assertThat(second).isEqualTo(first);
-        List<String> expected = QuestGenerator.shuffled(user, day,
-                List.of("LEARN_NEW", "REVIEW_LEARNING", "TOPIC", "PHRASE_OF_DAY")).subList(0, 2);
+        List<String> expected = QuestGenerator.shuffled(user, day, settings.getRotating()).subList(0, 2);
         assertThat(first.subList(1, 3)).isEqualTo(expected);
         assertThat(QuestGenerator.shuffled(user, day, List.of("A", "B", "C", "D")))
                 .isEqualTo(QuestGenerator.shuffled(user, day, List.of("A", "B", "C", "D")));
@@ -187,8 +191,7 @@ class QuestGenerationFlowTest extends QuestFlowSupport {
             // Yesterday's choice is today's natural one: today must still differ
             setJapanTime(day.minusDays(1), LocalTime.NOON);
             jdbc.update("DELETE FROM user_daily_quests WHERE user_id = ?", user);
-            List<String> natural = QuestGenerator.shuffled(user, day,
-                    List.of("LEARN_NEW", "REVIEW_LEARNING", "TOPIC", "PHRASE_OF_DAY")).subList(0, 2);
+            List<String> natural = QuestGenerator.shuffled(user, day, settings.getRotating()).subList(0, 2);
             jdbc.update("""
                     INSERT INTO user_daily_quests (user_id, quest_date, code, sort_order, title, target)
                     VALUES (?, ?, 'FLASH_REVIEW', 0, 'x', 1), (?, ?, ?, 1, 'x', 1), (?, ?, ?, 2, 'x', 1)""",
@@ -262,23 +265,51 @@ class QuestGenerationFlowTest extends QuestFlowSupport {
     }
 
     @Test
-    void topicIsGivenByItselfWhenItIsTheOnlyRotatingQuestPossible() throws Exception {
+    void topicIsNeverGivenEvenWhenItIsTheOnlyRotatingQuestPossible() throws Exception {
         LocalDate day = freshDay();
         isolateLibrary();
-        clearPhraseOfDay(day);
         long user = member();
         String topic = topic("Chủ đề từ vựng");
-        // Words only (never the phrase of the day), all "Đã thuộc": no LEARN_NEW, REVIEW_LEARNING or PHRASE_OF_DAY
+        // Words only (never the phrase of the day), all "Đã thuộc": no LEARN_NEW, REVIEW_LEARNING or PHRASE_OF_DAY.
+        // Only TOPIC was possible (the day was FLASH_REVIEW + TOPIC until 23/11/2026): now the fixed quest alone.
         for (int i = 0; i < 6; i++) {
             mark(user, phrase("konbini", "VOCAB", topic), true);
         }
 
-        JsonNode today = today(user);
+        for (int d = 0; d < 5; d++) {
+            clearPhraseOfDay(day.plusDays(d));
+            setJapanTime(day.plusDays(d), LocalTime.NOON);
+            JsonNode today = today(user);
+            assertThat(codes(today)).as("day %d", d).containsExactly("FLASH_REVIEW");
+            assertThat(quest(today, "FLASH_REVIEW").path("target").asInt()).isEqualTo(6);
+        }
+    }
 
-        assertThat(codes(today)).containsExactly("FLASH_REVIEW", "TOPIC");
-        assertThat(quest(today, "FLASH_REVIEW").path("target").asInt()).isEqualTo(6);
-        assertThat(quest(today, "TOPIC").path("target").asInt()).isEqualTo(5);
-        assertThat(quest(today, "TOPIC").path("action").path("group").asText()).isEqualTo(topic);
+    /**
+     * TOPIC is not offered any more (user decision 23/11/2026): over many Members and days where every quest is
+     * possible, the day is always the fixed quest + 2 of LEARN_NEW, REVIEW_LEARNING and PHRASE_OF_DAY, and each of
+     * these still turns up.
+     */
+    @Test
+    void topicIsNeverGivenWhenEveryQuestIsPossible() throws Exception {
+        LocalDate day = freshDay();
+        isolateLibrary();
+        Set<String> seen = new HashSet<>();
+        for (int n = 0; n < 6; n++) {
+            long user = member();
+            everyQuestPossible(user);
+            for (int d = 0; d < 15; d++) {
+                setJapanTime(day.plusDays(d), LocalTime.NOON);
+                List<String> codes = codes(today(user));
+                assertThat(codes).as("member %d, day %d", n, d).hasSize(3).doesNotContain("TOPIC")
+                        .first().isEqualTo("FLASH_REVIEW");
+                seen.addAll(codes);
+            }
+            assertThat(rows("SELECT COUNT(*) FROM user_daily_quests WHERE user_id = ? AND code = 'TOPIC'", user))
+                    .isZero();
+            assertThat(questRows(user)).isEqualTo(45);
+        }
+        assertThat(seen).containsExactlyInAnyOrder("FLASH_REVIEW", "LEARN_NEW", "REVIEW_LEARNING", "PHRASE_OF_DAY");
     }
 
     @Test

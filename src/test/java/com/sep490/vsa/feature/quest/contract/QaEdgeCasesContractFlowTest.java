@@ -21,12 +21,40 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = QaContractSupport.QA_DB)
 class QaEdgeCasesContractFlowTest extends QaContractSupport {
 
-    // ------------------------------------------------------------ 3.3 TOPIC choice
+    // ------------------------------------------------------------ TOPIC no longer offered (23/11/2026)
+
+    /**
+     * The day of {@link #payLibrary} without offering TOPIC again: only TOPIC was possible among the rotating quests,
+     * and it is not given any more, so the day is FLASH_REVIEW + PHRASE_OF_DAY, on every day.
+     */
+    @Test
+    void topicIsNoLongerGivenEvenWhenItIsTheOnlyRotatingQuestPossible() throws Exception {
+        LocalDate day = freshDay();
+        long m = member();
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            ids.add(phrase("konbini", "PHRASE", "pay"));
+        }
+        isolateLibrary();
+        setStage(m, "ARR");
+        ids.forEach(id -> mark(m, id, true));
+
+        SoftAssertions s = new SoftAssertions();
+        for (int d = 0; d < 5; d++) {
+            setJapanTime(day.plusDays(d), LocalTime.NOON);
+            JsonNode t = today(m);
+            s.assertThat(codes(t.path("quests"))).as("day " + d).containsExactly("FLASH_REVIEW", "PHRASE_OF_DAY");
+        }
+        s.assertAll();
+    }
+
+    // ------------------------------------------------------------ 3.3 TOPIC choice (days that hold TOPIC)
 
     /** "Lấy chủ đề đầu tiên khả thi trong danh sách": ARR = pay, train, …; pay has 3 entries (< 5), train 5. */
     @Test
     void topicIsTheFirstFeasibleTopicOfTheStage() throws Exception {
         freshDay();
+        offerTopicAsBefore();
         long m = member();
         List<Long> all = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
@@ -62,6 +90,7 @@ class QaEdgeCasesContractFlowTest extends QaContractSupport {
     @Test
     void withoutAStageTopicIsTheOneWithMostEntriesNotLearned() throws Exception {
         LocalDate day = freshDay();
+        offerTopicAsBefore();
         long m = member();
         String t1 = topic("QA chủ đề một");
         String t2 = topic("QA chủ đề hai");
@@ -111,7 +140,7 @@ class QaEdgeCasesContractFlowTest extends QaContractSupport {
 
     // ------------------------------------------------------------ 3.2 rotation
 
-    /** "ưu tiên khác bộ của hôm qua": with all 4 rotating quests feasible, today's pair differs from yesterday's. */
+    /** "ưu tiên khác bộ của hôm qua": with all 3 rotating quests feasible, today's pair differs from yesterday's. */
     @Test
     void theRotatingPairDiffersFromYesterdaysWhenPossible() throws Exception {
         LocalDate day = freshDay();
@@ -571,6 +600,7 @@ class QaEdgeCasesContractFlowTest extends QaContractSupport {
     @Test
     void theDaysSetSurvivesItsTopicBeingDeleted() throws Exception {
         LocalDate day = freshDay();
+        offerTopicAsBefore();
         long m = member();
         String t2 = topic("QA chủ đề sẽ xóa");
         List<Long> two = new ArrayList<>();
@@ -625,6 +655,7 @@ class QaEdgeCasesContractFlowTest extends QaContractSupport {
     @Test
     void flashTargetCountsEntriesOfBothKinds() throws Exception {
         freshDay();
+        offerTopicAsBefore();
         long m = member();
         long only = phrase("konbini", "PHRASE", "pay");
         List<Long> words = new ArrayList<>();
