@@ -22,8 +22,11 @@ public class QuestSettings {
     private String zone = "Asia/Tokyo";
     /** The quest every Member gets every day, listed first. */
     private String fixed = "FLASH_REVIEW";
-    /** The quests the day's others are chosen from. */
-    private List<String> rotating = new ArrayList<>(List.of("LEARN_NEW", "REVIEW_LEARNING", "TOPIC", "PHRASE_OF_DAY"));
+    /**
+     * The quests the day's others are chosen from. TOPIC is not offered any more (23/11/2026): its rule stays for the
+     * days made before and the test-only API.
+     */
+    private List<String> rotating = new ArrayList<>(List.of("LEARN_NEW", "REVIEW_LEARNING", "PHRASE_OF_DAY"));
     private int rotatingPerDay = 2;
     /** Default target of each quest code. */
     private Map<String, Integer> target = new LinkedHashMap<>(Map.of(

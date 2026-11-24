@@ -555,19 +555,19 @@ class QuestInterestFlowTest extends QuestFlowSupport {
     }
 
     /**
-     * Only TOPIC can follow the interest here (its 5 entries are all "Đã thuộc": nothing for LEARN_NEW or
-     * REVIEW_LEARNING in the group), while LEARN_NEW, REVIEW_LEARNING and PHRASE_OF_DAY are all possible on the whole
-     * library: without {@code min-per-day} most days would hold no quest about the interest.
+     * Only LEARN_NEW can follow the interest here (4 entries of its group, none "Chưa thuộc": not enough for
+     * REVIEW_LEARNING in the group; TOPIC, which followed interests first, is not offered any more since 23/11/2026),
+     * while LEARN_NEW, REVIEW_LEARNING and PHRASE_OF_DAY are all possible on the whole library: without
+     * {@code min-per-day} some days would hold no quest about the interest.
      */
     @Test
     void everyDayAQuestFollowsAnInterestAndTheDaysStillVary() throws Exception {
         long m = member();
         String mine = topic("Khám bệnh");
-        List<Long> known = phrases(5, mine);
+        phrases(4, mine);
         List<Long> learning = phrases(5);
         phrases(2);
         isolateLibrary();
-        known.forEach(id -> mark(m, id, true));
         learning.forEach(id -> mark(m, id, false));
         Topic yTe = blogTopic("QI Y tế", "topic:" + mine);
         choose(m, yTe);
@@ -580,11 +580,14 @@ class QuestInterestFlowTest extends QuestFlowSupport {
             Set<String> rotating = new HashSet<>(codes(t));
             rotating.remove("FLASH_REVIEW");
             assertThat(t.path("quests").size()).as("day " + d).isEqualTo(3);
-            JsonNode topic = quest(t, "TOPIC");
-            assertThat(topic).as("day " + d + ": " + codes(t)).isNotNull();
-            assertThat(reason(topic)).containsExactly("INTEREST", "Chủ đề bạn quan tâm", yTe.name());
+            assertThat(codes(t)).as("day " + d).doesNotContain("TOPIC");
+            JsonNode learn = quest(t, "LEARN_NEW");
+            assertThat(learn).as("day " + d + ": " + codes(t)).isNotNull();
+            assertThat(reason(learn)).containsExactly("INTEREST", "Chủ đề bạn quan tâm", yTe.name());
+            assertThat(action(learn).subList(1, 3)).isEqualTo(List.of("topic", mine));
+            assertThat(learn.path("title").asText()).isEqualTo("Thuộc 3 mục mới chủ đề “Khám bệnh”");
             for (JsonNode q : t.path("quests")) {
-                if (!"TOPIC".equals(q.path("code").asText())) {
+                if (!"LEARN_NEW".equals(q.path("code").asText())) {
                     assertThat(reason(q)).as(q.path("code").asText()).isNull();
                 }
             }
@@ -593,32 +596,33 @@ class QuestInterestFlowTest extends QuestFlowSupport {
         }
         assertThat(sets.size()).as("the pairs of rotating quests vary over the days").isGreaterThan(1);
         assertThat(seen).as("the other quests still turn up")
-                .contains("PHRASE_OF_DAY", "LEARN_NEW", "REVIEW_LEARNING");
+                .containsExactlyInAnyOrder("PHRASE_OF_DAY", "LEARN_NEW", "REVIEW_LEARNING");
     }
 
     @Test
     void minPerDayZeroLeavesTheChoiceToChance() throws Exception {
         long m = member();
         String mine = topic("Khám bệnh");
-        List<Long> known = phrases(5, mine);
+        phrases(4, mine);
         List<Long> learning = phrases(5);
         phrases(2);
         isolateLibrary();
-        known.forEach(id -> mark(m, id, true));
         learning.forEach(id -> mark(m, id, false));
         choose(m, blogTopic("QI Y tế", "topic:" + mine));
         settings.getInterest().setMinPerDay(0);
 
-        int withTopic = 0;
+        int withLearnNew = 0;
         for (int d = 0; d < 21; d++) {
             setJapanTime(day.plusDays(d), LocalTime.NOON);
-            JsonNode topic = quest(today(m), "TOPIC");
-            if (topic != null) {
-                withTopic++;
-                assertThat(reason(topic).get(0)).as("a TOPIC still follows the interest").isEqualTo("INTEREST");
+            JsonNode t = today(m);
+            assertThat(codes(t)).as("day " + d).doesNotContain("TOPIC");
+            JsonNode learn = quest(t, "LEARN_NEW");
+            if (learn != null) {
+                withLearnNew++;
+                assertThat(reason(learn).get(0)).as("a LEARN_NEW still follows the interest").isEqualTo("INTEREST");
             }
         }
-        assertThat(withTopic).as("TOPIC is no longer on every day").isLessThan(21);
+        assertThat(withLearnNew).as("LEARN_NEW is no longer on every day").isLessThan(21).isPositive();
     }
 
     @Test

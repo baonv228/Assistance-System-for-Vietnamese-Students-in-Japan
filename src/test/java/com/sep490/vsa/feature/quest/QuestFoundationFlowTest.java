@@ -41,7 +41,9 @@ class QuestFoundationFlowTest extends QuestTestSupport {
     void settingsAreReadAsWrittenInApplicationProperties() {
         assertThat(settings.zoneId().getId()).isEqualTo("Asia/Tokyo");
         assertThat(settings.getFixed()).isEqualTo("FLASH_REVIEW");
-        assertThat(settings.getRotating()).containsExactly("LEARN_NEW", "REVIEW_LEARNING", "TOPIC", "PHRASE_OF_DAY");
+        // TOPIC is not offered any more (23/11/2026), in the file and in the class's own default
+        assertThat(settings.getRotating()).containsExactly("LEARN_NEW", "REVIEW_LEARNING", "PHRASE_OF_DAY");
+        assertThat(new QuestSettings().getRotating()).containsExactly("LEARN_NEW", "REVIEW_LEARNING", "PHRASE_OF_DAY");
         assertThat(settings.questsPerDay()).isEqualTo(3);
         assertThat(settings.targetOf("FLASH_REVIEW")).isEqualTo(10);
         assertThat(settings.targetOf("LEARN_NEW")).isEqualTo(3);
