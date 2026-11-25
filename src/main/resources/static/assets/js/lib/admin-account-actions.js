@@ -17,12 +17,13 @@ export async function runStatusFlow(user, { onMessage, onChanged }) {
     try {
         await adminClient.checkStatusChange(user.id, target);
     } catch (err) {
-        onMessage(err.message, true);
         if (err.status === 404) await onChanged();
+        onMessage(err.message, true);
         return;
     }
 
-    const bodyHtml = locking ? `
+    const bodyHtml = locking
+        ? `
         <p>Bạn có chắc muốn khóa tài khoản <b>${esc(user.displayName)}</b>? Thao tác này có thể ảnh hưởng đến dữ liệu liên quan.</p>
         <p class="note">${ic("info")} Mọi phiên đăng nhập của tài khoản sẽ bị chấm dứt ngay, và bài viết, bình luận của họ
             được ẩn cho đến khi mở khóa.</p>
@@ -30,7 +31,8 @@ export async function runStatusFlow(user, { onMessage, onChanged }) {
             <label for="lockReasonInput">Lý do khóa (ghi vào nhật ký):</label>
             <input type="text" id="lockReasonInput" class="admin-input" maxlength="500"
                    placeholder="Ví dụ: đăng nội dung lừa đảo, vi phạm nhiều lần…">
-        </div>` : `
+        </div>`
+        : `
         <p>Bạn có chắc muốn mở khóa tài khoản <b>${esc(user.displayName)}</b>? Tài khoản sẽ đăng nhập lại được ngay.</p>`;
 
     showModal({
@@ -39,20 +41,20 @@ export async function runStatusFlow(user, { onMessage, onChanged }) {
         confirmText: "Xác nhận",
         confirmClass: locking ? "dan solid" : "pri",
         onConfirm: async () => {
-            const reason = locking ? (document.getElementById("lockReasonInput")?.value.trim() || "") : "";
+            const reason = locking ? document.getElementById("lockReasonInput")?.value.trim() || "" : "";
             try {
                 await adminClient.updateUserStatus(user.id, target, reason, user.status);
             } catch (err) {
                 if (err.status === 409 || err.status === 404) {
-                    onMessage(err.message, true);
                     await onChanged();
+                    onMessage(err.message, true);
                     return false;
                 }
                 if (err.status === 400) {
                     onMessage(err.message, true);
                     return false;
                 }
-                throw err;      // lỗi bất ngờ: toast do hộp thoại hiện, hộp thoại giữ nguyên để thử lại
+                throw err; // lỗi bất ngờ: toast do hộp thoại hiện, hộp thoại giữ nguyên để thử lại
             }
             toast("Đã cập nhật trạng thái tài khoản.", "success");
             await onChanged();
@@ -69,8 +71,8 @@ export async function runRoleChange(user, newRole, { onMessage, onChanged }) {
     try {
         await adminClient.updateUserRole(user.id, newRole, user.role);
     } catch (err) {
-        onMessage(err.message, true);
         if (err.status === 409 || err.status === 404) await onChanged();
+        onMessage(err.message, true);
         return false;
     }
     if (newRole === user.role) {
@@ -84,6 +86,7 @@ export async function runRoleChange(user, newRole, { onMessage, onChanged }) {
 
 /** Các <option> của ô chọn vai trò, chọn sẵn vai trò hiện tại. */
 export function roleOptionsHtml(current) {
-    return ROLE_OPTIONS.map((r) =>
-        `<option value="${esc(r.code)}" ${r.code === current ? "selected" : ""}>${esc(r.label)}</option>`).join("");
+    return ROLE_OPTIONS.map(
+        (r) => `<option value="${esc(r.code)}" ${r.code === current ? "selected" : ""}>${esc(r.label)}</option>`
+    ).join("");
 }

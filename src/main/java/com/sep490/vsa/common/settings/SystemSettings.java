@@ -20,6 +20,14 @@ public class SystemSettings {
     public static final String NEW_ACCOUNT_DAYS = "new_account_days";
     public static final String POSTS_PER_DAY = "posts_per_day";
     public static final String PINS_PER_DAY = "pins_per_day";
+    /**
+     * New pins that skip the Moderator (feature/review PinService): on (1) / off (0), the points a member needs, and
+     * how many of one member's pins a Japan day go on the map at once (the next ones wait). Set by the Moderators
+     * (/moderator, "Duyệt ghim tự động"), since they answer for the pins; the Admin sees them too.
+     */
+    public static final String PIN_AUTO_APPROVE = "pin_auto_approve";
+    public static final String PIN_AUTO_MIN_POINTS = "pin_auto_min_points";
+    public static final String PIN_AUTO_PER_DAY = "pin_auto_per_day";
     public static final String VIDEOS_PER_DAY = "videos_per_day";
     /** "Bài nổi bật": how many posts are featured and the minimum score (feature/blog FeaturedSnapshotService). */
     public static final String FEATURED_TOP_N = "featured_top_n";

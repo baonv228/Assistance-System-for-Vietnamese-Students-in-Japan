@@ -852,7 +852,8 @@ public class ContentFilter {
 
     /** "com|net|…", longest first. */
     private static String alternatives(Set<String> endings) {
-        return endings.stream().sorted(Comparator.comparingInt(String::length).reversed().thenComparing(s -> s))
+        return endings.stream().sorted(Comparator.comparingInt(String::length).reversed()
+                .thenComparing(Comparator.naturalOrder()))
                 .collect(Collectors.joining("|"));
     }
 }

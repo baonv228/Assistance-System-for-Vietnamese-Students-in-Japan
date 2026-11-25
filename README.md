@@ -61,6 +61,35 @@ Cùng lúc đó app nạp dữ liệu mẫu từ prototype (địa điểm, revi
 
 Thiết kế từng bảng: `docs/database/database-design.md`.
 
+### Kiểm thử và báo cáo Admin
+
+Chạy backend trên MySQL thử nghiệm local và JavaScript với Node ≥ 20:
+
+```powershell
+$runDate = Get-Date -Format yyyy-MM-dd
+$runStamp = $runDate -replace '-', ''
+$fullSuiteLog = "target/full-verification-$runStamp.log"
+New-Item -ItemType Directory -Force target | Out-Null
+mvn '-Dspring.datasource.hikari.maximum-pool-size=4' `
+    '-Dspring.datasource.hikari.minimum-idle=1' `
+    '-Dspring.test.context.cache.maxSize=4' test | Tee-Object -FilePath $fullSuiteLog
+node --test src/test/js/
+```
+
+Kế hoạch, danh sách case và hai file Excel nằm trong [docs/testing](docs/testing).
+[Báo cáo lần chạy 21/11/2026](docs/testing/admin-test-run-report-2026-11-21.md) ghi môi trường, kết quả và cách chạy browser trên localhost.
+Script cập nhật/kiểm tra Excel nằm trong `scripts/testing/`, không cần cài Excel:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/testing/Update-AdminTestWorkbooks.ps1 -RunDate $runDate -FullSuiteLog $fullSuiteLog -CheckEvidenceOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/testing/Update-AdminTestWorkbooks.ps1 -RunDate $runDate -FullSuiteLog $fullSuiteLog
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/testing/Test-AdminTestWorkbooks.ps1 -RunDate $runDate -FullSuiteLog $fullSuiteLog
+```
+
+Các script đọc Surefire XML, log Maven và browser report/screenshots của lần chạy đã hoàn tất trong `target/`.
+Dùng `-RunDate`, `-FullSuiteLog` và `-BrowserEvidence` khi đổi lần chạy hoặc vị trí bằng chứng.
+Case thiếu bằng chứng hoặc test bị skip sẽ không được đánh dấu Passed; log Maven phải khớp tổng số trong XML.
+
 ## 1. Cấu trúc Backend
 
 Mã nguồn Java nằm trong `src/main/java/com/sep490/vsa/`.

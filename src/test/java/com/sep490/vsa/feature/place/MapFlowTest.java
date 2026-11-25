@@ -30,7 +30,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -210,6 +212,48 @@ class MapFlowTest {
         // A category matches at the start of a word: "ga" is "Ga tàu", not "ngân hàng"
         mvc.perform(get("/api/map/search").param("q", "ga"))
                 .andExpect(jsonPath("$.data.categories[*].id", not(hasItem("bank"))));
+    }
+
+    @Test
+    void theSearchListsPlacesInTheViewAndLooksFurtherOnlyWhenItHoldsNone() throws Exception {
+        String q = "zz" + word;      // not in the names of the places setUp adds anywhere in Japan
+        // The view: a small box in Adachi. One Senpai ơi place inside it, one in Shibuya (far outside)
+        long inside = insertPlace("Cửa hàng " + q + " Adachi", "ACTIVE", 35.770, 139.800, "OSM", null);
+        long shibuya = insertPlace("Cửa hàng " + q + " Shibuya", "ACTIVE", 35.660, 139.700, "OSM", null);
+        ExternalPlaces.Hit hitIn = new ExternalPlaces.Hit("N7" + System.nanoTime(), "Shop " + q + " in", null, null,
+                null, "Adachi, Tokyo", "shop=convenience", "jp", 35.772, 139.801);
+        ExternalPlaces.Hit hitOut = new ExternalPlaces.Hit("N6" + System.nanoTime(), "Shop " + q + " out", null, null,
+                null, "Minato, Tokyo", "shop=convenience", "jp", 35.650, 139.750);
+        when(map.search(anyString(), any(ExternalPlaces.Where.class))).thenReturn(List.of(hitIn, hitOut));
+
+        mvc.perform(get("/api/map/search").param("q", q).session(session(viewer))
+                        .param("south", "35.75").param("west", "139.78").param("north", "35.79").param("east", "139.82"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.scope").value("AREA"))
+                .andExpect(jsonPath("$.data.places[0].id").value((int) inside))
+                .andExpect(jsonPath("$.data.places[*].id", not(hasItem((int) shibuya))))
+                .andExpect(jsonPath("$.data.places[*].externalId", hasItem(hitIn.id())))
+                .andExpect(jsonPath("$.data.places[*].externalId", not(hasItem(hitOut.id()))));
+        // The map service was asked for the box only, not around Tokyo's centre
+        verify(map).search(anyString(), argThat(w -> w.inside() && w.contains(35.77, 139.80)));
+
+        // Looking at Osaka, where nothing matches: all of Japan, nearest to Osaka first (Shibuya before Adachi)
+        mvc.perform(get("/api/map/search").param("q", q)
+                        .param("south", "34.60").param("west", "135.40").param("north", "34.75").param("east", "135.60"))
+                .andExpect(jsonPath("$.data.scope").value("WIDE"))
+                .andExpect(jsonPath("$.data.external").value("LOGIN"))
+                .andExpect(jsonPath("$.data.places[0].id").value((int) shibuya))
+                .andExpect(jsonPath("$.data.places[1].id").value((int) inside));
+
+        // Without a view the search covers Japan as before; a box that is not one answers 400
+        mvc.perform(get("/api/map/search").param("q", q))
+                .andExpect(jsonPath("$.data.scope").doesNotExist())
+                .andExpect(jsonPath("$.data.places[*].id", hasItem((int) shibuya)));
+        mvc.perform(get("/api/map/search").param("q", q)
+                        .param("south", "35.79").param("west", "139.78").param("north", "35.75").param("east", "139.82"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/map/search").param("q", q).param("south", "35.75"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

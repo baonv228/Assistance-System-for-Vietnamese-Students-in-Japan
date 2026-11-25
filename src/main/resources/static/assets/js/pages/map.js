@@ -5,30 +5,12 @@
 import { apiClient } from "../api/client.js";
 import { checkNotificationsSoon, mountSiteHeader } from "../components/site-header.js";
 import { avatar, esc, googleDirectionsUrl, ic, stars, tagChips, timeAgo } from "../lib/ui.js";
+import {
+    BASEMAPS, distance, formatDistance, glOf, knownPlaceFor, poiAt, poiInfo, poisAround, rememberBasemap, setBaseLayer,
+    storedBasemap, SUBCLASS_CATEGORY
+} from "../lib/basemap.js";
 
 const L = window.L;
-const OSM_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
-/**
- * Map styles. "Gọn" is OpenFreeMap "Liberty" (vector map drawn by MapLibre; free, no key, no sign-up): calm like
- * Google Maps, labels in Latin letters and Japanese, so our pins stand out. MapLibre (~800 KB) loads only for it; if
- * it cannot run (no WebGL, blocked CDN) the map falls back to "Chi tiết", the standard OpenStreetMap map with every
- * shop and house number. The choice is kept in this browser.
- */
-const BASEMAPS = {
-    clean: { label: "Gọn", style: "https://tiles.openfreemap.org/styles/liberty",
-        attribution: `<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> ${OSM_CREDIT}` },
-    detail: { label: "Chi tiết", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        options: { maxZoom: 19, attribution: OSM_CREDIT } }
-};
-const MAPLIBRE = [
-    { css: "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css",
-        hash: "sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" },
-    { js: "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
-        hash: "sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" },
-    { js: "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js",
-        hash: "sha384-tXYNKOHx4T02jMP7YYCtBxPIv1B5gaA5mcVPBzqMp6d7VzWzxJgI2aWF/nJLrQdS" }
-];
-const BASEMAP_KEY = "asvsj.map.basemap";
 const SEARCH_DELAY = 350;
 const FRESH_DAYS = 30;
 const OLD_DAYS = 365;
@@ -53,7 +35,8 @@ const els = {
     confirmDlg: $("#confirm-dlg"), confirmText: $("#confirm-text"), confirmOk: $("#confirm-ok"),
     reportDlg: $("#report-dlg"), reportForm: $("#report-form"), reportReasons: $("#report-reasons"),
     reportNote: $("#report-note"), reportError: $("#report-error"), reportTitle: $("#report-title"),
-    reportIntro: $("#report-intro"), staffDlg: $("#staff-dlg"), staffJa: $("#staff-ja"), staffVi: $("#staff-vi")
+    reportIntro: $("#report-intro"), staffDlg: $("#staff-dlg"), staffJa: $("#staff-ja"), staffVi: $("#staff-vi"),
+    searchHere: $("#search-here")
 };
 
 const state = {
@@ -63,7 +46,9 @@ const state = {
     catByName: new Map(),
     places: new Map(),          // id → MapPlace
     filter: null,               // category id
-    results: null,              // { title, items: [PlaceOption] } after Enter in the search box
+    results: null,              // { q, title, sub, items: [PlaceOption] } after Enter in the search box
+    searchAt: null,             // { center, zoom } of the map when the results were shown ("Tìm kiếm ở khu vực này")
+    searchTicket: 0,            // the latest search sent: an older answer arriving late is ignored
     panel: null,                // "list" | "detail" | "osm"
     detail: null,               // PlaceDetail
     osm: null,                  // PlaceOption of an OpenStreetMap place not yet on Senpai ơi
@@ -73,6 +58,7 @@ const state = {
     phraseKind: "PHRASE",       // the part shown: PHRASE "Mẫu câu" or VOCAB "Từ vựng"
     phraseReasons: null,        // the report reasons of phrases, read once when first needed
     reportPhraseId: null,       // set while the report dialog is about a phrase, not a review
+    reportPlaceId: null,        // set while it is "Báo cáo địa điểm" (UC-U20)
     cameFromList: false,
     me: null,                   // { lat, lng } from "Vị trí của tôi"
     suggestTicket: 0,
@@ -87,7 +73,6 @@ let resultLayer;           // OpenStreetMap results of the last search (not on S
 let tempMarker = null;
 let meMarker = null;
 let tiles = null;
-let maplibreLoading = null;  // MapLibre scripts for the "Gọn" style, loaded once
 const markers = new Map();     // place id → Leaflet marker
 
 // ---------------------------------------------------------------- start
@@ -165,6 +150,7 @@ async function start() {
     loadEvents();
     map.on("moveend", () => {
         if (state.panel === "list" && !state.results) renderPanel();
+        updateSearchHere();
     });
     map.on("click", (e) => {
         if (state.picking) startPin(e.latlng);
@@ -359,6 +345,7 @@ els.clear.addEventListener("click", () => {
         resultLayer.clearLayers();
         closePanel();
     }
+    els.searchHere.hidden = true;
     els.q.focus();
 });
 els.form.addEventListener("submit", (event) => {
@@ -383,7 +370,7 @@ async function suggest(text) {
     const ticket = ++state.suggestTicket;
     let found;
     try {
-        found = await apiClient.mapSearch(text);
+        found = await apiClient.mapSearch(text, viewBox());
     } catch (error) {
         if (ticket !== state.suggestTicket) return;
         els.suggest.innerHTML = `<p class="note">${esc(error.message)}</p>`;
@@ -451,26 +438,115 @@ els.suggest.addEventListener("click", (event) => {
     }
 });
 
+/**
+ * The search as on Google Maps: the places inside the view on screen, nearest to its centre first, and the map stays
+ * where it is. Only when the view holds none does the server look all over Japan (scope WIDE); the map then goes to
+ * the best result (and close ones), never zooms out to all of them.
+ */
 async function runSearch(text) {
     const q = text.trim();
     hideSuggest();
     if (!q) return;
     ++state.suggestTicket;
+    const ticket = ++state.searchTicket;
+    els.searchHere.hidden = true;
     els.body.innerHTML = `<p class="skeleton">Đang tìm…</p>`;
     state.panel = "list";
     openPanel();
     try {
-        const found = await apiClient.mapSearch(q);
-        state.results = { title: `Kết quả cho “${q}”`, items: found.places, note: externalNote(found), categories: found.categories };
+        const found = await apiClient.mapSearch(q, viewBox());
+        if (ticket !== state.searchTicket) return;
+        const wide = found.scope === "WIDE";
+        const n = found.places.length;
+        state.results = {
+            q,
+            title: `Kết quả cho “${q}”`,
+            sub: !n ? "" : wide ? `${n} địa điểm ngoài vùng đang xem` : `${n} địa điểm trong vùng đang xem`,
+            items: found.places,
+            note: (wide && n ? `<p class="note">${ic("travel_explore")}Không có kết quả trong vùng đang xem, đây là kết quả ở nơi khác.</p>` : "")
+                + externalNote(found),
+            categories: found.categories
+        };
         state.lastOptions = found.places;
         showList();
         drawResultPins(found.places);
-        const pts = found.places.filter((o) => o.lat != null);
-        if (pts.length) map.fitBounds(L.latLngBounds(pts.map((o) => [o.lat, o.lng])), { padding: [60, 60], maxZoom: 16 });
+        state.searchAt = { center: map.getCenter(), zoom: map.getZoom() };
+        if (wide && n) {
+            // the best result (the server's order weighs the name and the nearness), with those of the next two that
+            // stand close to it: never zoomed out to every result
+            const pts = found.places.filter((o) => o.lat != null);
+            const first = L.latLng(pts[0].lat, pts[0].lng);
+            const nearest = [pts[0], ...pts.slice(1, 3).filter((o) => first.distanceTo([o.lat, o.lng]) <= 1500)];
+            map.once("moveend", markSearchView);
+            // into the part of the map that is not behind the list panel / sheet
+            const v = visibleRect();
+            const size = map.getSize();
+            const bounds = L.latLngBounds(nearest.map((o) => [o.lat, o.lng]));
+            map.fitBounds(nearest.length === 1 ? bounds.pad(0.002) : bounds, {
+                paddingTopLeft: [v.left + 60, v.top + 90],
+                paddingBottomRight: [size.x - v.right + 60, size.y - v.bottom + 40],
+                maxZoom: nearest.length === 1 ? Math.max(map.getZoom(), 16) : 16
+            });
+        }
     } catch (error) {
+        if (ticket !== state.searchTicket) return;
         els.body.innerHTML = `<div class="pad"><div class="alert error">${esc(error.message)}</div></div>`;
     }
 }
+
+/**
+ * The part of the map the user can see, in map pixels: without the list panel on its left (wide screens) or the sheet
+ * at the bottom (phones), so the search does not list places hidden behind them.
+ */
+function visibleRect() {
+    const size = map.getSize();
+    const rect = { left: 0, top: 0, right: size.x, bottom: size.y };
+    if (!els.panel.hidden) {
+        const box = map.getContainer().getBoundingClientRect();
+        const panel = els.panel.getBoundingClientRect();
+        if (matchMedia("(min-width: 861px)").matches) rect.left = Math.min(size.x - 80, Math.max(0, panel.right - box.left));
+        else rect.bottom = Math.max(80, Math.min(size.y, panel.top - box.top));
+    }
+    return rect;
+}
+
+/** The box on screen for the search, within the world's limits (a map zoomed far out repeats the world sideways). */
+function viewBox() {
+    if (!map) return {};
+    const v = visibleRect();
+    const b = L.latLngBounds(map.containerPointToLatLng([v.left, v.bottom]), map.containerPointToLatLng([v.right, v.top]));
+    const r = (x) => Math.round(x * 1e5) / 1e5;
+    const south = Math.max(-90, b.getSouth());
+    const north = Math.min(90, b.getNorth());
+    const west = Math.max(-180, b.getWest());
+    const east = Math.min(180, b.getEast());
+    if (!(south < north && west < east)) return {};
+    return { south: r(south), west: r(west), north: r(north), east: r(east) };
+}
+
+function markSearchView() {
+    state.searchAt = { center: map.getCenter(), zoom: map.getZoom() };
+    updateSearchHere();
+}
+
+/** "Tìm kiếm ở khu vực này" shows once the user has moved the map away from the results of a search. */
+function updateSearchHere() {
+    if (!state.results?.q || !state.searchAt || state.picking) {
+        els.searchHere.hidden = true;
+        return;
+    }
+    const moved = map.getZoom() !== state.searchAt.zoom
+        || map.latLngToContainerPoint(state.searchAt.center).distanceTo(map.latLngToContainerPoint(map.getCenter())) > 80;
+    els.searchHere.hidden = !moved;
+}
+
+els.searchHere.addEventListener("click", () => {
+    const q = state.results?.q;
+    if (!q) return;
+    els.q.value = q;
+    els.clear.hidden = false;
+    runSearch(q);
+});
 
 // ---------------------------------------------------------------- list panel
 
@@ -515,7 +591,7 @@ function renderList() {
     if (state.results) {
         title = state.results.title;
         items = state.results.items;
-        sub = `${items.length} địa điểm`;
+        sub = state.results.sub || `${items.length} địa điểm`;
         note = state.results.note || "";
     } else {
         const cat = state.catById.get(state.filter);
@@ -616,10 +692,11 @@ function renderDetail() {
         : `<button class="btn pri sm" type="button" data-act="write" ${outsideJapan(d) ? `disabled ${ONLY_JAPAN_ATTR}` : staff || d.status !== "ACTIVE" ? "disabled" : ""}>${ic("rate_review")}Viết review</button>`;
     const saveBtn = `<button class="btn sm ${d.saved ? "on" : ""}" type="button" data-act="save" aria-pressed="${d.saved}"
             ${state.user && !d.canAct ? "disabled" : ""}>${ic(d.saved ? "bookmark_added" : "bookmark")}${d.saved ? "Đã lưu" : "Lưu"}</button>`;
-    const shown = `${Math.min(d.closedReports, d.closedThreshold)}/${d.closedThreshold}`;
-    const closedBtn = d.closed || d.status !== "ACTIVE" ? "" : d.reportedClosed
-        ? `<button class="btn sm on" type="button" disabled>${ic("block")}Bạn đã báo đóng cửa (${shown})</button>`
-        : `<button class="btn sm" type="button" data-act="report-closed" ${staff ? "disabled" : ""}>${ic("block")}Báo đã đóng cửa (${shown})</button>`;
+    // "Báo cáo địa điểm": "Đã đóng cửa" or "Sai thông tin", one of each per member
+    const doneAll = (d.closed || d.reportedClosed) && d.reportedWrong;
+    const closedBtn = d.status !== "ACTIVE" ? "" : doneAll
+        ? `<button class="btn sm on" type="button" disabled>${ic("flag")}Bạn đã báo cáo địa điểm này</button>`
+        : `<button class="btn sm" type="button" data-act="report-place" ${staff ? "disabled" : ""}>${ic("flag")}Báo cáo địa điểm</button>`;
     return `<div class="pad">
             <div class="panel-head"><div class="row grow">${badges(d)}</div>
                 <button class="btn sm" type="button" data-act="back">${closeLabel()}</button></div>
@@ -847,6 +924,7 @@ els.body.addEventListener("click", async (event) => {
     switch (btn.dataset.act) {
         case "close-list":
             state.results = null;
+            els.searchHere.hidden = true;
             resultLayer.clearLayers();
             els.q.value = "";
             els.clear.hidden = true;
@@ -881,8 +959,8 @@ els.body.addEventListener("click", async (event) => {
         case "delete-review":
             await deleteReview(Number(btn.dataset.id));
             break;
-        case "report-closed":
-            await reportClosed();
+        case "report-place":
+            openPlaceReport();
             break;
         case "to-clean":
             await setBasemap("clean", true);
@@ -936,8 +1014,30 @@ function openReport(reviewId) {
     if (needLogin()) return;
     state.reportReviewId = reviewId;
     state.reportPhraseId = null;
+    state.reportPlaceId = null;
     showReportDialog("Báo cáo review", "Moderator sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.",
         state.detail.reportReasons);
+}
+
+/**
+ * "Báo cáo địa điểm" (user decision 20/11/2026): "Đã đóng cửa" (the Moderators look once enough people say so) or
+ * "Sai thông tin" (they look at once), always with a reason; a kind already reported is greyed out.
+ */
+function openPlaceReport() {
+    if (needLogin()) return;
+    const d = state.detail;
+    state.reportPlaceId = d.id;
+    state.reportReviewId = null;
+    state.reportPhraseId = null;
+    const kinds = [
+        { id: "CLOSED", label: `Đã đóng cửa (${Math.min(d.closedReports, d.closedThreshold)}/${d.closedThreshold} người đã báo)`,
+            off: d.closed || d.reportedClosed },
+        { id: "WRONG_INFO", label: "Sai thông tin: tên, vị trí, danh mục hoặc địa chỉ", off: d.reportedWrong }
+    ];
+    showReportDialog("Báo cáo địa điểm",
+        `“${d.name}”: Moderator sẽ đọc lý do của bạn rồi sửa, gắn nhãn hoặc gỡ địa điểm. Bạn sẽ nhận thông báo khi xử lý xong.`,
+        kinds, { noteLabel: "Lý do (bắt buộc)", noteMax: 300,
+            placeholder: "Ví dụ: tiệm đã dọn đi từ tháng 9; ghim nằm sai bên kia đường; tên đúng là …" });
 }
 
 /** "Báo lỗi" on a phrase: its own reasons (Sai tiếng Nhật, Sai nghĩa…), handled by the Japanese content editor. */
@@ -949,16 +1049,22 @@ async function openPhraseReport(phraseId) {
         return toast(error.message, "error");
     }
     state.reportPhraseId = phraseId;
+    state.reportPlaceId = null;
     showReportDialog("Báo lỗi mẫu câu",
         "Biên tập viên nội dung tiếng Nhật sẽ xem xét. Mỗi nội dung bạn chỉ báo cáo được một lần.", state.phraseReasons);
 }
 
-function showReportDialog(title, note, reasons) {
+function showReportDialog(title, note, reasons,
+                          { noteLabel = "Ghi chú thêm (không bắt buộc)", noteMax = 500, placeholder = "" } = {}) {
     els.reportTitle.textContent = title;
     els.reportIntro.textContent = note;
     els.reportReasons.innerHTML = `<legend class="sr-only">Lý do</legend>`
-        + reasons.map((r) => `<label><input type="radio" name="reason" value="${r.id}"><span>${esc(r.label)}</span></label>`).join("");
+        + reasons.map((r) => `<label class="${r.off ? "off" : ""}"><input type="radio" name="reason" value="${esc(r.id)}" ${r.off ? "disabled" : ""}>
+            <span>${esc(r.label)}${r.off ? " · bạn đã báo" : ""}</span></label>`).join("");
     els.reportNote.value = "";
+    els.reportNote.maxLength = noteMax;
+    els.reportNote.placeholder = placeholder;
+    els.reportForm.querySelector('label[for="report-note"]').textContent = noteLabel;
     els.reportError.hidden = true;
     els.reportDlg.showModal();
 }
@@ -975,6 +1081,30 @@ els.reportForm.addEventListener("submit", async (event) => {
     }
     const body = { reasonId: Number(reason.value), note: els.reportNote.value.trim() || null };
     try {
+        if (state.reportPlaceId != null) {
+            if (!body.note) {
+                els.reportError.textContent = "Hãy ghi lý do để Moderator kiểm tra.";
+                els.reportError.hidden = false;
+                els.reportNote.focus();
+                return;
+            }
+            const res = await apiClient.reportPlace(state.reportPlaceId, { kind: reason.value, note: body.note });
+            els.reportDlg.close();
+            const d = state.detail;
+            if (d?.id === state.reportPlaceId) {
+                if (reason.value === "CLOSED") {
+                    d.closedReports = res.count;
+                    d.reportedClosed = true;
+                } else {
+                    d.reportedWrong = true;
+                }
+                renderPanel();
+            }
+            toast(reason.value === "WRONG_INFO" ? "Cảm ơn bạn. Moderator sẽ kiểm tra và sửa thông tin địa điểm."
+                : res.queued ? `Đủ ${res.threshold} báo cáo. Moderator sẽ kiểm tra trước khi gắn nhãn “Đã đóng cửa”.`
+                    : `Đã ghi nhận. Khi đủ ${res.threshold} người báo, Moderator sẽ kiểm tra.`);
+            return;
+        }
         if (state.reportPhraseId != null) {
             await apiClient.reportPhrase(state.reportPhraseId, body);
             els.reportDlg.close();
@@ -1284,25 +1414,6 @@ function confirmBox(text, okLabel) {
     });
 }
 
-// ---------------------------------------------------------------- "Báo đã đóng cửa" (UC-U20)
-
-async function reportClosed() {
-    if (needLogin()) return;
-    const d = state.detail;
-    if (!(await confirmBox(`Bạn chắc “${d.name}” đã đóng cửa? Khi đủ ${d.closedThreshold} người báo, Moderator sẽ kiểm tra rồi mới gắn nhãn.`, "Gửi báo cáo"))) return;
-    try {
-        const res = await apiClient.reportClosed(d.id);
-        d.closedReports = res.count;
-        d.reportedClosed = true;
-        renderPanel();
-        toast(res.queued
-            ? `Đủ ${res.threshold} báo cáo. Moderator sẽ kiểm tra trước khi gắn nhãn “Đã đóng cửa”.`
-            : "Đã ghi nhận báo cáo.");
-    } catch (error) {
-        toast(error.message, "error");
-    }
-}
-
 // ---------------------------------------------------------------- "Cắm ghim" (UC-U19)
 // Pick a point → form (names, category, first review) in the panel, the pin draggable to fine-tune. OpenStreetMap places
 // right there are offered first ("Có phải nơi này?"): reviewing one of them needs no pin. Before sending, approved
@@ -1422,7 +1533,7 @@ function renderPin() {
     return `<div class="pad">
         <div class="panel-head"><div class="grow"><p class="note">Cắm ghim</p><h2 class="place-title">Địa điểm mới</h2></div>
             <button class="btn sm" type="button" data-act="cancel-pin">${ic("close")}Hủy</button></div>
-        <p class="note">${ic("open_with")}Kéo ghim trên bản đồ để chỉnh đúng vị trí. ${p.compose?.noApprovalNeeded ? "Bạn là Senpai tin cậy nên ghim lên bản đồ ngay, +15 điểm." : "Ghim mới cần Moderator duyệt; được duyệt bạn nhận +15 điểm."}</p>
+        <p class="note">${ic("open_with")}Kéo ghim trên bản đồ để chỉnh đúng vị trí. ${p.compose?.noApprovalNeeded ? "Bạn đủ điểm để ghim lên bản đồ ngay, không chờ duyệt, +15 điểm." : "Ghim mới cần Moderator duyệt; được duyệt bạn nhận +15 điểm."}</p>
         ${c.newAccount ? `<p class="info">${ic("schedule")}Tài khoản mới: hôm nay còn ${Math.max(0, c.pinsLimit - c.pinsUsed)}/${c.pinsLimit} lượt cắm ghim.</p>` : ""}
         ${suggestionsHtml(p)}
         <form class="rv-form pin-form" id="pin-form" novalidate>
@@ -1661,74 +1772,19 @@ els.locate.addEventListener("click", () => {
 // Senpai ơi place when we have its OSM id, else the "chưa có trên Senpai ơi" panel with "Viết review đầu tiên"
 // (the server looks the place up on Nominatim and adds it when the review is saved).
 
-const POI_LAYERS = ["poi_r1", "poi_r7", "poi_r20", "poi_transit"];
-/** OpenMapTiles poi subclass (the OSM value) → Senpai ơi category, only to label the panel. */
-const SUBCLASS_CATEGORY = {
-    convenience: "konbini",
-    restaurant: "food", fast_food: "food", cafe: "food", food_court: "food", bakery: "food", pub: "food",
-    bar: "food", ice_cream: "food", confectionery: "food",
-    station: "station", halt: "station", subway: "station", train_station: "station", subway_entrance: "station",
-    supermarket: "super", department_store: "super", mall: "super", variety_store: "super", general: "super",
-    townhall: "ward", hospital: "hospital", clinic: "hospital", doctors: "hospital", dentist: "hospital",
-    pharmacy: "pharmacy", chemist: "pharmacy", bank: "bank", atm: "bank", post_office: "bank",
-    school: "school", university: "school", college: "school", language_school: "school",
-    laundry: "laundry", dry_cleaning: "laundry", park: "park", garden: "park", place_of_worship: "temple",
-    shrine: "temple", temple: "temple", mobile_phone: "phone", electronics: "phone", estate_agent: "housing"
-};
-
 function glMap() {
-    return state.basemap === "clean" && tiles?.getMaplibreMap ? tiles.getMaplibreMap() : null;
+    return glOf(tiles, state.basemap);
 }
 
 /** The named map shop under the pointer (a few pixels around it), or null. */
 function shopAt(latlng) {
-    const gl = glMap();
-    if (!gl || !gl.isStyleLoaded()) return null;
-    const layers = POI_LAYERS.filter((id) => gl.getLayer(id));
-    if (!layers.length) return null;
-    const p = gl.project([latlng.lng, latlng.lat]);
-    return gl.queryRenderedFeatures([[p.x - 10, p.y - 10], [p.x + 10, p.y + 10]], { layers })
-        .find((f) => f.properties.name && f.id != null && f.properties.class !== "bus") || null;
-}
-
-/** A name as compared: no accents, case or punctuation, without the word for station ("Ga Nippori" = "日暮里駅"). */
-function nameKey(name) {
-    let s = String(name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().trim();
-    s = s.replace(/^(nha ga|ga) /, "").replace(/( railway station| train station| station| eki|駅)$/, "");
-    return s.replace(/[^\p{L}\p{N}]/gu, "");
-}
-
-/**
- * The Senpai ơi place a map shop already is: the same OSM id, or the same name close by (a station has a point per
- * line, so 600 m between stations; 80 m otherwise), as the server decides when a review is saved.
- */
-function knownPlaceFor(osmId, names, lat, lng, station) {
-    const keys = new Set(names.filter(Boolean).map(nameKey).filter(Boolean));
-    let best = null;
-    for (const p of state.places.values()) {
-        if (p.osmId === osmId) return p;
-        const near = distance({ lat, lng }, p);
-        const limit = station && p.categoryId === "station" ? 600 : 80;
-        if (near <= limit && [p.name, p.nameJa, p.nameEn].some((n) => keys.has(nameKey(n)))
-            && (!best || near < best.near)) {
-            best = { place: p, near };
-        }
-    }
-    return best?.place || null;
-}
-
-/** OpenFreeMap tiles are made by Planetiler: feature id = OSM id × 10 + 1 (node), 2 (way) or 3 (relation). */
-function osmIdOf(featureId) {
-    const n = Number(featureId);
-    const type = { 1: "N", 2: "W", 3: "R" }[n % 10];
-    return type && Number.isFinite(n) ? `${type}${Math.floor(n / 10)}` : null;
+    return poiAt(glMap(), latlng);
 }
 
 function openMapShop(latlng) {
     if (state.panel === "write") return;         // never drop a review being written
     const f = shopAt(latlng);
-    const osmId = f && osmIdOf(f.id);
-    if (!osmId) {
+    if (!f) {
         showNearby(latlng);
         return;
     }
@@ -1739,19 +1795,16 @@ function openMapShop(latlng) {
 
 /** A map shop as a search option: the Senpai ơi place it already is (id), else an OpenStreetMap option (externalId). */
 function shopOption(f, latlng) {
-    const osmId = osmIdOf(f.id);
-    const pr = f.properties;
-    const name = pr["name:latin"] || pr["name:en"] || pr.name_en || pr.name;
-    const nameJa = pr["name:nonlatin"] || pr["name:ja"] || (pr.name !== name ? pr.name : null);
-    const [lng, lat] = f.geometry?.type === "Point" ? f.geometry.coordinates : [latlng.lng, latlng.lat];
-    const known = knownPlaceFor(osmId, [name, nameJa, pr.name, pr["name:en"]], lat, lng, pr.class === "railway");
+    const s = poiInfo(f, latlng);
+    const known = knownPlaceFor(state.places.values(), s.osmId, [s.name, s.nameJa, ...s.otherNames], s.lat, s.lng,
+        s.cls === "railway");
     if (known) {
         return { id: known.id, name: known.name, category: state.catById.get(known.categoryId)?.name, lat: known.lat,
             lng: known.lng };
     }
-    const category = state.catById.get(SUBCLASS_CATEGORY[pr.subclass] || SUBCLASS_CATEGORY[pr.class] || "other");
-    return { id: null, externalId: osmId, name, nameJa, category: category?.name || "Địa điểm khác", address: null,
-        source: "OSM", lat, lng };
+    const category = state.catById.get(SUBCLASS_CATEGORY[s.subclass] || SUBCLASS_CATEGORY[s.cls] || "other");
+    return { id: null, externalId: s.osmId, name: s.name, nameJa: s.nameJa, category: category?.name || "Địa điểm khác",
+        address: null, source: "OSM", lat: s.lat, lng: s.lng };
 }
 
 /**
@@ -1761,8 +1814,6 @@ function shopOption(f, latlng) {
 function localNearby(latlng) {
     const gl = glMap();
     if (!gl || !gl.isStyleLoaded()) return null;
-    const layers = POI_LAYERS.filter((id) => gl.getLayer(id));
-    const p = gl.project([latlng.lng, latlng.lat]);
     const seen = new Set();
     const items = [];
     for (const place of state.places.values()) {
@@ -1772,8 +1823,7 @@ function localNearby(latlng) {
                 lat: place.lat, lng: place.lng });
         }
     }
-    for (const f of gl.queryRenderedFeatures([[p.x - 120, p.y - 120], [p.x + 120, p.y + 120]], { layers })) {
-        if (!f.properties.name || f.id == null || f.properties.class === "bus" || !osmIdOf(f.id)) continue;
+    for (const f of poisAround(gl, latlng, 120)) {
         const o = shopOption(f, latlng);
         const key = o.id != null ? `id:${o.id}` : `osm:${o.externalId}`;
         if (!seen.has(key)) {
@@ -1854,62 +1904,18 @@ async function showNearby(latlng) {
 
 // ---------------------------------------------------------------- map style
 
-function storedBasemap() {
-    try {
-        return BASEMAPS[localStorage.getItem(BASEMAP_KEY)] ? localStorage.getItem(BASEMAP_KEY) : "clean";
-    } catch {
-        return "clean";
-    }
-}
-
-/** Loads MapLibre and its Leaflet bridge once (CSS and scripts in order, each checked with SRI). */
-function loadMaplibre() {
-    if (!maplibreLoading) {
-        maplibreLoading = MAPLIBRE.reduce((ready, file) => ready.then(() => new Promise((resolve, reject) => {
-            const el = file.css
-                ? Object.assign(document.createElement("link"), { rel: "stylesheet", href: file.css })
-                : Object.assign(document.createElement("script"), { src: file.js });
-            el.integrity = file.hash;
-            el.crossOrigin = "anonymous";
-            el.onload = resolve;
-            el.onerror = reject;
-            document.head.append(el);
-        })), Promise.resolve()).then(() => {
-            const canvas = document.createElement("canvas");
-            const webgl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-            if (!L.maplibreGL || !window.maplibregl || !webgl) throw new Error("MapLibre");
-        });
-        maplibreLoading.catch(() => { maplibreLoading = null; });
-    }
-    return maplibreLoading;
-}
-
 async function setBasemap(key, remember = false) {
-    let b = BASEMAPS[key];
-    if (b.style) {
-        try {
-            await loadMaplibre();
-        } catch {
-            if (state.basemap) toast("Không tải được bản đồ gọn, đang dùng bản đồ chi tiết.", "error");
-            key = "detail";
-            b = BASEMAPS.detail;
-        }
-    }
-    if (tiles) tiles.remove();
-    tiles = b.style
-        ? L.maplibreGL({ style: b.style, attribution: b.attribution, maxZoom: 20 }).addTo(map)
-        : L.tileLayer(b.url, b.options).addTo(map);
+    const shown = await setBaseLayer(map, key, tiles);
+    if (shown.fellBack && state.basemap) toast("Không tải được bản đồ gọn, đang dùng bản đồ chi tiết.", "error");
+    tiles = shown.layer;
+    key = shown.key;
+    const b = BASEMAPS[key];
     state.basemap = key;
     const next = BASEMAPS[key === "clean" ? "detail" : "clean"].label;
     els.basemap.title = `Đổi sang bản đồ ${next.toLowerCase()}`;
     els.basemap.setAttribute("aria-label", `Kiểu bản đồ: ${b.label}. Bấm để đổi sang ${next.toLowerCase()}`);
     els.basemap.classList.toggle("on", key === "detail");
-    if (!remember) return;
-    try {
-        localStorage.setItem(BASEMAP_KEY, key);
-    } catch {
-        // storage blocked: the choice lasts for this visit
-    }
+    if (remember) rememberBasemap(key);
 }
 
 els.basemap.addEventListener("click", async () => {
@@ -1919,16 +1925,6 @@ els.basemap.addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------- helpers
-
-function distance(a, b) {
-    const x = (b.lng - a.lng) * Math.PI / 180 * Math.cos((a.lat + b.lat) / 2 * Math.PI / 180);
-    const y = (b.lat - a.lat) * Math.PI / 180;
-    return Math.sqrt(x * x + y * y) * 6371000;
-}
-
-function formatDistance(m) {
-    return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
-}
 
 function setUrl(params) {
     const query = new URLSearchParams(params).toString();

@@ -18,7 +18,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Date;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -158,22 +157,34 @@ public class MapRepository {
                 (rs, i) -> new ReviewFigures(rs.getInt(1), rating(rs.getBigDecimal(2))), placeId);
     }
 
-    /** "Đã đóng cửa" reports a Moderator has not handled yet. */
-    public int closedReports(long placeId) {
-        return count("SELECT COUNT(*) FROM place_closed_reports WHERE place_id = ? AND resolved_at IS NULL", placeId);
-    }
-
-    public boolean reportedClosed(long placeId, long userId) {
+    /** Reports of this kind (CLOSED "Đã đóng cửa", WRONG_INFO "Sai thông tin") a Moderator has not handled yet. */
+    public int placeReports(long placeId, String kind) {
         return count("""
-                SELECT COUNT(*) FROM place_closed_reports WHERE place_id = ? AND user_id = ? AND resolved_at IS NULL""",
-                placeId, userId) > 0;
+                SELECT COUNT(*) FROM place_closed_reports WHERE place_id = ? AND kind = ? AND resolved_at IS NULL""",
+                placeId, kind);
     }
 
-    /** @return false when this user already reported the place (one report per user and place) */
-    public boolean addClosedReport(long placeId, long userId, Instant now) {
+    public int closedReports(long placeId) {
+        return placeReports(placeId, "CLOSED");
+    }
+
+    /**
+     * True while this member's report of this kind waits (handled ones do not count: a reopened place may be
+     * reported again).
+     */
+    public boolean reported(long placeId, long userId, String kind) {
+        return count("""
+                SELECT COUNT(*) FROM place_closed_reports
+                WHERE place_id = ? AND user_id = ? AND kind = ? AND resolved_at IS NULL""",
+                placeId, userId, kind) > 0;
+    }
+
+    /** @return false when this member already has a report of this kind for the place (one of each kind) */
+    public boolean addPlaceReport(long placeId, long userId, String kind, String note, Instant now) {
         return jdbc.update("""
-                INSERT IGNORE INTO place_closed_reports (place_id, user_id, created_at) VALUES (?, ?, ?)""",
-                placeId, userId, Timestamp.from(now)) > 0;
+                INSERT IGNORE INTO place_closed_reports (place_id, user_id, kind, note, created_at)
+                VALUES (?, ?, ?, ?, ?)""",
+                placeId, userId, kind, note, Timestamp.from(now)) > 0;
     }
 
     public boolean saved(long placeId, long userId) {

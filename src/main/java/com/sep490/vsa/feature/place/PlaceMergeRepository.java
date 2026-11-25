@@ -144,11 +144,12 @@ public class PlaceMergeRepository {
         jdbc.update("UPDATE guide_items SET place_id = ? WHERE place_id = ?", toId, fromId);
     }
 
-    /** Open "đã đóng cửa" reports follow the place (one per user); handled ones stay with the merged place. */
+    /** Open place reports follow the place (one per user and kind); handled ones stay with the merged place. */
     public void moveClosedReports(long fromId, long toId) {
         jdbc.update("""
-                INSERT IGNORE INTO place_closed_reports (place_id, user_id, created_at)
-                SELECT ?, user_id, created_at FROM place_closed_reports WHERE place_id = ? AND resolved_at IS NULL""",
+                INSERT IGNORE INTO place_closed_reports (place_id, user_id, kind, note, created_at)
+                SELECT ?, user_id, kind, note, created_at FROM place_closed_reports
+                WHERE place_id = ? AND resolved_at IS NULL""",
                 toId, fromId);
         jdbc.update("DELETE FROM place_closed_reports WHERE place_id = ? AND resolved_at IS NULL", fromId);
     }

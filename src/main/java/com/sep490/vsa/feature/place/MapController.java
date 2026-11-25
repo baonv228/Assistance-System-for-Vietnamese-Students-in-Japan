@@ -1,6 +1,7 @@
 package com.sep490.vsa.feature.place;
 
 import com.sep490.vsa.common.dto.ApiResponse;
+import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.security.AppUserPrincipal;
 import com.sep490.vsa.feature.place.MapDtos.LikeState;
 import com.sep490.vsa.feature.place.MapDtos.MapEvent;
@@ -48,10 +49,34 @@ public class MapController {
         return ApiResponse.ok("OK", service.events(days));
     }
 
+    /**
+     * Search on the Map. With the view on screen ({@code south, west, north, east}): the places inside it, or, when it
+     * holds none, all of Japan nearest to it first (answer {@code scope} AREA / WIDE). Without: all of Japan.
+     */
     @GetMapping("/api/map/search")
     public ApiResponse<MapSearch> search(@RequestParam(defaultValue = "") String q,
+                                         @RequestParam(required = false) Double south,
+                                         @RequestParam(required = false) Double west,
+                                         @RequestParam(required = false) Double north,
+                                         @RequestParam(required = false) Double east,
                                          @AuthenticationPrincipal AppUserPrincipal me) {
-        return ApiResponse.ok("OK", service.search(me, q));
+        return ApiResponse.ok("OK", service.search(me, q, view(south, west, north, east)));
+    }
+
+    static final String BAD_VIEW = "Vùng bản đồ không hợp lệ. Hãy tải lại trang.";
+
+    /** The box on screen, or null when none was sent; a box that is not one answers 400. */
+    static ExternalPlaces.Where view(Double south, Double west, Double north, Double east) {
+        if (south == null && west == null && north == null && east == null) {
+            return null;
+        }
+        if (south == null || west == null || north == null || east == null
+                || !Double.isFinite(south) || !Double.isFinite(west) || !Double.isFinite(north) || !Double.isFinite(east)
+                || south < -90 || north > 90 || south >= north
+                || west < -180 || east > 180 || west >= east) {
+            throw ApiException.badRequest(BAD_VIEW);
+        }
+        return new ExternalPlaces.Where(south, west, north, east, true);
     }
 
     /** Places around a point clicked on the map (signed-in people only). */
@@ -87,14 +112,24 @@ public class MapController {
         return ApiResponse.ok("Đã bỏ lưu địa điểm.", service.save(me, id, false));
     }
 
-    /** UC-U20: "Báo đã đóng cửa". */
-    @PostMapping("/api/map/places/{id:\\d+}/closed-report")
-    public ApiResponse<MapDtos.ClosedState> reportClosed(@PathVariable long id,
-                                                         @AuthenticationPrincipal AppUserPrincipal me) {
-        MapDtos.ClosedState state = service.reportClosed(me, id);
-        return ApiResponse.ok(state.queued()
-                ? "Đủ " + state.threshold() + " báo cáo. Moderator sẽ kiểm tra trước khi gắn nhãn “Đã đóng cửa”."
-                : "Đã ghi nhận báo cáo.", state);
+    /**
+     * UC-U20 "Báo cáo địa điểm": {@code {kind: CLOSED | WRONG_INFO, note}} (user decision 20/11/2026; it was a plain
+     * "Báo đã đóng cửa" click).
+     */
+    @PostMapping("/api/map/places/{id:\\d+}/report")
+    public ApiResponse<MapDtos.ClosedState> reportPlace(@PathVariable long id,
+                                                        @RequestBody(required = false) MapDtos.PlaceReportRequest body,
+                                                        @AuthenticationPrincipal AppUserPrincipal me) {
+        MapDtos.ClosedState state = service.reportPlace(me, id, body);
+        String message;
+        if (body != null && "WRONG_INFO".equals(body.kind())) {
+            message = "Cảm ơn bạn. Moderator sẽ kiểm tra và sửa thông tin địa điểm.";
+        } else if (state.queued()) {
+            message = "Đủ " + state.threshold() + " báo cáo. Moderator sẽ kiểm tra trước khi gắn nhãn “Đã đóng cửa”.";
+        } else {
+            message = "Đã ghi nhận báo cáo. Khi đủ " + state.threshold() + " người báo, Moderator sẽ kiểm tra.";
+        }
+        return ApiResponse.ok(message, state);
     }
 
     @PostMapping("/api/reviews/{id:\\d+}/like")

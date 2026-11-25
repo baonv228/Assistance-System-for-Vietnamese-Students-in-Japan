@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -581,6 +584,14 @@ class ContentFilterTest {
         // pattern may recurse once per repetition (StackOverflowError → 500) or backtrack its way through them.
         // Against every keyword the database starts with (V1, V5, V6), as the server checks a post
         List<ContentFilter.Keyword> keywords = allSeeded();
+        ThreadMXBean timer = ManagementFactory.getThreadMXBean();
+        boolean cpuTimeSupported = timer.isCurrentThreadCpuTimeSupported();
+        if (cpuTimeSupported && !timer.isThreadCpuTimeEnabled()) {
+            timer.setThreadCpuTimeEnabled(true);
+        }
+        // Keep the same work budget without charging this worker for scheduling/GC pauses elsewhere in the suite.
+        // A VM without per-thread CPU timing retains the wall-clock budget; the outer timeout always bounds elapsed time.
+        LongSupplier nanosNow = cpuTimeSupported ? timer::getCurrentThreadCpuTime : System::nanoTime;
         List<String> inputs = List.of("a.".repeat(10_000), "1 ".repeat(10_000), "0 9 ".repeat(5_000),
                 "a-".repeat(10_000), "0.".repeat(10_000), "a . ".repeat(5_000), "zalo ".repeat(4_000),
                 "zalo " + "1 ".repeat(10_000), "line: " + "0 9 ".repeat(5_000), "tele @" + "a.".repeat(10_000),
@@ -593,12 +604,12 @@ class ContentFilterTest {
                     for (int i = 0; i < 3; i++) {
                         runAllChecks(input, keywords);                 // warm up first (JIT)
                     }
-                    long start = System.nanoTime();
+                    long start = nanosNow.getAsLong();
                     runAllChecks(input, keywords);
-                    return System.nanoTime() - start;
+                    return nanosNow.getAsLong() - start;
                 });
-                // Backtracking or recursion would take seconds; well under that is fine on a busy test machine too
-                assertThat(Duration.ofNanos(nanos)).as("time on " + input.substring(0, 12) + "…")
+                assertThat(Duration.ofNanos(nanos)).as((cpuTimeSupported ? "CPU time on " : "elapsed time on ")
+                                + input.substring(0, 12) + "…")
                         .isLessThan(Duration.ofMillis(300));
             });
         }

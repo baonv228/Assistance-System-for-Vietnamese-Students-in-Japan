@@ -8,6 +8,8 @@ import com.sep490.vsa.feature.phrase.PhraseDtos.Overview;
 import com.sep490.vsa.feature.phrase.PhraseDtos.PhraseCard;
 import com.sep490.vsa.feature.phrase.PhraseDtos.ReportRequest;
 import com.sep490.vsa.feature.phrase.PhraseDtos.SaveState;
+import com.sep490.vsa.feature.quest.QuestDtos.FlashAnswer;
+import com.sep490.vsa.feature.quest.QuestService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -48,11 +50,16 @@ public class PhraseController {
         return ApiResponse.ok("OK", service.list(me, topic, category, mine, q));
     }
 
+    /**
+     * {@code data}: {learning, learned} as before, plus {@code quests} (what the answer did to the day's quests). The
+     * message keeps its old start and names each quest the answer completed.
+     */
     @PostMapping("/api/phrases/{id:\\d+}/flash")
-    public ApiResponse<Marks> flash(@PathVariable long id, @Valid @RequestBody FlashRequest request,
-                                    @AuthenticationPrincipal AppUserPrincipal me) {
-        return ApiResponse.ok(request.learned() ? "Đã lưu: Đã thuộc." : "Đã lưu: Chưa thuộc.",
-                service.flash(me, id, request.learned()));
+    public ApiResponse<FlashAnswer> flash(@PathVariable long id, @Valid @RequestBody FlashRequest request,
+                                          @AuthenticationPrincipal AppUserPrincipal me) {
+        FlashAnswer answer = service.flash(me, id, request.learned());
+        return ApiResponse.ok((request.learned() ? "Đã lưu: Đã thuộc." : "Đã lưu: Chưa thuộc.")
+                + QuestService.completionNote(answer.quests()), answer);
     }
 
     @DeleteMapping("/api/phrases/{id:\\d+}/flash")
