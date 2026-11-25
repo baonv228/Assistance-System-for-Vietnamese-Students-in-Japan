@@ -16,6 +16,8 @@ import com.sep490.vsa.feature.place.PlaceModerationDtos.NearbyPlace;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.OsmPick;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceForm;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceInfo;
+import com.sep490.vsa.feature.place.PlaceModerationDtos.MapPin;
+import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceMap;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlacePage;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.PlaceSaved;
 import com.sep490.vsa.feature.place.PlaceModerationDtos.RemoveRequest;
@@ -90,6 +92,21 @@ public class PlaceAdminService {
                 repository.countPlaces(filter), repository.categories(), repository.prefectures());
     }
 
+    /** Pins the Moderator's map draws at most; more matching places ask to narrow the filters. */
+    static final int MAP_LIMIT = 5000;
+
+    /** The Moderator's map: every place with a position matching the filters (any status unless one is chosen). */
+    @Transactional(readOnly = true)
+    public PlaceMap map(String q, String categoryId, String source, String status, String prefecture) {
+        PlaceFilter filter = new PlaceFilter(q == null ? null : q.strip(), categoryId,
+                source != null && SOURCES.contains(source) ? source : null,
+                status != null && STATUSES.contains(status) ? status : null, prefecture);
+        List<MapPin> pins = repository.mapPins(filter, MAP_LIMIT + 1);
+        boolean truncated = pins.size() > MAP_LIMIT;
+        return new PlaceMap(truncated ? pins.subList(0, MAP_LIMIT) : pins, truncated, MAP_LIMIT,
+                repository.categories(), repository.prefectures());
+    }
+
     @Transactional(readOnly = true)
     public PlaceInfo detail(long id) {
         PlaceState p = repository.place(id, false).orElseThrow(() -> notFound(PinModerationService.GONE));
@@ -99,7 +116,8 @@ public class PlaceAdminService {
                 categoryOf(p.categoryId()), x.areaId(), x.areaName(), p.source(), p.status(), p.closed(), x.closedAt(),
                 x.removedReason(), x.rejectReason(), x.mergedIntoId(), x.mergedIntoName(), p.createdBy(),
                 p.authorName(), p.createdAt(), x.reviewCount(), x.saveCount(), repository.openClosedReports(id),
-                history, repository.categories(), repository.reasons("PLACE_REMOVE"));
+                history, repository.categories(), repository.reasons("PLACE_REMOVE"),
+                repository.openReports(id, "WRONG_INFO"), repository.reportsOf(id));
     }
 
     // ---------------------------------------------------------------- UC-M07 Thêm địa điểm
@@ -247,6 +265,7 @@ public class PlaceAdminService {
             detail.put("note", note);
         }
         repository.history(id, "REMOVED", moderatorId, toJson(detail), now);
+        pins.closeReportsOnRemoval(id, p.nameVi(), now);
         if ("USER".equals(p.source())) {
             notifications.send(p.createdBy(), "PLACE_REMOVED", "Địa điểm “" + p.nameVi()
                     + "” bạn cắm ghim đã được gỡ khỏi bản đồ: " + reason + ".", "PLACE", id);
@@ -343,6 +362,8 @@ public class PlaceAdminService {
             case "RESTORED" -> "Khôi phục lên bản đồ";
             case "CLOSED" -> "Gắn nhãn đã đóng cửa";
             case "REOPENED" -> "Gỡ nhãn đóng cửa";
+            case "REPORTS_HANDLED" -> ("FIXED".equals(d.path("outcome").asText())
+                    ? "Xử lý " : "Bỏ qua ") + d.path("reports").asInt() + " báo cáo sai thông tin";
             case "MERGED" -> d.has("into") ? "Gộp vào địa điểm #" + d.path("into").asLong()
                     : join("Nhận gộp từ địa điểm #" + d.path("from").asLong()
                     + (d.path("movedReviews").asInt(0) > 0 ? " (" + d.path("movedReviews").asInt() + " review)" : ""), d);

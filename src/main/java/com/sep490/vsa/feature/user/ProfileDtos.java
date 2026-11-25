@@ -21,7 +21,12 @@ public final class ProfileDtos {
     public record DailyUsage(int posts, int maxPosts, int pins, int maxPins, int videos, int maxVideos) {
     }
 
-    /** @param savedCount places, posts, questions, guides and phrases listed on "Đã lưu" (/saved) */
+    /**
+     * @param points     rank points (users.points)
+     * @param coins      balance of "xu" earned by the daily quests (users.coins); never part of the rank until the
+     *                   Member exchanges them (POST /api/me/coins/exchange)
+     * @param savedCount places, posts, questions, guides and phrases listed on "Đã lưu" (/saved)
+     */
     public record ProfileResponse(
             Long id,
             String email,
@@ -30,6 +35,7 @@ public final class ProfileDtos {
             String role,
             String roleLabel,
             int points,
+            int coins,
             List<RankResponse> ranks,
             List<TagResponse> tags,
             String pendingTag,

@@ -23,6 +23,9 @@ import com.sep490.vsa.feature.home.HomeDtos.ScopeCount;
 import com.sep490.vsa.feature.home.HomeDtos.Stats;
 import com.sep490.vsa.feature.home.HomeDtos.Tag;
 import com.sep490.vsa.feature.home.InterestService.Interest;
+import com.sep490.vsa.feature.phrase.PhraseOfDayService;
+import com.sep490.vsa.feature.phrase.PhraseOfDayService.PhraseOfDay;
+import com.sep490.vsa.feature.quest.QuestService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -44,7 +47,10 @@ import java.util.Map;
 /**
  * Read-only data for the homepage. Places, reviews, events, blogs and the guide are owned by other
  * features, so this service only reads their tables with SQL and never writes to them. Whether a guide is done is
- * the guide feature's rule, read through {@link GuideProgressService}.
+ * the guide feature's rule, read through {@link GuideProgressService}. "Câu tiếng Nhật hôm nay" comes from
+ * {@link PhraseOfDayService} (HomeController keeps the day's phrase before this read-only transaction starts) and the
+ * member's "Nhiệm vụ hằng ngày" from {@link QuestService#homeSummary} (read only: the Home never makes the day's
+ * quests).
  */
 @Service
 @Transactional(readOnly = true)
@@ -90,15 +96,20 @@ public class HomeService {
     private final FeaturedSnapshotService featuredPosts;
     private final GuideProgressService guideProgress;
     private final InterestService interestService;
+    private final PhraseOfDayService phraseOfDay;
+    private final QuestService questService;
 
     public HomeService(JdbcTemplate jdbc, Clock clock, FeaturedSnapshotService featuredPosts,
-                       GuideProgressService guideProgress, InterestService interestService) {
+                       GuideProgressService guideProgress, InterestService interestService,
+                       PhraseOfDayService phraseOfDay, QuestService questService) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.clock = clock;
         this.featuredPosts = featuredPosts;
         this.guideProgress = guideProgress;
         this.interestService = interestService;
+        this.phraseOfDay = phraseOfDay;
+        this.questService = questService;
     }
 
     /**
@@ -143,7 +154,8 @@ public class HomeService {
                 phraseOfToday(), guide, events(),
                 reviews(userId, me.area()), featured(), posts(forYou, ForYouScope.ALL, FOR_YOU_SIZE, 0),
                 names(interests, false), names(interests, true),
-                me.stage() == null ? List.of() : guideCards(guides, states, guide.next()));
+                me.stage() == null ? List.of() : guideCards(guides, states, guide.next()),
+                questService.homeSummary(userId));
     }
 
     /**
@@ -511,21 +523,18 @@ public class HomeService {
         return null;
     }
 
-    /** The same phrase for everyone on a given day; it changes every day. */
+    /**
+     * "Câu tiếng Nhật hôm nay": the phrase kept for today's Japan date, the same for everyone and for the quest
+     * PHRASE_OF_DAY all day, even when phrases are added or deleted meanwhile; null when the library holds no phrase.
+     * Read in this read-only transaction (one connection): HomeController kept the day's row just before.
+     */
     private Phrase phraseOfToday() {
-        long total = count("SELECT COUNT(*) FROM phrases WHERE kind = 'PHRASE' AND deleted_at IS NULL");
-        if (total == 0) {
-            return null;
-        }
-        long offset = LocalDate.now(clock.withZone(JAPAN)).toEpochDay() % total;
-        return jdbc.query("""
-                SELECT ph.japanese, ph.romaji, ph.meaning_vi, c.id, c.name_vi, c.icon,
-                       (SELECT MIN(l.topic_id) FROM phrase_topic_links l WHERE l.phrase_id = ph.id)
-                FROM phrases ph
-                JOIN place_categories c ON c.id = ph.category_id
-                WHERE ph.kind = 'PHRASE' AND ph.deleted_at IS NULL ORDER BY ph.id LIMIT 1 OFFSET ?""",
-                (rs, i) -> new Phrase(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5), rs.getString(6), rs.getString(7)), offset).stream().findFirst().orElse(null);
+        return phraseOfDay.phraseOfToday().map(HomeService::phrase).orElse(null);
+    }
+
+    private static Phrase phrase(PhraseOfDay p) {
+        return new Phrase(p.id(), p.japanese(), p.romaji(), p.meaningVi(), p.categoryId(), p.categoryName(),
+                p.categoryIcon(), p.topicId());
     }
 
     /** Approved, not revoked identity tags whose tag type is still active (like the Blog's tags). */

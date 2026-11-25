@@ -72,7 +72,17 @@ public final class PlaceModerationDtos {
      * @param lastReviewAt the newest published review, to judge whether people still go there
      */
     public record ClosedRow(long id, String name, CategoryRef category, int reports, String address,
-                            Instant lastReviewAt, Instant closedAt, String osmId, Double lat, Double lng) {
+                            Instant lastReviewAt, Instant closedAt, String osmId, Double lat, Double lng,
+                            int wrongReports) {
+    }
+
+    /**
+     * One report of a place not handled yet ("Báo cáo địa điểm").
+     *
+     * @param kind CLOSED "Đã đóng cửa" or WRONG_INFO "Sai thông tin"
+     * @param note the reporter's reason (rows from before V24 have none)
+     */
+    public record PlaceReport(String kind, String note, long userId, String userName, Instant at) {
     }
 
     /** @param waiting places that reached the threshold; {@code closed} the ones labelled, newest first */
@@ -100,6 +110,24 @@ public final class PlaceModerationDtos {
                             List<PrefectureRef> prefectures) {
     }
 
+    /**
+     * One pin of the Moderator's map: every status, so removed, merged and waiting places show too.
+     *
+     * @param closedReports "đã đóng cửa" reports not handled yet
+     */
+    public record MapPin(long id, String nameVi, String nameJa, String nameEn, String osmId, String categoryId,
+                         double lat, double lng, String status, String source, boolean closed, int reviewCount,
+                         int closedReports) {
+    }
+
+    /**
+     * The pins matching the filters (no paging: the page lists those in view), at most {@code limit}; {@code truncated}
+     * when more matched (the page asks to narrow the filters).
+     */
+    public record PlaceMap(List<MapPin> pins, boolean truncated, int limit, List<CategoryRef> categories,
+                           List<PrefectureRef> prefectures) {
+    }
+
     /** One line of the place's "Lịch sử": {@code text} is ready to show ("Danh mục: Quán ăn → Siêu thị"). */
     public record HistoryItem(String action, String actorName, Instant at, String text) {
     }
@@ -115,7 +143,8 @@ public final class PlaceModerationDtos {
                             String status, boolean closed, Instant closedAt, String removedReason, String rejectReason,
                             Long mergedIntoId, String mergedIntoName, long createdBy, String authorName,
                             Instant createdAt, int reviewCount, int saveCount, int closedReports,
-                            List<HistoryItem> history, List<CategoryRef> categories, List<Reason> removeReasons) {
+                            List<HistoryItem> history, List<CategoryRef> categories, List<Reason> removeReasons,
+                            int wrongReports, List<PlaceReport> reports) {
     }
 
     /**

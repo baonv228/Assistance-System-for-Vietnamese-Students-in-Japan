@@ -6,6 +6,7 @@ import com.sep490.vsa.feature.home.HomeDtos.ForYouFeed;
 import com.sep490.vsa.feature.home.HomeDtos.GuestHome;
 import com.sep490.vsa.feature.home.HomeDtos.MemberHome;
 import com.sep490.vsa.feature.home.HomeDtos.ReviewFeed;
+import com.sep490.vsa.feature.phrase.PhraseOfDayService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -16,21 +17,29 @@ public class HomeController {
 
     private final HomeService homeService;
     private final HomeReviewService reviewService;
+    private final PhraseOfDayService phraseOfDay;
 
-    public HomeController(HomeService homeService, HomeReviewService reviewService) {
+    public HomeController(HomeService homeService, HomeReviewService reviewService, PhraseOfDayService phraseOfDay) {
         this.homeService = homeService;
         this.reviewService = reviewService;
+        this.phraseOfDay = phraseOfDay;
     }
 
     /** Homepage for guests (public). */
     @GetMapping("/api/home")
     public ApiResponse<GuestHome> guest() {
+        phraseOfDay.phraseOfToday();
         return ApiResponse.ok("OK", homeService.guest());
     }
 
-    /** Homepage for a signed-in user (requires login: /api/me/**). */
+    /**
+     * Homepage for a signed-in user (requires login: /api/me/**). Both Homes first keep today's "Câu tiếng Nhật hôm
+     * nay" in a short transaction of its own ({@link PhraseOfDayService}): the Home reads in a read-only one, which
+     * cannot write the day's row, and a request never holds two connections.
+     */
     @GetMapping("/api/me/home")
     public ApiResponse<MemberHome> member(@AuthenticationPrincipal AppUserPrincipal me) {
+        phraseOfDay.phraseOfToday();
         return ApiResponse.ok("OK", homeService.member(me.id()));
     }
 

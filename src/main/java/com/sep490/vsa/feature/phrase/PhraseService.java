@@ -9,6 +9,10 @@ import com.sep490.vsa.feature.phrase.PhraseDtos.PhraseCard;
 import com.sep490.vsa.feature.phrase.PhraseDtos.ReportRequest;
 import com.sep490.vsa.feature.phrase.PhraseDtos.SaveState;
 import com.sep490.vsa.feature.phrase.PhraseRepository.Filter;
+import com.sep490.vsa.feature.quest.MemberGuard;
+import com.sep490.vsa.feature.quest.QuestDtos.FlashAnswer;
+import com.sep490.vsa.feature.quest.QuestDtos.QuestChange;
+import com.sep490.vsa.feature.quest.QuestService;
 import com.sep490.vsa.feature.report.ContentReportService;
 import com.sep490.vsa.feature.report.ContentReportService.Target;
 import org.springframework.http.HttpStatus;
@@ -47,10 +51,15 @@ public class PhraseService {
 
     private final PhraseRepository repository;
     private final ContentReportService reports;
+    private final QuestService quests;
+    private final MemberGuard guard;
 
-    public PhraseService(PhraseRepository repository, ContentReportService reports) {
+    public PhraseService(PhraseRepository repository, ContentReportService reports, QuestService quests,
+                         MemberGuard guard) {
         this.repository = repository;
         this.reports = reports;
+        this.quests = quests;
+        this.guard = guard;
     }
 
     // ---------------------------------------------------------------- reading
@@ -92,14 +101,24 @@ public class PhraseService {
 
     // ---------------------------------------------------------------- marks
 
-    /** A flash card answer: "Đã thuộc" ({@code learned}) or "Chưa thuộc"; the last answer replaces the one before. */
-    public Marks flash(AppUserPrincipal me, long phraseId, boolean learned) {
+    /**
+     * A flash card answer: "Đã thuộc" ({@code learned}) or "Chưa thuộc"; the last answer replaces the one before. It also
+     * moves the Member's "Nhiệm vụ hằng ngày" ({@link QuestService#recordFlash}): after the phrase (FOR SHARE) the
+     * Member's users row is locked (FOR UPDATE, the order of every quest and xu write), the entry's marks are read
+     * before the answer replaces them (REVIEW_LEARNING and LEARN_NEW look at the state right before), then the answer
+     * is kept.
+     */
+    public FlashAnswer flash(AppUserPrincipal me, long phraseId, boolean learned) {
         long userId = lock(me, phraseId);
+        guard.lockUserRow(userId);
+        boolean[] before = repository.marks(userId, phraseId);
+        QuestChange change = quests.recordFlash(userId, phraseId, learned, before[0], before[1]);
         repository.setFlash(userId, phraseId, learned);
-        return marks(userId, phraseId);
+        Marks marks = marks(userId, phraseId);
+        return new FlashAnswer(marks.learning(), marks.learned(), change);
     }
 
-    /** "Bỏ đánh dấu": neither "Chưa thuộc" nor "Đã thuộc" any more. */
+    /** "Bỏ đánh dấu": neither "Chưa thuộc" nor "Đã thuộc" any more. The quests keep what they counted. */
     public Marks clearFlash(AppUserPrincipal me, long phraseId) {
         long userId = lock(me, phraseId);
         repository.clearFlash(userId, phraseId);

@@ -34,9 +34,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -249,6 +251,8 @@ public class PinModerationService {
         repository.setClosed(id, closed, now);
         int handled = repository.openClosedReports(id);
         if (closed) {
+            tellReporters(id, "CLOSED", "Cảm ơn bạn đã báo “" + p.nameVi()
+                    + "” đã đóng cửa. Moderator đã kiểm tra và gắn nhãn “Đã đóng cửa”.");
             repository.resolveClosedReports(id, now);
         } else {
             repository.deleteClosedReports(id);
@@ -269,13 +273,64 @@ public class PinModerationService {
     public Done keepOpen(long moderatorId, long id) {
         PlaceState p = repository.place(id, true).filter(x -> "ACTIVE".equals(x.status()))
                 .orElseThrow(() -> notFound(GONE));
-        int removed = repository.deleteClosedReports(id);
+        tellReporters(id, "CLOSED", "Moderator đã kiểm tra “" + p.nameVi()
+                + "”: địa điểm vẫn mở cửa nên báo cáo của bạn được đóng lại. Cảm ơn bạn đã báo.");
+        int removed = repository.deleteReports(id, "CLOSED");
         if (removed == 0) {
             throw ApiException.conflict("Các báo cáo của địa điểm này đã được xử lý.");
         }
         activityLog.recordLog(moderatorId, "CLOSED_REPORTS_DISMISSED", "PLACE", id, Map.of("reports", removed), null,
                 "Vẫn mở cửa, xóa " + removed + " báo đóng cửa của “" + p.nameVi() + "”");
         return new Done("Đã xóa các báo đóng cửa. Địa điểm vẫn mở cửa.", id);
+    }
+
+    /**
+     * "Sai thông tin" reports: "Đã xử lý" ({@code fixed}: the Moderator corrected or checked the details; the reports
+     * are kept as handled) or "Báo cáo không đúng" (the details are right; the reports go). The reporters are told
+     * either way (user decision 20/11/2026).
+     */
+    @Transactional
+    public Done handleWrongInfo(long moderatorId, long id, boolean fixed) {
+        PlaceState p = repository.place(id, true).filter(x -> "ACTIVE".equals(x.status()))
+                .orElseThrow(() -> notFound(GONE));
+        tellReporters(id, "WRONG_INFO", fixed
+                ? "Cảm ơn bạn đã báo “" + p.nameVi() + "” sai thông tin. Moderator đã kiểm tra và cập nhật địa điểm."
+                : "Moderator đã kiểm tra “" + p.nameVi() + "”: thông tin hiện tại là đúng nên báo cáo của bạn được "
+                        + "đóng lại. Cảm ơn bạn đã báo.");
+        Instant now = clock.instant();
+        int handled = fixed ? repository.resolveReports(id, "WRONG_INFO", now) : repository.deleteReports(id, "WRONG_INFO");
+        if (handled == 0) {
+            throw ApiException.conflict("Các báo cáo của địa điểm này đã được xử lý.");
+        }
+        repository.history(id, "REPORTS_HANDLED", moderatorId,
+                toJson(Map.of("kind", "WRONG_INFO", "outcome", fixed ? "FIXED" : "DISMISSED", "reports", handled)), now);
+        activityLog.recordLog(moderatorId, fixed ? "PLACE_REPORTS_RESOLVED" : "PLACE_REPORTS_DISMISSED", "PLACE", id,
+                Map.of("reports", handled), null,
+                (fixed ? "Đã xử lý " : "Bỏ qua ") + handled + " báo cáo sai thông tin của “" + p.nameVi() + "”");
+        return new Done(fixed ? "Đã xử lý các báo cáo sai thông tin. Người báo được cảm ơn."
+                : "Đã đóng các báo cáo sai thông tin. Người báo được thông báo.", id);
+    }
+
+    /** One notification to each member whose report of this kind waits for the place (sent before it is handled). */
+    void tellReporters(long placeId, String kind, String text) {
+        for (Long userId : repository.reporters(placeId, kind)) {
+            notifications.send(userId, "PLACE_REPORT_HANDLED", text, "PLACE", placeId);
+        }
+    }
+
+    /**
+     * The place was taken off the map: everyone with a report waiting is told once (both kinds), and the reports are
+     * kept as handled.
+     */
+    void closeReportsOnRemoval(long placeId, String placeName, Instant now) {
+        Set<Long> people = new LinkedHashSet<>(repository.reporters(placeId, "WRONG_INFO"));
+        people.addAll(repository.reporters(placeId, "CLOSED"));
+        for (Long userId : people) {
+            notifications.send(userId, "PLACE_REPORT_HANDLED", "Cảm ơn bạn đã báo cáo “" + placeName
+                    + "”. Moderator đã kiểm tra và gỡ địa điểm khỏi bản đồ.", "PLACE", placeId);
+        }
+        repository.resolveReports(placeId, "WRONG_INFO", now);
+        repository.resolveReports(placeId, "CLOSED", now);
     }
 
     // ---------------------------------------------------------------- helpers

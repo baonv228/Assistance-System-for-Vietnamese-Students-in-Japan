@@ -104,7 +104,7 @@ public class AdminSafetyConfigService {
     }
 
     /** Kiểm tra từng ô; trả về khóa → giá trị số hoặc ném 400 kèm lỗi của mọi ô sai. */
-    private Map<String, Integer> validate(Map<String, Object> input) {
+    Map<String, Integer> validate(Map<String, Object> input) {
         Map<String, Integer> valid = new LinkedHashMap<>();
         Map<String, String> errors = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : input.entrySet()) {
@@ -130,7 +130,7 @@ public class AdminSafetyConfigService {
     }
 
     /** Số nguyên từ số JSON hoặc chuỗi chữ số ASCII ("007" → 7); null nếu rỗng, thập phân, âm hoặc không phải số. */
-    private static Integer parseWholeNumber(Object raw) {
+    static Integer parseWholeNumber(Object raw) {
         if (raw instanceof Integer || raw instanceof Long) {
             long number = ((Number) raw).longValue();
             return number < 0 || number > Integer.MAX_VALUE ? null : (int) number;
@@ -141,7 +141,7 @@ public class AdminSafetyConfigService {
         return null;
     }
 
-    private static boolean isSafetyKey(String key) {
+    static boolean isSafetyKey(String key) {
         return GROUPS.values().stream().anyMatch(group -> group.keys().contains(key));
     }
 
