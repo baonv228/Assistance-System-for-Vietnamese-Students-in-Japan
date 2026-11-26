@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.qa;
 
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
 import com.sep490.vsa.feature.blog.BlogDtos.Author;
 import com.sep490.vsa.feature.blog.BlogDtos.PlaceRef;
 import com.sep490.vsa.feature.blog.BlogDtos.Tag;
@@ -11,6 +12,7 @@ import com.sep490.vsa.feature.qa.QaDtos.QuestionCard;
 import com.sep490.vsa.feature.qa.QaDtos.QuestionPage;
 import com.sep490.vsa.feature.qa.QaRepository.AnswererRow;
 import com.sep490.vsa.feature.qa.QaRepository.Row;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,11 +39,14 @@ public class QaService {
     private final QaRepository repository;
     private final BlogFeedRepository cards;
     private final Clock clock;
+    private final String mediaBaseUrl;
 
-    public QaService(QaRepository repository, BlogFeedRepository cards, Clock clock) {
+    public QaService(QaRepository repository, BlogFeedRepository cards, Clock clock,
+                     @Value("${app.media.public-base-url:/media/}") String mediaBaseUrl) {
         this.repository = repository;
         this.cards = cards;
         this.clock = clock;
+        this.mediaBaseUrl = mediaBaseUrl;
     }
 
     public QuestionPage list(QaListQuery query) {
@@ -52,7 +57,7 @@ public class QaService {
         if (query.page() >= totalPages) {
             query = query.withPage(totalPages - 1);
         }
-        List<QuestionCard> items = total == 0 ? List.of() : toCards(repository.find(query));
+        List<QuestionCard> items = total == 0 ? List.of() : toCards(repository.find(query), query.viewerId());
         return new QuestionPage(items, query.page(), query.size(), total, totalPages, query.filtered());
     }
 
@@ -77,17 +82,20 @@ public class QaService {
         return query.withTopicIds(query.topicIds().stream().filter(active::contains).toList());
     }
 
-    private List<QuestionCard> toCards(List<Row> rows) {
+    private List<QuestionCard> toCards(List<Row> rows, Long viewerId) {
         List<Long> ids = rows.stream().map(Row::id).toList();
         Set<Long> authorIds = new LinkedHashSet<>(rows.stream().map(Row::authorId).toList());
         Map<Long, List<TopicRef>> topics = cards.topicsOf(ids);
         Map<Long, List<PlaceRef>> places = cards.placesOf(ids);
+        Map<Long, List<Media>> media = cards.mediaOf(ids, viewerId, mediaBaseUrl);
+        Set<Long> liked = cards.likedBy(viewerId, ids);
         Map<Long, List<Tag>> tags = cards.tagsOf(authorIds);
         return rows.stream().map(r -> new QuestionCard(r.id(), r.status(), r.pinned(), r.solved(), r.unanswered(),
                 r.title(), excerpt(r.contentStart(), EXCERPT_LENGTH),
                 new Author(r.authorId(), r.authorName(), r.avatarUrl(), tags.getOrDefault(r.authorId(), List.of())),
                 topics.getOrDefault(r.id(), List.of()), places.getOrDefault(r.id(), List.of()),
-                r.likeCount(), r.answerCount(), r.createdAt())).toList();
+                r.likeCount(), r.answerCount(), r.createdAt(), media.getOrDefault(r.id(), List.of()),
+                liked.contains(r.id()))).toList();
     }
 
     /** Plain one-line excerpt cut at a word boundary. */

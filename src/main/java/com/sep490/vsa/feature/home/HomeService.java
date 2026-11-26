@@ -3,6 +3,12 @@ package com.sep490.vsa.feature.home;
 import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.text.VietnameseText;
 import com.sep490.vsa.feature.blog.ActiveAuthors;
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
+import com.sep490.vsa.feature.blog.BlogDtos;
+import com.sep490.vsa.feature.blog.BlogDtos.Author;
+import com.sep490.vsa.feature.blog.BlogDtos.PlaceRef;
+import com.sep490.vsa.feature.blog.BlogDtos.TopicRef;
+import com.sep490.vsa.feature.blog.BlogFeedRepository;
 import com.sep490.vsa.feature.blog.FeaturedSnapshotService;
 import com.sep490.vsa.feature.guide.GuideProgressService;
 import com.sep490.vsa.feature.guide.GuideProgressService.State;
@@ -26,6 +32,7 @@ import com.sep490.vsa.feature.home.InterestService.Interest;
 import com.sep490.vsa.feature.phrase.PhraseOfDayService;
 import com.sep490.vsa.feature.phrase.PhraseOfDayService.PhraseOfDay;
 import com.sep490.vsa.feature.quest.QuestService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -41,8 +48,10 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Read-only data for the homepage. Places, reviews, events, blogs and the guide are owned by other
@@ -98,10 +107,14 @@ public class HomeService {
     private final InterestService interestService;
     private final PhraseOfDayService phraseOfDay;
     private final QuestService questService;
+    /** The Blog's read helpers for what its cards show ("Dành cho bạn" draws the same cards). */
+    private final BlogFeedRepository blogCards;
+    private final String mediaBaseUrl;
 
     public HomeService(JdbcTemplate jdbc, Clock clock, FeaturedSnapshotService featuredPosts,
                        GuideProgressService guideProgress, InterestService interestService,
-                       PhraseOfDayService phraseOfDay, QuestService questService) {
+                       PhraseOfDayService phraseOfDay, QuestService questService, BlogFeedRepository blogCards,
+                       @Value("${app.media.public-base-url:/media/}") String mediaBaseUrl) {
         this.jdbc = jdbc;
         this.named = new NamedParameterJdbcTemplate(jdbc);
         this.clock = clock;
@@ -110,6 +123,8 @@ public class HomeService {
         this.interestService = interestService;
         this.phraseOfDay = phraseOfDay;
         this.questService = questService;
+        this.blogCards = blogCards;
+        this.mediaBaseUrl = mediaBaseUrl;
     }
 
     /**
@@ -304,7 +319,8 @@ public class HomeService {
                                             OR kp.name_en COLLATE utf8mb4_0900_ai_ci LIKE :kw)))""";
         }
         String select = """
-                SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.display_name, b.like_count,
+                SELECT b.id, b.title, LEFT(b.content, 400) AS content_start, u.id AS author_id, u.display_name,
+                       u.avatar_url, b.like_count,
                        b.comment_count, b.created_at, b.created_at >= :since AS recent,
                        (SELECT t.name FROM blog_topic_links btl JOIN blog_topics t ON t.id = btl.topic_id
                         WHERE btl.blog_id = b.id AND t.is_active ORDER BY t.is_other, t.sort_order, t.name LIMIT 1)
@@ -338,11 +354,41 @@ public class HomeService {
         return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
+    /** A ranked post before its card parts (author's tags, topics, places, media, the user's like) are read. */
+    private record RankedPost(FeedPost post, long authorId, String avatarUrl) {
+    }
+
     /**
      * {@code limit} posts of the ranked feed from {@code offset} on, all of them ({@code ALL}) or only those that
-     * matched one reason. The order ends with the post id, so a page always follows the one before it.
+     * matched one reason. The order ends with the post id, so a page always follows the one before it. Each post also
+     * gets what the Blog's cards show (read with the Blog's own helpers, {@link BlogFeedRepository}): the author with
+     * avatar and identity tags, the active topics, the linked places, the media that passed the scan and whether
+     * {@code userId} likes it (the posts are always someone else's, so a file still being scanned never shows).
      */
     private List<FeedPost> posts(Ranking ranking, ForYouScope scope, int limit, int offset) {
+        List<RankedPost> ranked = rankedPosts(ranking, scope, limit, offset);
+        if (ranked.isEmpty()) {
+            return List.of();
+        }
+        Long userId = (Long) ranking.params().getValue("userId");
+        List<Long> ids = ranked.stream().map(r -> r.post().id()).toList();
+        Map<Long, List<TopicRef>> topics = blogCards.topicsOf(ids);
+        Map<Long, List<PlaceRef>> places = blogCards.placesOf(ids);
+        Map<Long, List<Media>> media = blogCards.mediaOf(ids, userId, mediaBaseUrl);
+        Set<Long> liked = blogCards.likedBy(userId, ids);
+        Map<Long, List<BlogDtos.Tag>> tags = blogCards.tagsOf(
+                new LinkedHashSet<>(ranked.stream().map(RankedPost::authorId).toList()));
+        return ranked.stream().map(r -> {
+            FeedPost p = r.post();
+            return new FeedPost(p.id(), p.title(), p.excerpt(), p.authorName(), p.topicName(), p.likeCount(),
+                    p.commentCount(), p.createdAt(), p.reason(), p.reasons(), p.engaged(),
+                    new Author(r.authorId(), p.authorName(), r.avatarUrl(), tags.getOrDefault(r.authorId(), List.of())),
+                    topics.getOrDefault(p.id(), List.of()), places.getOrDefault(p.id(), List.of()),
+                    media.getOrDefault(p.id(), List.of()), liked.contains(p.id()));
+        }).toList();
+    }
+
+    private List<RankedPost> rankedPosts(Ranking ranking, ForYouScope scope, int limit, int offset) {
         String only = switch (scope) {
             case ALL -> "";
             case NEAR -> "WHERE f.near > 0";
@@ -377,12 +423,13 @@ public class HomeService {
                     if (chosenTopic == null && rs.getString("learnt_topic") != null) {
                         reasons.add(new FeedReason("INTEREST", REASON_INTEREST, rs.getString("learnt_topic")));
                     }
-                    return new FeedPost(rs.getLong("id"), rs.getString("title"),
+                    FeedPost post = new FeedPost(rs.getLong("id"), rs.getString("title"),
                             excerpt(rs.getString("content_start"), 140), rs.getString("display_name"),
                             rs.getString("topic_name"), rs.getInt("like_count"), rs.getInt("comment_count"),
                             rs.getTimestamp("created_at").toInstant(),
                             reasons.isEmpty() ? null : reasons.get(0).label(), List.copyOf(reasons),
-                            rs.getBoolean("engaged"));
+                            rs.getBoolean("engaged"), null, List.of(), List.of(), List.of(), false);
+                    return new RankedPost(post, rs.getLong("author_id"), rs.getString("avatar_url"));
                 });
     }
 

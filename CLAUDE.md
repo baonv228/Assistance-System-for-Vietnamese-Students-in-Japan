@@ -246,7 +246,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   ("cần chốt" constants in `InterestService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST,
   `label`, `detail` = the linked place or the matching topic; one INTEREST at most, the chosen topic before the learnt
   one, listed before STAGE when chosen), `reason` = the first label and `engaged` (already liked, saved or commented
-  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below). The Home's
+  on), plus what the Blog's cards show (additive, read with `BlogFeedRepository`'s helpers): `author` (id, avatar,
+  tags), `topics`, `places`, `media` (passed the scan, post order) and `liked`. Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below). The Home's
   "Điều chỉnh" saves all three with one `PUT /api/me/feed-preferences` `{areaId, stage, topicIds}` (`topicIds` null =
   topics unchanged; `ProfileService.updateFeedPreferences`): one transaction, users row locked first, so they are saved
   together or not at all; its answer `{areaId, areaName, stage, topicIds}` reads nothing of "Tôi", so a table of another

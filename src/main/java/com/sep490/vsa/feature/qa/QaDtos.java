@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.qa;
 
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
 import com.sep490.vsa.feature.blog.BlogDtos.Author;
 import com.sep490.vsa.feature.blog.BlogDtos.PlaceRef;
 import com.sep490.vsa.feature.blog.BlogDtos.TopicCount;
@@ -23,10 +24,12 @@ public final class QaDtos {
      * @param unanswered  "Chưa ai trả lời", the rule of the filter and the statistics: no published answer by an active
      *                    account and not solved (a reply or a hidden answer does not count)
      * @param answerCount published answers and replies of active accounts
+     * @param media       photos and videos the viewer may see, by the rule of the Blog cards
+     * @param liked       the signed-in viewer likes the question (false for a guest)
      */
     public record QuestionCard(Long id, String status, boolean pinned, boolean solved, boolean unanswered, String title,
                                String excerpt, Author author, List<TopicRef> topics, List<PlaceRef> places,
-                               int likeCount, int answerCount, Instant createdAt) {
+                               int likeCount, int answerCount, Instant createdAt, List<Media> media, boolean liked) {
     }
 
     /**

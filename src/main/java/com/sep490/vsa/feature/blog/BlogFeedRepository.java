@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.blog;
 
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
 import com.sep490.vsa.feature.blog.BlogDtos.Author;
 import com.sep490.vsa.feature.blog.BlogDtos.PlaceRef;
 import com.sep490.vsa.feature.blog.BlogDtos.Tag;
@@ -16,17 +17,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Read-only SQL for the Blog Feed. Plain SQL (not JPA) because the filters are dynamic and the screen
  * also reads users, tags, topics and places; it never writes the blog tables.
  * <p>
  * The feed, its statistics and "Bài nổi bật" cover posts only ({@code blog_type = 'POST'}); questions live in the
- * same table but are listed by feature/qa. {@link #topicsOf}, {@link #placesOf} and {@link #tagsOf} work for
- * both and are reused by feature/qa.
+ * same table but are listed by feature/qa. {@link #topicsOf}, {@link #placesOf}, {@link #mediaOf}, {@link #likedBy}
+ * and {@link #tagsOf} work for both and are reused by feature/qa.
  */
 @Repository
 public class BlogFeedRepository {
@@ -193,6 +196,46 @@ public class BlogFeedRepository {
 
     private static Double decimal(java.math.BigDecimal value) {
         return value == null ? null : value.doubleValue();
+    }
+
+    /**
+     * Photos and videos of each post, in the post's order, by the rule of the post page
+     * ({@link BlogDetailRepository#media}): deleted or rejected files never; files still being scanned only on the
+     * viewer's own post (its author sees them through {@code MediaAccess} too).
+     */
+    public Map<Long, List<Media>> mediaOf(Collection<Long> blogIds, Long viewerId, String publicBaseUrl) {
+        Map<Long, List<Media>> result = new HashMap<>();
+        if (blogIds.isEmpty()) {
+            return result;
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("ids", blogIds)
+                .addValue("viewerId", viewerId);
+        jdbc.query("""
+                SELECT bm.blog_id, m.id, m.media_type, m.storage_key, m.mime_type, m.width, m.height
+                FROM blog_media bm JOIN media m ON m.id = bm.media_id JOIN blogs b ON b.id = bm.blog_id
+                WHERE bm.blog_id IN (:ids) AND m.deleted_at IS NULL
+                  AND (m.scan_status = 'PASSED'
+                       OR (m.scan_status = 'PROCESSING' AND :viewerId IS NOT NULL AND b.author_id = :viewerId))
+                ORDER BY bm.blog_id, bm.sort_order, m.id""",
+                params, (ResultSet rs) -> {
+                    while (rs.next()) {
+                        result.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>())
+                                .add(new Media(rs.getLong(2), rs.getString(3), publicBaseUrl + rs.getString(4),
+                                        rs.getString(5), (Integer) rs.getObject(6), (Integer) rs.getObject(7)));
+                    }
+                    return null;
+                });
+        return result;
+    }
+
+    /** Which of these posts (or questions) the user likes; empty for a guest. */
+    public Set<Long> likedBy(Long userId, Collection<Long> blogIds) {
+        if (userId == null || blogIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jdbc.query("SELECT blog_id FROM blog_likes WHERE user_id = :userId AND blog_id IN (:ids)",
+                Map.of("userId", userId, "ids", blogIds), (rs, i) -> rs.getLong(1)));
     }
 
     /** Approved, not revoked identity tags of each user. */

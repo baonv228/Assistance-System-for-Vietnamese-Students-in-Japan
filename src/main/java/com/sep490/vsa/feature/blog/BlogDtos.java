@@ -1,5 +1,7 @@
 package com.sep490.vsa.feature.blog;
 
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
+
 import java.time.Instant;
 import java.util.List;
 
@@ -32,10 +34,13 @@ public final class BlogDtos {
      *
      * @param type   POST (the feed shows posts only; QA questions are listed by feature/qa)
      * @param status PUBLISHED, or PROCESSING when the author views their own post while its media is scanned
+     * @param media  photos and videos the viewer may see, in the post's order (the rule of the post page: scan
+     *               PASSED, or still scanned on the viewer's own post); the page draws them as a photo grid
+     * @param liked  the signed-in viewer likes the post (always false for a guest and in "Bài nổi bật")
      */
     public record BlogCard(Long id, String type, String status, boolean pinned, boolean answered, String title,
                            String excerpt, Author author, List<TopicRef> topics, List<PlaceRef> places,
-                           int likeCount, int commentCount, Instant createdAt) {
+                           int likeCount, int commentCount, Instant createdAt, List<Media> media, boolean liked) {
     }
 
     /**
