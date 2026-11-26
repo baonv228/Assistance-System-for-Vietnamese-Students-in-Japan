@@ -286,7 +286,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card, "Chủ đề quan tâm" right
   under it), scope buttons and text in
   the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
-  drawn twice (likes may move the ranking between two pages).
+  drawn twice (likes may move the ranking between two pages). The posts are the same cards as the Home's (searched text
+  marked in title and excerpt), edge to edge on phones.
 - "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,
   `SearchRepository`, `SearchDtos`; page `/search?q=`, `pages/search.html`, `search.js`, `search.css`; public). The Home
   (guest hero and member, under the greeting) has a plain GET form to it (an empty box is not sent). `GET /api/search?q=`

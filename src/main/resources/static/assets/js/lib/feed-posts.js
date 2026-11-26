@@ -1,5 +1,6 @@
 // Pieces of a post of the personal feed ("Dành cho bạn"), shared by the member Home and the page /for-you. The server
 // chooses and ranks the posts (HomeService); these only draw them. Styles: .whys/.why/.spot-meta in site.css.
+import { feedCard } from "./feed-card.js";
 import { esc, ic, timeAgo } from "./ui.js";
 
 /**
@@ -23,6 +24,14 @@ export const postMeta = (p) => `<span class="row spot-meta">${p.topicName ? `<sp
 
 /** The post's own page. */
 export const postUrl = (p) => `/blog/${encodeURIComponent(p.id)}`;
+
+/**
+ * A post of "Dành cho bạn" drawn as a card of the Blog list (lib/feed-card.js, user decision 25/11/2026), with why it
+ * was chosen above the author. The feed holds only published posts of other members, so "Thích" is there for a Member.
+ * Topics open the Blog filtered by them; `mark(text)` marks a searched text in the title and excerpt (/for-you).
+ */
+export const forYouCard = (p, user, { mark } = {}) => feedCard({ ...p, status: "PUBLISHED", pinned: false }, "POST",
+    user, { top: reasonChips(p), topicHref: (t) => `/blog?topics=${encodeURIComponent(t.id)}`, mark });
 
 /**
  * The interests in "Dựa trên" (Home and /for-you): the topics the member chose, then those learnt from what the member
