@@ -421,17 +421,28 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
   Tests: `GuideMemberFlowTest`, `HomeGuideFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
-  CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
-  (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
-  `GET /summary?after=` (unread, latestId, `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5
-  after that id, one read-only snapshot), `POST /read {upToId}`. The header (`site-header.js`) shows a bell with the
-  unread count, asks the summary at once when the live stream announces a notification (see "Live updates" below),
+  CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=
+  &unread=` (20, newest first, pages kept within 0–199, `unread=true` = unread only; `link` computed from the post's
+  `blog_type`, the review's event or place; null when it is gone), `GET /summary?after=&seen=` (unread, latestId,
+  `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5 after `after`, `unseen` = unread after `seen`,
+  one read-only snapshot), `POST /read {upToId}` (null = all), `POST /{id}/read` (one; another's or missing → 404).
+  The bell (`site-header.js`, a button) opens a panel on the page itself, drawn like Facebook's (user decision 25/11:
+  no page change; `components/notif-panel.js` + `lib/notif-view.js`, styles `.notif-pop` / `.np-*` in site.css): "…"
+  menu ("Đánh dấu tất cả là đã đọc", "Mở trang Thông báo"), tabs "Tất cả" / "Chưa đọc", groups "Hôm nay" / "Trước đó"
+  ("Xem tất cả" → `/notifications`), "Xem thông báo trước đó"; each row a round picture (the commenter's letter for
+  NEW_COMMENT, else the Senpai ơi flower) with a badge per type, names and “quoted” titles in bold, short time ("20
+  giờ"), a dot while unread. A notification stays unread until clicked (marked before its page opens, at most 1.5 s
+  wait); the bell's number = `unseen` and goes when the list is shown (newest id shown kept in localStorage
+  `asvsj.notifications.shown.<userId>`, shared by the tabs), as on Facebook. Under 600 px the panel fills the screen
+  between header and tab bar; closes with the bell, "Đóng", Escape, a click outside or focus leaving it. The header asks
+  the summary at once when the live stream announces a notification (see "Live updates" below),
   every 5 s while `processing` > 0 (else every 60 s, never while the tab is hidden),
   pops up the scan results (`.site-notices`, "Xem" opens the link) and fires `asvsj:notification`, which reloads the post
-  (`blog-detail.js`), event (`event-detail.js`) or place panel (`map.js`) still shown as PROCESSING; the Map, which
-  stays on its page after sending a review or pin with media, calls `checkNotificationsSoon()`. The newest id a tab
-  handled is kept in sessionStorage (`asvsj.notifications.seen.<userId>`). Page `/notifications` (guarded like
-  `/saved`) lists them and marks the shown ones read.
+  (`blog-detail.js`), event (`event-detail.js`) or place panel (`map.js`) still shown as PROCESSING and adds it to an
+  open list; the Map, which stays on its page after sending a review or pin with media, calls
+  `checkNotificationsSoon()`. The newest id a tab handled is kept in sessionStorage
+  (`asvsj.notifications.seen.<userId>`). Page `/notifications` (guarded like `/saved`; "Thông báo" in the phone "Thêm"
+  sheet) shows the same list in a card. Tests: `ScanNotificationFlowTest`, `src/test/js/notif-view.test.mjs`.
 - "Tin nhắn" (one-to-one chat between Members, `feature/chat`, V14 + V15; there is no chat in the prototype, rules decided
   in this repo, "cần chốt" constants in `ChatService`, `ChatKeyService`, `ChatTyping`, `ChatViewers`):
   - Who: signed-in ACTIVE Members (role USER) with other ACTIVE Members; staff get MSG18 (403) and have no "Tin nhắn"

@@ -15,16 +15,11 @@
     <link rel="stylesheet" href="/assets/css/notifications.css">
 </head>
 <body class="app">
-<!-- "Thông báo" (the bell in the header): results of the photo/video scan of the user's posts, questions and reviews,
-     comments and best answers. Opening the page marks them read. -->
+<!-- "Thông báo" ("Xem tất cả" of the bell's panel): the same list as the panel (components/notif-panel.js) on a page of
+     its own: results of the photo/video scan of the user's posts, questions and reviews, comments, best answers… A
+     notification stays unread until it is clicked; "…" → "Đánh dấu tất cả là đã đọc". -->
 <main class="page narrow notifpage" id="notifications">
-    <div>
-        <a class="link" href="/profile"><span class="ic" aria-hidden="true">chevron_left</span>Tôi</a>
-        <h2>Thông báo</h2>
-        <p class="note" id="summary" aria-live="polite">Đang tải…</p>
-    </div>
-    <ul class="notif-list" id="list"></ul>
-    <p><button class="btn sm" type="button" id="more" hidden>Xem thêm</button></p>
+    <a class="link" href="/profile"><span class="ic" aria-hidden="true">chevron_left</span>Tôi</a>
 </main>
 <script type="module" src="/assets/js/pages/notifications.js"></script>
 </body>
