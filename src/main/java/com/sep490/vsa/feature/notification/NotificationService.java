@@ -1,9 +1,11 @@
 package com.sep490.vsa.feature.notification;
 
+import com.sep490.vsa.common.exception.ApiException;
 import com.sep490.vsa.common.live.LiveEvents;
 import com.sep490.vsa.feature.notification.NotificationDtos.NotificationItem;
 import com.sep490.vsa.feature.notification.NotificationDtos.NotificationPage;
 import com.sep490.vsa.feature.notification.NotificationDtos.NotificationSummary;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,9 @@ public class NotificationService {
     public static final String CONTENT_PUBLISHED = "CONTENT_PUBLISHED";
 
     static final int PAGE_SIZE = 20;
+    /** Pages asked past this one answer this one (a huge number would overflow the offset). */
+    static final int MAX_PAGE = 199;
+    static final String NOT_FOUND = "Không tìm thấy thông báo này.";
     /** At most this many new notifications are handed to the bell at once (it shows the scan results among them). */
     static final int FRESH_MAX = 5;
 
@@ -57,31 +62,49 @@ public class NotificationService {
         live.publish(userId, "notification", Map.of());
     }
 
-    /** Page {@code page} (from 0) of the user's notifications, newest first. */
+    /**
+     * Page {@code page} (from 0, kept within 0–{@value #MAX_PAGE}) of the user's notifications, newest first; only the
+     * unread ones when {@code unreadOnly} (tab "Chưa đọc").
+     */
     @Transactional(readOnly = true)
-    public NotificationPage list(long userId, int page) {
-        int offset = Math.max(0, page) * PAGE_SIZE;
-        List<NotificationItem> rows = repository.page(userId, offset, PAGE_SIZE + 1);
+    public NotificationPage list(long userId, int page, boolean unreadOnly) {
+        int offset = Math.min(Math.max(0, page), MAX_PAGE) * PAGE_SIZE;
+        List<NotificationItem> rows = repository.page(userId, unreadOnly, offset, PAGE_SIZE + 1);
         boolean hasMore = rows.size() > PAGE_SIZE;
         return new NotificationPage(hasMore ? rows.subList(0, PAGE_SIZE) : rows, hasMore, repository.unread(userId));
     }
 
     /**
      * The bell: unread count, newest id, the user's content still being scanned and, when {@code afterId} is given,
-     * the notifications that came after it. One read-only transaction, so a scan finishing in between is seen either
-     * entirely (its notification and the content no longer processing) or not at all.
+     * the notifications that came after it; {@code unseen} counts the unread ones after {@code seenId} (all unread
+     * without it). One read-only transaction, so a scan finishing in between is seen either entirely (its notification
+     * and the content no longer processing) or not at all.
      */
     @Transactional(readOnly = true)
-    public NotificationSummary summary(long userId, Long afterId) {
+    public NotificationSummary summary(long userId, Long afterId, Long seenId) {
         List<NotificationItem> fresh = afterId == null ? List.of() : repository.after(userId, afterId, FRESH_MAX);
-        return new NotificationSummary(repository.unread(userId), repository.latestId(userId),
-                repository.processing(userId), fresh);
+        int unread = repository.unread(userId);
+        int unseen = seenId == null ? unread : repository.unreadAfter(userId, seenId);
+        return new NotificationSummary(unread, repository.latestId(userId), repository.processing(userId), fresh,
+                unseen);
     }
 
     /** Marks the user's notifications read (up to {@code upToId} when given); returns the unread left. */
     @Transactional
     public int markRead(long userId, Long upToId) {
         repository.markRead(userId, upToId);
+        return repository.unread(userId);
+    }
+
+    /**
+     * Marks one notification read (the user clicked it in the panel or on the page); returns the unread left. Reading
+     * it twice changes nothing; someone else's or a missing one → 404.
+     */
+    @Transactional
+    public int markOneRead(long userId, long id) {
+        if (repository.markOneRead(userId, id) == 0 && !repository.exists(userId, id)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, NOT_FOUND);
+        }
         return repository.unread(userId);
     }
 }

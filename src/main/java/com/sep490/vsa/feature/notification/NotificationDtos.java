@@ -19,7 +19,10 @@ public final class NotificationDtos {
     public record NotificationItem(long id, String type, String content, String link, boolean read, Instant createdAt) {
     }
 
-    /** A page of the list, newest first. {@code unread} counts all the user's unread notifications. */
+    /**
+     * A page of the list (all, or the unread ones only: tab "Chưa đọc"), newest first. {@code unread} counts all the
+     * user's unread notifications.
+     */
     public record NotificationPage(List<NotificationItem> items, boolean hasMore, int unread) {
     }
 
@@ -31,8 +34,13 @@ public final class NotificationDtos {
      * @param processing the user's own posts, questions and reviews whose photos/video are still being scanned: while
      *                   there are some, the page asks again soon
      * @param fresh      notifications newer than the {@code after} id asked for, newest first (empty without it)
+     * @param unseen     the number on the bell: unread notifications newer than the {@code seen} id asked for (the
+     *                   newest one this browser has shown in the panel or on the page), as Facebook clears its count
+     *                   when the list is opened while each notification stays unread until clicked; = {@code unread}
+     *                   without it
      */
-    public record NotificationSummary(int unread, long latestId, int processing, List<NotificationItem> fresh) {
+    public record NotificationSummary(int unread, long latestId, int processing, List<NotificationItem> fresh,
+                                      int unseen) {
     }
 
     /** Marks the user's notifications up to this id as read (the newest the page has shown; null: all of them). */

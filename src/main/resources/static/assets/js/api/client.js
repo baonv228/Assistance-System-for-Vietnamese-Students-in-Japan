@@ -170,11 +170,14 @@ export const apiClient = {
     nearestArea: (lat, lng) => request(`/areas/nearest?${toQuery({ lat, lng })}`),
     area: (id) => request(`/areas/${encodeURIComponent(id)}`),
 
-    // Notifications (bell + "Thông báo"). page → { items, hasMore, unread };
-    // summary → { unread, latestId, processing, fresh: notifications after `after`, newest first }
-    notifications: (page = 0) => request(`/me/notifications?${toQuery({ page })}`),
-    notificationSummary: (after) => request(`/me/notifications/summary?${toQuery({ after })}`),
+    // Notifications (bell panel + "Thông báo"). page → { items, hasMore, unread } (unreadOnly: tab "Chưa đọc");
+    // summary → { unread, latestId, processing, fresh: notifications after `after`, newest first, unseen: unread
+    // after `seen` = the number on the bell }; readNotification(id) / readNotifications(upToId) → { unread }
+    notifications: (page = 0, unreadOnly = false) =>
+        request(`/me/notifications?${toQuery({ page, unread: unreadOnly ? true : undefined })}`),
+    notificationSummary: (after, seen) => request(`/me/notifications/summary?${toQuery({ after, seen })}`),
     readNotifications: (upToId) => post("/me/notifications/read", { upToId: upToId ?? null }),
+    readNotification: (id) => post(`/me/notifications/${encodeURIComponent(id)}/read`),
 
     // "Tin nhắn" between Members. chats(box: INBOX | REQUESTS) → { items, hasMore, counts: { unread, requests } };
     // chat / chatWith → { id (null before the first message), peer, status: { state, canSend, notice: { code, text },
