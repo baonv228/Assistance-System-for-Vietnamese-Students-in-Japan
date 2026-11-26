@@ -253,12 +253,23 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   together or not at all; its answer `{areaId, areaName, stage, topicIds}` reads nothing of "Tôi", so a table of another
   feature missing on the shared database (V22 `saved_phrases` on 11/13) no longer undoes the save. Test:
   `FeedPreferencesFlowTest`.
-  Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
-  bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
-  "Điều chỉnh" opens the area/stage/topics form in place and the feed is redrawn after "Lưu", the reasons on every post, the
-  first post across the width, "Xem tất cả" → `/for-you`, then "Cẩm nang cho giai đoạn …" = `stageGuides`, see
-  "Cẩm nang progress" below), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
-  Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+  Page (`home.js renderMember`, styles `assets/css/home.css`, classes `mh-*`; redesigned 26/11/2026, user approved):
+  two columns from 960 px (main column + 360 px side column, 320 px below 1100 px), one column below, side cards after
+  the feed. Main column: card with avatar, greeting (the area name never broken), "Giai đoạn" and points · rank (→
+  `/profile#points`), the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below) and shortcuts "Viết bài"
+  `/blog/new`, "Đặt câu hỏi" `/qa/ask`, "Viết review" `/map`, "Đã lưu" `/saved`; then "Dành cho bạn": "Xem tất cả" →
+  `/for-you` (which has the search; no magnifier on the Home), "Dựa trên" chips for area, stage and interests (one row
+  that scrolls sideways ≤ 640 px, "Điều chỉnh" then icon only), "Điều chỉnh" opens the area/stage/topics form in place
+  (with `interestNote`) and the feed is redrawn after "Lưu", the posts as the Blog's Facebook-like cards (user decision
+  25/11/2026: `feedCard` of `lib/feed-card.js`, why it was chosen in one quiet line above the author =
+  `lib/feed-posts.js reasonLine`: the first reason in full, the others as "+N" written out on hover and for screen
+  readers; /for-you keeps every reason as chips; topics link to `/blog?topics=`, "Thích" / viewer / "Chia sẻ" work in
+  place; the Home loads blog.css for them; phones ≤ 560 px: cards edge to edge and only the first 3), then "Xem thêm
+  bài viết dành cho bạn". Side column: "Cẩm nang của bạn" (progress of the stage, "Việc tiếp theo", the other
+  `stageGuides`, see "Cẩm nang progress" below), "Câu tiếng Nhật hôm nay", "Review mới quanh …", "Sự kiện 2 tuần tới"
+  (one line + "Lịch sự kiện" when there is none), "Bài nổi bật" when there is one, then the terms links. Each side card
+  is drawn through `safely` (a card that cannot be drawn is left out), like "Dành cho bạn". Post pieces shared with
+  `/for-you`: `lib/feed-posts.js`.
 - "Chủ đề quan tâm" (`feature/home`: `InterestService`, `InterestController`; V21 `user_interest_topics`): `GET
   /api/me/interests` → `{max, topics[{id, name, chosen, learnt}]}` (every active topic but "Khác", Blog order; `learnt`
   = a suggestion, never also chosen), `PUT /api/me/interests` `{topicIds}` = the whole new choice (empty clears; at most
@@ -402,8 +413,9 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `guide-preparation.js`, whose `preparationTabs` returns `{select}`); guests get a sign-in line, staff nothing.
   Member Home: "Việc tiếp theo" (`HomeService#guide`) = visible guides of the user's stage (ARR until chosen), done/total
   by the rule, `next` = the first started checklist, else the first guide not done, in `sort_order, id` order, with
-  `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Cả giai
-  đoạn" `/guides?category=`, the count → `/profile#guides`. `stageGuides` in "Dành cho bạn": up to 3 not-done guides of
+  `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Tất cả"
+  of the card `/guides?category=`, the count → `/profile#guides`; all in the side card "Cẩm nang của bạn" (no progress
+  bar while the stage has no guide). `stageGuides` under it ("Cẩm nang cho giai đoạn …"): up to 3 not-done guides of
   the user's own stage (none without a stage), started checklists first, never `guide.next`, shown even when no post
   fits. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
   `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
