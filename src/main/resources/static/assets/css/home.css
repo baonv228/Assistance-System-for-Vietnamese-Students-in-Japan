@@ -1,0 +1,299 @@
+/* Member Home (pages/home.js renderMember). Load after tokens.css, site.css and blog.css (the feed cards are the
+   Blog's .fbp cards). Every class starts with "mh-", so the guest Home, /for-you and Tôi keep site.css as it is.
+   Wide screens: main column (greeting, search, shortcuts, "Dành cho bạn") + side column of small cards.
+   Below 960 px: one column, the side cards after the feed. Phones: the feed cards run edge to edge, as on the Blog. */
+
+.mh {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 24px 56px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+    align-items: start;
+}
+.mh-main, .mh-side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; align-content: start; }
+
+.mh-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(47, 62, 110, .06);
+}
+.mh-meta { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.mh-eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.mh-link {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    color: var(--brand-text);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.mh-link .ic { font-size: 20px; }
+.mh-link:hover { text-decoration: underline; }
+.mh a:focus-visible, .mh button:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 8px; }
+.mh-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------------- greeting, search, shortcuts ---------------- */
+.mh-hello { padding: 20px 20px 12px; display: grid; gap: 16px; }
+.mh-hello-top { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.mh-me { flex: none; border-radius: 50%; }
+.mh-me .avatar { width: 52px; height: 52px; font-size: 20px; background: var(--brand-soft); color: var(--brand-text); }
+.mh-hello-txt { display: grid; gap: 4px; min-width: 0; }
+.mh-hello h1 { font-size: 22px; font-weight: 700; line-height: 1.25; text-wrap: balance; overflow-wrap: anywhere; }
+.mh-nowrap { white-space: nowrap; }
+.mh-facts { display: flex; flex-wrap: wrap; gap: 2px 16px; color: var(--muted); font-size: 14px; }
+.mh-facts > * { display: inline-flex; align-items: center; gap: 4px; }
+.mh-facts .ic { font-size: 17px; color: var(--brand); }
+.mh-facts b { color: var(--ink); font-weight: 600; }
+.mh-facts a { color: inherit; font-weight: 600; text-decoration: none; }
+.mh-facts a:hover { color: var(--brand-text); text-decoration: underline; }
+.mh-hello .home-search { min-height: 48px; background: var(--bg); box-shadow: none; }
+.mh-hello .home-search:focus-within { box-shadow: var(--focus); }
+.mh-hello .home-search input { height: 38px; }
+.mh-quick {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+}
+.mh-quick-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 6px;
+    border-radius: 10px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+.mh-quick-btn .ic { font-size: 22px; color: var(--brand); }
+.mh-quick-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mh-quick-btn:hover { background: var(--surface-2); }
+
+/* ---------------- "Dành cho bạn" ---------------- */
+.mh-foryou { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; scroll-margin-top: 76px; }
+.mh-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.mh-section-head h2 { display: flex; align-items: center; gap: 8px; font-size: 21px; }
+.mh-section-head h2 .ic { font-size: 22px; color: var(--brand); }
+/* label and "Điều chỉnh" stay on the first row of chips when they wrap */
+.mh-basis { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.mh-basis-label { flex: none; display: flex; align-items: center; min-height: 32px; color: var(--muted); font-size: 13px; font-weight: 600; }
+/* relative: the chips' screen-reader labels (.sr-only, absolute) stay inside the row that scrolls on phones, instead
+   of widening the page */
+.mh-chips { position: relative; display: flex; flex-wrap: wrap; flex: 1; gap: 6px; min-width: 0; }
+.mh-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 0 11px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.mh-chip .ic { font-size: 16px; color: var(--brand); }
+/* a topic learnt from what the member did, after the chosen ones */
+.mh-chip.learnt { background: transparent; color: var(--muted); font-weight: 500; }
+.mh-chip.learnt .ic { color: var(--muted); }
+.mh-chip.off { border: 1px dashed var(--brand); background: transparent; color: var(--muted); font-weight: 500; }
+.mh-tune {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--brand-text);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.mh-tune .ic { font-size: 19px; }
+.mh-tune:hover, .mh-tune[aria-expanded="true"] { background: var(--brand-soft); }
+
+.mh-prompt { padding: 16px; display: grid; gap: 12px; border-color: rgba(194, 69, 110, .35); }
+.mh-prompt-title { display: flex; align-items: center; gap: 6px; }
+.mh-prompt-title .ic { color: var(--brand); }
+
+.mh-feed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+/* minmax(0, 1fr): a long reason or name is cut with "…" instead of widening the card past its edge */
+.mh-feed .fbp { grid-template-columns: minmax(0, 1fr); border-radius: 16px; }
+/* why the post was chosen: one quiet line above the author */
+.mh-feed .fbp-top { padding: 12px 16px 0; border-bottom: 0; }
+.mh-why { position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 13px; line-height: 1.35; }
+.mh-why > .ic { font-size: 16px; color: var(--brand); }
+.mh-why > span:not(.mh-why-more) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mh-why b { color: var(--ink); font-weight: 600; }
+.mh-why-more {
+    flex: none;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 20px;
+    cursor: help;
+}
+.mh-feed .fbp-head { padding-top: 8px; }
+/* the topics are links here (filter buttons on the Blog): no underline */
+.mh-feed .fbp-tags a.badge { text-decoration: none; }
+.mh-feed .fbp-tags a.badge:hover { background: var(--ai-soft); }
+.mh-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 46px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: none;
+}
+.mh-more:hover { background: var(--surface-2); }
+.mh-more .ic { color: var(--brand); }
+.mh-empty { display: flex; align-items: flex-start; gap: 10px; padding: 16px; color: var(--muted); }
+.mh-empty > .ic { color: var(--brand); }
+
+/* ---------------- side cards ---------------- */
+.mh-widget { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.mh-widget-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.mh-widget-head h2 { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 16px; line-height: 1.3; }
+.mh-widget-head h2 > span { overflow-wrap: anywhere; text-wrap: balance; }
+.mh-widget-head h2 .ic { font-size: 20px; color: var(--brand); }
+.mh-cat { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.mh-cat .ic { font-size: 16px; }
+
+.mh-progress { display: grid; gap: 6px; }
+.mh-progress-row { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; }
+.mh-progress-row a { flex: none; color: var(--ink); font-weight: 600; text-decoration: none; }
+.mh-progress-row a:hover { text-decoration: underline; }
+.mh .bar2 { height: 6px; }
+.mh-next { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: var(--bg); }
+.mh-next-title { color: var(--ink); font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.mh-next-title:hover { color: var(--brand-text); text-decoration: underline; }
+.mh-next .mh-actions { margin-top: 4px; }
+.mh-done { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); font-size: 14px; font-weight: 600; }
+.mh-sub { display: grid; gap: 4px; padding-top: 4px; }
+
+.mh-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.mh-list > li + li { border-top: 1px solid var(--line); }
+.mh-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; color: inherit; text-decoration: none; }
+.mh-list > li:first-child > .mh-row { padding-top: 4px; }
+.mh-list > li:last-child > .mh-row { padding-bottom: 0; }
+.mh-row:hover b { color: var(--brand-text); text-decoration: underline; }
+.mh-row-body { display: grid; gap: 2px; min-width: 0; font-size: 14px; }
+.mh-row-body b { font-weight: 600; overflow-wrap: anywhere; }
+.mh-row-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+.mh-row-top .stars { font-size: 12px; }
+.mh-ico {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--brand-soft);
+    color: var(--brand);
+}
+.mh-ico .ic { font-size: 20px; vertical-align: 0; }
+.mh-date {
+    flex: none;
+    width: 44px;
+    padding: 4px 0;
+    border-radius: 10px;
+    background: var(--lantern-soft);
+    color: var(--lantern-text);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+}
+.mh-date b { display: block; font-size: 17px; }
+.mh-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 13.5px;
+    overflow-wrap: anywhere;
+}
+
+.mh-phrase { display: grid; gap: 4px; }
+.mh-ja { font-size: 22px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+
+.mh-feat { display: grid; gap: 6px; color: inherit; text-decoration: none; }
+.mh-feat > b { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.mh-feat:hover > b { color: var(--brand-text); text-decoration: underline; }
+.mh-feat-by { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; font-weight: 600; }
+.mh-feat-by .badge { font-size: 11.5px; padding: 1px 7px; }
+
+.mh-foot { display: flex; flex-wrap: wrap; gap: 2px 6px; padding: 0 4px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.mh-foot a { color: inherit; text-decoration: none; }
+.mh-foot a:hover { text-decoration: underline; }
+.mh-foot span { flex-basis: 100%; }
+
+/* ---------------- narrower screens ---------------- */
+@media (max-width: 1099px) {
+    .mh { grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; }
+}
+@media (max-width: 959px) {
+    .mh { grid-template-columns: minmax(0, 1fr); max-width: 720px; }
+}
+@media (max-width: 860px) {
+    .mh { padding: 16px 16px 32px; }
+}
+@media (max-width: 640px) {
+    /* the "Dựa trên" chips: one row that scrolls sideways, fading out at the right edge */
+    .mh-chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+        -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+        mask-image: linear-gradient(90deg, #000 85%, transparent);
+        padding-right: 16px;
+    }
+    .mh-chips::-webkit-scrollbar { display: none; }
+    .mh-tune > span:not(.ic) { display: none; }      /* the icon alone; its name stays in aria-label */
+    .mh-tune { padding: 0 8px; }
+    /* shortcuts: icon above the label, like an app's quick actions */
+    .mh-quick-btn { flex-direction: column; gap: 2px; min-height: 58px; padding: 4px 2px; font-size: 12.5px; line-height: 1.2; }
+    .mh-quick-btn span { max-width: 100%; white-space: normal; text-align: center; }
+}
+@media (max-width: 560px) {
+    .mh-main, .mh-side { gap: 12px; }
+    .mh-hello { padding: 16px 16px 8px; gap: 14px; }
+    .mh-hello h1 { font-size: 19px; }
+    .mh-me .avatar { width: 44px; height: 44px; font-size: 18px; }
+    .mh-facts { font-size: 13px; }
+    .mh-quick-btn { font-size: 12px; }
+    /* feed cards from edge to edge, as on the Blog; the first 3 here, every post is one tap away ("Xem thêm") */
+    .mh-feed .fbp { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
+    .mh-feed > .fbp:nth-child(n+4) { display: none; }
+    .mh-feed .fbp-top { padding: 12px 12px 0; }
+}
+@media (max-width: 360px) {
+    .mh-me { display: none; }                       /* the greeting keeps the width */
+}

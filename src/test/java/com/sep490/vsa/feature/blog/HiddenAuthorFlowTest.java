@@ -425,7 +425,8 @@ class HiddenAuthorFlowTest {
         String home = body("/api/me/home", session(reader, "USER"));
         assertThat(ids(home, "$.data.forYou[*].id")).doesNotContain(w.postX());
         Map<String, Object> featured = JsonPath.read(home, "$.data.featured");
-        assertThat(featured == null ? null : ((Number) featured.get("id")).longValue()).isNotEqualTo(w.postX());
+        // No featured post at all is fine too (nothing else qualifies in asvsj_test): compared as objects, null allowed
+        assertThat(featured == null ? null : ((Number) featured.get("id")).longValue()).isNotEqualTo(Long.valueOf(w.postX()));
 
         assertThat(ids(body("/api/blogs/scam-warnings?placeId=" + place, null), "$.data[*].blogId")).isEmpty();
         assertThat(ids(body("/api/blogs/scam-warnings", null), "$.data[*].blogId")).doesNotContain(w.postX());

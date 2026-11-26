@@ -13,6 +13,10 @@
 .post-body p + p { margin-top: 12px; }
 .post-body a, .comment-body a { color: var(--brand-text); }
 
+/* the post's photos: the grid and viewer of blog.css (lib/post-media.js), inside the card's padding */
+.post-full .pm-grid { border-radius: 12px; }
+
+/* .media-grid: photos of event reviews (event-detail.js) */
 .media-grid { display: grid; gap: 6px; border-radius: 12px; overflow: hidden; }
 .media-grid.count-2, .media-grid.count-4 { grid-template-columns: 1fr 1fr; }
 .media-grid.count-3 { grid-template-columns: 2fr 1fr; }

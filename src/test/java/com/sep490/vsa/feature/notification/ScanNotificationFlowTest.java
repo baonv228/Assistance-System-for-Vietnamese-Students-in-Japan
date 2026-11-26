@@ -364,6 +364,96 @@ class ScanNotificationFlowTest {
     }
 
     @Test
+    void theUnreadTabListsOnlyTheUnreadOnesNewestFirst() throws Exception {
+        for (int i = 1; i <= 23; i++) {
+            notifications.send(owner, NotificationService.NEW_COMMENT, "Thông báo " + i, "BLOG", null);
+        }
+        jdbc.update("UPDATE notifications SET is_read = TRUE WHERE user_id = ? AND content IN ('Thông báo 23', "
+                + "'Thông báo 21', 'Thông báo 2')", owner);
+        notifications.send(other, NotificationService.NEW_COMMENT, "Của người khác", "BLOG", null);
+
+        mvc.perform(get("/api/me/notifications").param("unread", "true").session(session(owner)))
+                .andExpect(jsonPath("$.data.items.length()").value(20))
+                .andExpect(jsonPath("$.data.items[0].content").value("Thông báo 22"))
+                .andExpect(jsonPath("$.data.items[1].content").value("Thông báo 20"))
+                .andExpect(jsonPath("$.data.items[0].read").value(false))
+                .andExpect(jsonPath("$.data.hasMore").value(false))
+                .andExpect(jsonPath("$.data.unread").value(20));
+        mvc.perform(get("/api/me/notifications").param("unread", "true").param("page", "1").session(session(owner)))
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+        // "false" or nothing: every one, as before
+        mvc.perform(get("/api/me/notifications").param("unread", "false").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].content").value("Thông báo 23"))
+                .andExpect(jsonPath("$.data.hasMore").value(true));
+        // a page number far past the end answers the last page kept, never an error
+        mvc.perform(get("/api/me/notifications").param("page", String.valueOf(Integer.MAX_VALUE)).session(session(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+    }
+
+    @Test
+    void aClickedNotificationIsReadAloneAndOnlyByItsOwner() throws Exception {
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Một", "BLOG", null);
+        long first = latestId(owner);
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Hai", "BLOG", null);
+        notifications.send(other, NotificationService.NEW_COMMENT, "Của người khác", "BLOG", null);
+        long others = latestId(other);
+
+        mvc.perform(withCsrf(post("/api/me/notifications/" + first + "/read")).session(session(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unread").value(1));
+        mvc.perform(get("/api/me/notifications").session(session(owner)))
+                .andExpect(jsonPath("$.data.items[0].content").value("Hai"))
+                .andExpect(jsonPath("$.data.items[0].read").value(false))
+                .andExpect(jsonPath("$.data.items[1].read").value(true));
+        // twice: nothing changes
+        mvc.perform(withCsrf(post("/api/me/notifications/" + first + "/read")).session(session(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unread").value(1));
+        // someone else's or a missing one: 404, nothing read
+        mvc.perform(withCsrf(post("/api/me/notifications/" + others + "/read")).session(session(owner)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Không tìm thấy thông báo này."));
+        mvc.perform(withCsrf(post("/api/me/notifications/" + (others + 1_000_000) + "/read")).session(session(owner)))
+                .andExpect(status().isNotFound());
+        assertThat(unread(other)).isEqualTo(1);
+        // guests and calls without the CSRF token
+        mvc.perform(withCsrf(post("/api/me/notifications/" + first + "/read"))).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/notifications/" + first + "/read").session(session(owner)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void theBellCountsTheUnreadOnesAfterTheNewestTheListHasShown() throws Exception {
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Một", "BLOG", null);
+        notifications.send(owner, NotificationService.NEW_COMMENT, "Hai", "BLOG", null);
+        long shown = latestId(owner);
+        // without "seen" (the list never opened in this browser): every unread one
+        mvc.perform(get("/api/me/notifications/summary").session(session(owner)))
+                .andExpect(jsonPath("$.data.unread").value(2))
+                .andExpect(jsonPath("$.data.unseen").value(2));
+        mvc.perform(get("/api/me/notifications/summary").param("seen", String.valueOf(shown)).session(session(owner)))
+                .andExpect(jsonPath("$.data.unread").value(2))
+                .andExpect(jsonPath("$.data.unseen").value(0));
+
+        notifications.send(owner, NotificationService.CONTENT_PUBLISHED, "Ba", "BLOG", null);
+        notifications.send(owner, NotificationService.CONTENT_PUBLISHED, "Bốn", "BLOG", null);
+        long third = jdbc.queryForObject("SELECT id FROM notifications WHERE user_id = ? AND content = 'Ba'",
+                Long.class, owner);
+        mvc.perform(get("/api/me/notifications/summary").param("seen", String.valueOf(shown)).session(session(owner)))
+                .andExpect(jsonPath("$.data.unread").value(4))
+                .andExpect(jsonPath("$.data.unseen").value(2));
+        // a new one read on another device does not count any more
+        mvc.perform(withCsrf(post("/api/me/notifications/" + third + "/read")).session(session(owner)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/me/notifications/summary").param("seen", String.valueOf(shown))
+                        .param("after", String.valueOf(shown)).session(session(owner)))
+                .andExpect(jsonPath("$.data.unread").value(3))
+                .andExpect(jsonPath("$.data.unseen").value(1))
+                .andExpect(jsonPath("$.data.fresh.length()").value(2));
+    }
+
+    @Test
     void onlyASignedInUserReadsTheirNotificationsAndReadNeedsTheCsrfToken() throws Exception {
         mvc.perform(get("/api/me/notifications")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/me/notifications/summary")).andExpect(status().isUnauthorized());

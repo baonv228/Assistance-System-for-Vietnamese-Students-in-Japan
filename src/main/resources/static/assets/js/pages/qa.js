@@ -6,13 +6,13 @@
 // What is shown lives in the URL (lib/qa-state.js), so refresh and the Back button keep it. Questions are stored with
 // the blog posts but listed, asked and opened on their own pages.
 import { apiClient } from "../api/client.js";
-import { mountSiteHeader } from "../components/site-header.js";
+import { mountSiteHeader, showSiteNotice } from "../components/site-header.js";
 import { faqItem } from "../lib/faq-ui.js";
+import { bindFeedCards, feedCard, feedSkeleton } from "../lib/feed-card.js";
 import { communityHref, faqHref, qaQuery, Q_MAX, readQaState } from "../lib/qa-state.js";
-import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
+import { avatar, esc, ic, loginUrl, tagChips } from "../lib/ui.js";
 
 const ROUTES = {
-    detail: (id) => `/qa/${id}`,
     ask: "/qa/ask",
     profile: (id) => `/users/${id}`,
     login: loginUrl
@@ -60,6 +60,7 @@ let overview = null;         // GET /api/questions/overview: topics and side sta
 let sideTab = null;          // which tab the side column was drawn for
 let lastRequest = 0;         // ignores answers to requests that were overtaken by a newer one
 let state = readQaState(location.search);
+const shown = new Map();     // questions on screen by id: photo viewer and "Thích" read and update them
 
 // ---------------------------------------------------------------- URL state
 
@@ -223,8 +224,8 @@ function bindControls() {
 async function loadList() {
     const id = ++lastRequest;
     els.list.setAttribute("aria-busy", "true");
-    if (!els.list.querySelector(".question")) {
-        els.list.innerHTML = skeleton(3);
+    if (!els.list.querySelector(".fbp")) {
+        els.list.innerHTML = feedSkeleton(3);
     } else {
         els.list.classList.add("dim");
     }
@@ -263,6 +264,7 @@ function renderList(page) {
         state.page = page.page + 1;
         writeUrl(false);
     }
+    shown.clear();
     if (!page.items.length) {
         els.summary.textContent = "";
         els.pager.hidden = true;
@@ -273,7 +275,8 @@ function renderList(page) {
         return;
     }
     els.summary.textContent = `${page.totalItems.toLocaleString("vi-VN")} câu hỏi${page.filtered ? " phù hợp" : ""}`;
-    els.list.innerHTML = page.items.map(questionCard).join("");
+    page.items.forEach((q) => shown.set(q.id, q));
+    els.list.innerHTML = page.items.map((q) => feedCard(q, "QA", user)).join("");
     renderPager(page);
 }
 
@@ -298,42 +301,6 @@ function renderFaqHits(entries, q) {
 function hideFaqHits() {
     els.faqHits.hidden = true;
     els.faqHits.replaceChildren();
-}
-
-function questionCard(q) {
-    const answers = q.answerCount;
-    const countClass = q.solved ? "solved" : answers ? "answered" : "";
-    const countLabel = q.solved ? `Đã giải quyết, ${answers} câu trả lời` : `${answers} câu trả lời`;
-    const badges = [
-        q.pinned ? `<span class="badge">${ic("keep")}Đã ghim</span>` : "",
-        q.solved ? `<span class="badge ok">${ic("check_circle")}Đã giải quyết</span>`
-            : q.unanswered ? `<span class="badge lan">${ic("hourglass_empty")}Chưa ai trả lời</span>` : "",
-        q.status === "PROCESSING" ? `<span class="badge warn" title="Chỉ bạn thấy câu hỏi này cho đến khi quét xong">${ic("hourglass_top")}Đang quét ảnh/video</span>` : ""
-    ].join("");
-    const topicsHtml = q.topics.map((t) =>
-        `<button class="badge topic" type="button" data-topic="${t.id}" title="Lọc theo chủ đề này">${esc(t.name)}</button>`).join("");
-    const placesHtml = q.places.map((p) =>
-        placeChip(p)).join("");
-    return `
-        <article class="card post question${q.status === "PROCESSING" ? " processing" : ""}">
-            <div class="qa-count ${countClass}" title="${esc(countLabel)}">
-                ${q.solved ? ic("check") : ""}<b>${answers}</b><span>trả lời</span>
-                <span class="sr-only">${esc(countLabel)}</span>
-            </div>
-            <div class="qa-body">
-                <div class="row meta">${badges}<span class="grow"></span>
-                    <time class="note" datetime="${esc(q.createdAt)}" title="${esc(fullDate(q.createdAt))}">${timeAgo(q.createdAt)}</time></div>
-                <h3><a class="stretch" href="${ROUTES.detail(q.id)}">${esc(q.title)}</a></h3>
-                ${q.excerpt ? `<p class="excerpt">${esc(q.excerpt)}</p>` : ""}
-                ${topicsHtml || placesHtml ? `<div class="row tags">${topicsHtml}${placesHtml}</div>` : ""}
-                <div class="row foot">
-                    <a class="author" href="${ROUTES.profile(q.author.id)}">${avatar(q.author)}<b>${esc(q.author.displayName)}</b></a>
-                    ${tagChips(q.author.tags)}
-                    <span class="grow"></span>
-                    <span class="stat" title="Lượt thích">${ic("favorite")}<span class="sr-only">Lượt thích:</span>${q.likeCount}</span>
-                </div>
-            </div>
-        </article>`;
 }
 
 function renderPager(page) {
@@ -574,7 +541,7 @@ const skeleton = (n) => Array.from({ length: n }, () =>
 // ---------------------------------------------------------------- start
 
 async function start() {
-    els.list.innerHTML = skeleton(3);
+    els.list.innerHTML = isFaq() ? skeleton(3) : feedSkeleton(3);
     // The community tab needs its topics and statistics first; the FAQ tab does not wait for them
     if (!isFaq() && !(await ensureOverview())) {
         els.side.innerHTML = "";
@@ -590,5 +557,6 @@ async function start() {
 const user = await mountSiteHeader("qa");
 els.ask.href = user ? ROUTES.ask : ROUTES.login(ROUTES.ask);     // Guests sign in before asking, then ask
 bindControls();
+bindFeedCards(els.list, { kind: "QA", find: (id) => shown.get(id), notify: showSiteNotice });
 syncControls();
 await start();

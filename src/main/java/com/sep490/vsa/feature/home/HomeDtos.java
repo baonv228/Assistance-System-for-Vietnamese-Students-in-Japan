@@ -1,5 +1,9 @@
 package com.sep490.vsa.feature.home;
 
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
+import com.sep490.vsa.feature.blog.BlogDtos.Author;
+import com.sep490.vsa.feature.blog.BlogDtos.PlaceRef;
+import com.sep490.vsa.feature.blog.BlogDtos.TopicRef;
 import com.sep490.vsa.feature.quest.QuestDtos.HomeQuests;
 
 import java.time.Instant;
@@ -128,11 +132,14 @@ public final class HomeDtos {
     /**
      * A post chosen for the user; {@code reason} is the first badge text ("Gần khu vực của bạn"…) or null, {@code reasons}
      * every reason that matched, in ranking order; {@code engaged} when the user already liked, saved or commented on
-     * it (such posts come last).
+     * it (such posts come last). The rest draws it as a card of the Blog list (lib/feed-card.js): {@code author} with
+     * avatar and identity tags, every active {@code topics} ({@code topicName} is the first), the linked {@code places},
+     * the {@code media} that passed the scan in the post's order, and whether the user {@code liked} it.
      */
     public record FeedPost(Long id, String title, String excerpt, String authorName, String topicName, int likeCount,
                            int commentCount, Instant createdAt, String reason, List<FeedReason> reasons,
-                           boolean engaged) {
+                           boolean engaged, Author author, List<TopicRef> topics, List<PlaceRef> places,
+                           List<Media> media, boolean liked) {
     }
 
     /**

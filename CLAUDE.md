@@ -246,18 +246,30 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   ("cần chốt" constants in `InterestService`). Each post carries `reasons` (`code` AREA / PREFECTURE / STAGE / INTEREST,
   `label`, `detail` = the linked place or the matching topic; one INTEREST at most, the chosen topic before the learnt
   one, listed before STAGE when chosen), `reason` = the first label and `engaged` (already liked, saved or commented
-  on). Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below). The Home's
+  on), plus what the Blog's cards show (additive, read with `BlogFeedRepository`'s helpers): `author` (id, avatar,
+  tags), `topics`, `places`, `media` (passed the scan, post order) and `liked`. Feed preferences = the user's area + stage (`PUT /api/me/profile`) and "Chủ đề quan tâm" (below). The Home's
   "Điều chỉnh" saves all three with one `PUT /api/me/feed-preferences` `{areaId, stage, topicIds}` (`topicIds` null =
   topics unchanged; `ProfileService.updateFeedPreferences`): one transaction, users row locked first, so they are saved
   together or not at all; its answer `{areaId, areaName, stage, topicIds}` reads nothing of "Tôi", so a table of another
   feature missing on the shared database (V22 `saved_phrases` on 11/13) no longer undoes the save. Test:
   `FeedPreferencesFlowTest`.
-  Page (`home.js`): greeting, the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below), then "Dành cho
-  bạn" (`.spot` in site.css: "Dựa trên" chips for area, stage and interests, a magnifier → `/for-you#search`,
-  "Điều chỉnh" opens the area/stage/topics form in place and the feed is redrawn after "Lưu", the reasons on every post, the
-  first post across the width, "Xem tất cả" → `/for-you`, then "Cẩm nang cho giai đoạn …" = `stageGuides`, see
-  "Cẩm nang progress" below), then "Việc tiếp theo" and "Review mới quanh …", then events, phrase and "Bài nổi bật".
-  Post pieces shared with `/for-you`: `lib/feed-posts.js`.
+  Page (`home.js renderMember`, styles `assets/css/home.css`, classes `mh-*`; redesigned 26/11/2026, user approved):
+  two columns from 960 px (main column + 360 px side column, 320 px below 1100 px), one column below, side cards after
+  the feed. Main column: card with avatar, greeting (the area name never broken), "Giai đoạn" and points · rank (→
+  `/profile#points`), the search box "Tìm trên Senpai ơi" (→ `/search`, see "Tìm kiếm" below) and shortcuts "Viết bài"
+  `/blog/new`, "Đặt câu hỏi" `/qa/ask`, "Viết review" `/map`, "Đã lưu" `/saved`; then "Dành cho bạn": "Xem tất cả" →
+  `/for-you` (which has the search; no magnifier on the Home), "Dựa trên" chips for area, stage and interests (one row
+  that scrolls sideways ≤ 640 px, "Điều chỉnh" then icon only), "Điều chỉnh" opens the area/stage/topics form in place
+  (with `interestNote`) and the feed is redrawn after "Lưu", the posts as the Blog's Facebook-like cards (user decision
+  25/11/2026: `feedCard` of `lib/feed-card.js`, why it was chosen in one quiet line above the author =
+  `lib/feed-posts.js reasonLine`: the first reason in full, the others as "+N" written out on hover and for screen
+  readers; /for-you keeps every reason as chips; topics link to `/blog?topics=`, "Thích" / viewer / "Chia sẻ" work in
+  place; the Home loads blog.css for them; phones ≤ 560 px: cards edge to edge and only the first 3), then "Xem thêm
+  bài viết dành cho bạn". Side column: "Cẩm nang của bạn" (progress of the stage, "Việc tiếp theo", the other
+  `stageGuides`, see "Cẩm nang progress" below), "Câu tiếng Nhật hôm nay", "Review mới quanh …", "Sự kiện 2 tuần tới"
+  (one line + "Lịch sự kiện" when there is none), "Bài nổi bật" when there is one, then the terms links. Each side card
+  is drawn through `safely` (a card that cannot be drawn is left out), like "Dành cho bạn". Post pieces shared with
+  `/for-you`: `lib/feed-posts.js`.
 - "Chủ đề quan tâm" (`feature/home`: `InterestService`, `InterestController`; V21 `user_interest_topics`): `GET
   /api/me/interests` → `{max, topics[{id, name, chosen, learnt}]}` (every active topic but "Khác", Blog order; `learnt`
   = a suggestion, never also chosen), `PUT /api/me/interests` `{topicIds}` = the whole new choice (empty clears; at most
@@ -285,7 +297,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   it), "Dựa trên" chips with "Điều chỉnh" → `/profile#area` (the "Khu vực và giai đoạn" card, "Chủ đề quan tâm" right
   under it), scope buttons and text in
   the address (`?scope=&q=`), "Xem thêm bài viết", a heading above the first `engaged` post, ids already on screen never
-  drawn twice (likes may move the ranking between two pages).
+  drawn twice (likes may move the ranking between two pages). The posts are the same cards as the Home's (searched text
+  marked in title and excerpt), edge to edge on phones.
 - "Tìm kiếm" (the prototype's "Tìm kiếm chung"; `feature/search`: `SearchController`, `SearchService`,
   `SearchRepository`, `SearchDtos`; page `/search?q=`, `pages/search.html`, `search.js`, `search.css`; public). The Home
   (guest hero and member, under the greeting) has a plain GET form to it (an empty box is not sent). `GET /api/search?q=`
@@ -400,24 +413,36 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `guide-preparation.js`, whose `preparationTabs` returns `{select}`); guests get a sign-in line, staff nothing.
   Member Home: "Việc tiếp theo" (`HomeService#guide`) = visible guides of the user's stage (ARR until chosen), done/total
   by the rule, `next` = the first started checklist, else the first guide not done, in `sort_order, id` order, with
-  `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Cả giai
-  đoạn" `/guides?category=`, the count → `/profile#guides`. `stageGuides` in "Dành cho bạn": up to 3 not-done guides of
+  `guideId`, `checklist`, task counts, `nextTask`; links `/guides/{id}` (`?tab=preparation` for checklists), "Tất cả"
+  of the card `/guides?category=`, the count → `/profile#guides`; all in the side card "Cẩm nang của bạn" (no progress
+  bar while the stage has no guide). `stageGuides` under it ("Cẩm nang cho giai đoạn …"): up to 3 not-done guides of
   the user's own stage (none without a stage), started checklists first, never `guide.next`, shown even when no post
   fits. Tôi: card "Cẩm nang của tôi" (`#guides`, Members only) from `GET /api/me/guides/progress` (`MyGuidesService`:
   `{stage, stages[4]{code, title, done, total, current}, inProgress (≤ 10, latest tick first), recentlyDone (≤ 5)}`).
   Tests: `GuideMemberFlowTest`, `HomeGuideFlowTest`.
 - Notifications (`feature/notification`, as in the prototype): `NotificationService.send` writes them (CONTENT_PUBLISHED,
-  CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=`
-  (20, newest first, `link` computed from the post's `blog_type`, the review's event or place; null when it is gone),
-  `GET /summary?after=` (unread, latestId, `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5
-  after that id, one read-only snapshot), `POST /read {upToId}`. The header (`site-header.js`) shows a bell with the
-  unread count, asks the summary at once when the live stream announces a notification (see "Live updates" below),
+  CONTENT_REJECTED, NEW_COMMENT, BEST_ANSWER); `/api/me/notifications` (any signed-in role, own rows only): `GET ?page=
+  &unread=` (20, newest first, pages kept within 0–199, `unread=true` = unread only; `link` computed from the post's
+  `blog_type`, the review's event or place; null when it is gone), `GET /summary?after=&seen=` (unread, latestId,
+  `processing` = own blogs + reviews still PROCESSING, `fresh` = up to 5 after `after`, `unseen` = unread after `seen`,
+  one read-only snapshot), `POST /read {upToId}` (null = all), `POST /{id}/read` (one; another's or missing → 404).
+  The bell (`site-header.js`, a button) opens a panel on the page itself, drawn like Facebook's (user decision 25/11:
+  no page change; `components/notif-panel.js` + `lib/notif-view.js`, styles `.notif-pop` / `.np-*` in site.css): "…"
+  menu ("Đánh dấu tất cả là đã đọc", "Mở trang Thông báo"), tabs "Tất cả" / "Chưa đọc", groups "Hôm nay" / "Trước đó"
+  ("Xem tất cả" → `/notifications`), "Xem thông báo trước đó"; each row a round picture (the commenter's letter for
+  NEW_COMMENT, else the Senpai ơi flower) with a badge per type, names and “quoted” titles in bold, short time ("20
+  giờ"), a dot while unread. A notification stays unread until clicked (marked before its page opens, at most 1.5 s
+  wait); the bell's number = `unseen` and goes when the list is shown (newest id shown kept in localStorage
+  `asvsj.notifications.shown.<userId>`, shared by the tabs), as on Facebook. Under 600 px the panel fills the screen
+  between header and tab bar; closes with the bell, "Đóng", Escape, a click outside or focus leaving it. The header asks
+  the summary at once when the live stream announces a notification (see "Live updates" below),
   every 5 s while `processing` > 0 (else every 60 s, never while the tab is hidden),
   pops up the scan results (`.site-notices`, "Xem" opens the link) and fires `asvsj:notification`, which reloads the post
-  (`blog-detail.js`), event (`event-detail.js`) or place panel (`map.js`) still shown as PROCESSING; the Map, which
-  stays on its page after sending a review or pin with media, calls `checkNotificationsSoon()`. The newest id a tab
-  handled is kept in sessionStorage (`asvsj.notifications.seen.<userId>`). Page `/notifications` (guarded like
-  `/saved`) lists them and marks the shown ones read.
+  (`blog-detail.js`), event (`event-detail.js`) or place panel (`map.js`) still shown as PROCESSING and adds it to an
+  open list; the Map, which stays on its page after sending a review or pin with media, calls
+  `checkNotificationsSoon()`. The newest id a tab handled is kept in sessionStorage
+  (`asvsj.notifications.seen.<userId>`). Page `/notifications` (guarded like `/saved`; "Thông báo" in the phone "Thêm"
+  sheet) shows the same list in a card. Tests: `ScanNotificationFlowTest`, `src/test/js/notif-view.test.mjs`.
 - "Tin nhắn" (one-to-one chat between Members, `feature/chat`, V14 + V15; there is no chat in the prototype, rules decided
   in this repo, "cần chốt" constants in `ChatService`, `ChatKeyService`, `ChatTyping`, `ChatViewers`):
   - Who: signed-in ACTIVE Members (role USER) with other ACTIVE Members; staff get MSG18 (403) and have no "Tin nhắn"
@@ -527,6 +552,24 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and after an account is locked, unlocked or deleted. Page: `pages/blog.html` + `assets/js/pages/blog.js`; links to Write Post, Map and Public Profile
   go through `ROUTES` at the top of blog.js. Old
   `blog.html?type=QA` links redirect to `qa.html`.
+- List cards look like Facebook posts (user decision 25/11/2026; Blog and Hỏi-Đáp, `lib/feed-card.js`, styles `.fbp-*`
+  in blog.css): avatar, name, tags, time · globe on top (flags "Đã ghim", "Đang quét ảnh/video", for questions "Đã giải
+  quyết" / "Chưa ai trả lời" on the right), title, excerpt with "Xem thêm" when the server cut it (ends with "…"), topic
+  and place chips, the photo grid, "♥ n" and "n bình luận" / "n câu trả lời" (`#comments`), then "Thích" (in place:
+  Members only, not on their own post, so own cards have two buttons; guests → sign in with `next` = the list; staff
+  disabled), "Bình luận" / "Trả lời" (`#reply`: the post page scrolls to the box and focuses it) and "Chia sẻ" (share
+  sheet on touch screens, else the link is copied; notices through `showSiteNotice`). A card still being scanned has no
+  action bar. On phones (≤ 560 px) cards run edge to edge. Each card of `GET /api/blogs` and `GET /api/questions` has
+  `media` (the post page's rule: scan PASSED and not deleted, files still scanned only on the viewer's own post, in
+  `blog_media.sort_order`; `BlogFeedRepository.mediaOf`) and `liked` (`likedBy`; false for guests and in "Bài nổi bật",
+  whose cards stay small). Photo grid `lib/post-media.js` (also on the post page, under the text): 1 photo across the
+  width at its own shape between 4:5 and 1.91:1, 2 side by side, 3–4 one big + the rest below, 5+ two above and three
+  below with "+N"; a lone video plays in place; a tile opens a full-screen `<dialog>` viewer (arrows, ← →, swipe, Esc,
+  "Xem bài viết" from a list). A post without these parts (the new page against a server not restarted since: the
+  Home went blank with "Cannot read properties of undefined (reading 'map')" on 25/11) still draws, name and topic
+  without links and no photos; the Home draws "Dành cho bạn" through `safely` (a drawing fault shows a short notice
+  there, the rest of the Home stays) and shows only server messages, never a script error in English.
+  Tests: `FeedCardsFlowTest`, `src/test/js/feed-card.test.mjs`.
 - Post Detail (UC-10): `GET /api/blogs/{id}` (public) returns the post, media, comment tree and `viewer` flags.
   Actions (signed-in role USER only, never on one's own content for like/report): `POST|DELETE
   /api/blogs/{id}/like|save`, `POST /api/blogs/{id}/comments` (`parentId` for replies), `POST /api/blogs/{id}/report`,
@@ -678,7 +721,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   by "Đã lưu"), so a best answer hidden by reports, removed or written by a locked/deleted account stops counting, as on
   the question page. Unanswered = no published answer by an active account and not solved; the list card's
   "Chưa ai trả lời" badge reads the same rule (`unanswered`), not `answerCount` (which counts replies too).
-- Pages: `pages/qa.html` + `assets/js/pages/qa.js` + `assets/css/qa.css` (list, filters in the URL), `qa-ask.html`
+- Pages: `pages/qa.html` + `assets/js/pages/qa.js` + `assets/css/qa.css` (list, filters in the URL; the question cards
+  are the Facebook-like cards of the Blog, see "List cards" under Blog feed), `qa-ask.html`
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.

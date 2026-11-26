@@ -3,14 +3,17 @@ import { apiClient, ApiError } from "../api/client.js";
 import { mountAreaPicker } from "../components/area-picker.js";
 import { mountInterestPicker } from "../components/interest-picker.js";
 import { mountSiteHeader, showSiteNotice } from "../components/site-header.js";
-import { interestChips, interestNote, postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
+import { bindFeedCards, feedCard } from "../lib/feed-card.js";
+import { interestChips, interestNote, reasonLine } from "../lib/feed-posts.js";
 import {
-    areaRoman, areaShort, esc, eventWhen, formatDay, ic, LOGO_SVG, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
+    areaRoman, areaShort, avatar, esc, eventWhen, formatDay, ic, loginUrl, prefectureShort, STAGES, stars, tagChips, timeAgo
 } from "../lib/ui.js";
 
 const main = document.querySelector("#home");
 /** Every post of "Dành cho bạn", ranked the same way ("Xem tất cả"). */
 const FOR_YOU_PAGE = "/for-you";
+/** The posts of "Dành cho bạn" on screen by id: the photo viewer and "Thích" of their cards read and update them. */
+const forYouPosts = new Map();
 
 // ---------------------------------------------------------------- guest
 
@@ -70,153 +73,187 @@ const feature = (icon, title, text, href) =>
 // ---------------------------------------------------------------- member
 
 /**
- * The member Home leads with "Dành cho bạn", then the cards that follow the user's stage and area ("Việc tiếp theo",
- * "Review mới quanh …"), then what is the same for everyone. `notice` is shown in "Dành cho bạn" after a save.
+ * The member Home (styles: home.css, class prefix "mh-"). Wide screens: a main column with the greeting, the site
+ * search, shortcuts and the personal feed "Dành cho bạn", and a side column with the cards that follow the user's stage
+ * and area (guides, the phrase of the day, reviews nearby, events, the featured post). Narrow screens: one column, the
+ * side cards after the feed. `notice` is shown in "Dành cho bạn" after a save.
  */
 async function renderMember(notice = "") {
     const home = await apiClient.memberHome();
+    forYouPosts.clear();
+    (Array.isArray(home.forYou) ? home.forYou : []).forEach((p) => p && forYouPosts.set(p.id, p));
+    // a side card that cannot be drawn (an answer of another shape) is left out, the rest of the Home still shows
+    const side = (draw) => safely(draw, () => "");
     main.innerHTML = `
-        <div class="page">
-            <div class="greet">${LOGO_SVG}<div>
-                <h2>${greeting(home)}</h2>
-                <p class="note">${home.stage ? `Giai đoạn của bạn: <b>${STAGES[home.stage]}</b> · ` : ""}<a class="link" href="/profile#points">${home.points} điểm · ${esc(home.rankName)}</a></p>
-            </div></div>
-            ${searchForm()}
-            ${forYouSection(home, notice)}
-            <div class="homegrid">
-                ${nextCard(home.guide)}
-                ${reviewCard(home)}
-                <div class="card">
-                    <div class="row"><span class="badge lan">${ic("celebration")}Sự kiện 2 tuần tới</span><span class="grow"></span>
-                        <a class="link" href="/events">Tất cả</a></div>
-                    ${home.events.map((e) => {
-                        const d = formatDay(e.startDate);
-                        return `<a class="mini" href="/events/${e.id}"><span class="when"><b>${d.day}</b>${d.month}</span>
-                            <span><b>${esc(e.title)}</b><br><span class="note">${eventWhen(e)} · ${esc(e.locationName)}</span></span></a>`;
-                    }).join("") || '<p class="note">Chưa có sự kiện nào trong 2 tuần tới.</p>'}
-                </div>
-                ${phraseCard(home.phrase)}
-                ${home.featured ? `<a class="card blogcard" href="/blog/${home.featured.id}" style="grid-column:1/-1">
-                    <span class="row"><span class="badge lan">${ic("star")}Bài nổi bật ${home.featured.period === "WEEK" ? "tuần này" : "tháng này"}</span>
-                        <span class="note">${home.featured.readMinutes} phút đọc</span></span>
-                    <h3>${esc(home.featured.title)}</h3>
-                    <span class="note">${esc(home.featured.excerpt)}</span>
-                    <span class="row">${esc(home.featured.authorName)} ${tagChips(home.featured.authorTags)}</span></a>` : ""}
+        <div class="mh">
+            <div class="mh-main">
+                ${welcomeCard(home)}
+                ${safely(() => forYouSection(home, notice), forYouFallback)}
             </div>
+            <aside class="mh-side" aria-label="Cẩm nang, tiếng Nhật, review và sự kiện cho bạn">
+                ${side(() => guideWidget(home))}
+                ${side(() => phraseWidget(home.phrase))}
+                ${side(() => reviewWidget(home))}
+                ${side(() => eventWidget(home.events))}
+                ${side(() => featuredWidget(home.featured))}
+                ${sideFooter()}
+            </aside>
         </div>`;
     bindSpeak(listenQuest(home.phrase));
     bindSearch();
     bindForYou(home);
 }
 
+/** The greeting with the user's stage and points, the site search, then shortcuts to what members do most. */
+function welcomeCard(home) {
+    const me = { displayName: home.displayName, avatarUrl: user?.avatarUrl };
+    return `<section class="mh-card mh-hello" aria-labelledby="mh-greeting">
+        <div class="mh-hello-top">
+            <a class="mh-me" href="/profile" tabindex="-1" aria-hidden="true">${avatar(me)}</a>
+            <div class="mh-hello-txt">
+                <h1 id="mh-greeting">${greeting(home)}</h1>
+                <p class="mh-facts">
+                    ${home.stage ? `<span>${ic("flag")}Giai đoạn: <b>${esc(STAGES[home.stage])}</b></span>` : ""}
+                    <a href="/profile#points" title="Xem điểm và hạng của bạn">${ic("military_tech")}${Number(home.points).toLocaleString("vi-VN")} điểm · ${esc(home.rankName ?? "")}</a>
+                </p>
+            </div>
+        </div>
+        ${searchForm()}
+        <nav class="mh-quick" aria-label="Lối tắt">
+            ${shortcut("edit_square", "Viết bài", "/blog/new")}
+            ${shortcut("contact_support", "Đặt câu hỏi", "/qa/ask")}
+            ${shortcut("rate_review", "Viết review", "/map")}
+            ${shortcut("bookmark", "Đã lưu", "/saved")}
+        </nav>
+    </section>`;
+}
+
+const shortcut = (icon, label, href) => `<a class="mh-quick-btn" href="${href}">${ic(icon)}<span>${label}</span></a>`;
+
 /**
  * "Dành cho bạn": what the suggestions are based on (area, stage, the topics the user chose, then those learnt from the
- * user's likes, saves, comments and posts) with "Điều chỉnh" to change area, stage and topics in place, then the first
- * 5 posts chosen and ranked by the server, each with the reasons it was chosen; "Xem tất cả" opens the whole feed
- * (/for-you). Then up to 3 guides of the user's stage (`stageGuidesBlock`), shown even when no post fits. The form is
- * open at once while area or stage is missing, until "Để sau".
+ * user's likes, saves, comments and posts; one row that scrolls sideways on phones) with "Điều chỉnh" to change area,
+ * stage and topics in place, then the first 5 posts chosen and ranked by the server, drawn as the Blog's Facebook-like
+ * cards with one line saying why each was chosen (phones show the first 3, home.css); "Xem tất cả" opens the whole feed
+ * (/for-you), which has its own search. The form is open at once while area or stage is missing, until "Để sau".
  */
 function forYouSection(home, notice) {
     const posts = home.forYou || [];
     const open = !(home.areaName && home.stage) && !promptHidden();
-    const [lead, ...rest] = posts;
-    return `<section class="spot" id="foryou" aria-labelledby="foryou-title">
-        <div class="spot-head">
-            <h2 class="grow" id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2>
-            ${lead ? `<a class="btn sm spot-find" href="${FOR_YOU_PAGE}#search" title="Tìm trong bài dành cho bạn">${ic("search")}<span class="sr-only">Tìm trong bài dành cho bạn</span></a>
-            <a class="btn sm" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("arrow_forward")}</a>` : ""}
+    return `<section class="mh-foryou" id="foryou" aria-labelledby="foryou-title">
+        <div class="mh-section-head">
+            <h2 id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2>
+            ${posts.length ? `<a class="mh-link" href="${FOR_YOU_PAGE}" aria-label="Xem tất cả bài viết dành cho bạn">Xem tất cả${ic("chevron_right")}</a>` : ""}
         </div>
-        <p class="spot-sub">Bài viết và cẩm nang Senpai ơi chọn riêng cho bạn, theo khu vực, giai đoạn và những chủ đề bạn quan tâm.</p>
-        <div class="spot-basis">
-            <span class="spot-label">Dựa trên</span>
-            ${home.areaName ? chip("location_on", areaShort(home.areaName), "Khu vực") : chip("location_off", "Chưa chọn khu vực", "", "off")}
-            ${home.stage ? chip("flag", STAGES[home.stage], "Giai đoạn") : chip("flag", "Chưa chọn giai đoạn", "", "off")}
-            ${interestChips(home, chip)}
-            <button class="btn sm" type="button" data-tune aria-expanded="${open}" aria-controls="prompt">${ic("tune")}Điều chỉnh</button>
+        <div class="mh-basis">
+            <span class="mh-basis-label">Dựa trên</span>
+            <div class="mh-chips">
+                ${home.areaName ? chip("location_on", areaShort(home.areaName), "Khu vực") : chip("location_off", "Chưa chọn khu vực", "", "off")}
+                ${home.stage ? chip("flag", STAGES[home.stage], "Giai đoạn") : chip("flag", "Chưa chọn giai đoạn", "", "off")}
+                ${interestChips(home, chip)}
+            </div>
+            <button class="mh-tune" type="button" data-tune aria-expanded="${open}" aria-controls="prompt"
+                aria-label="Điều chỉnh khu vực, giai đoạn và chủ đề quan tâm">${ic("tune")}<span>Điều chỉnh</span></button>
         </div>
-        <p class="note">${interestNote(home)}</p>
         ${notice ? `<p class="alert success" role="status">${ic("check_circle")} ${esc(notice)}</p>` : ""}
         ${profileForm(home, open)}
-        ${lead ? `<div class="spot-posts">
-            <article class="spot-lead">${reasonChips(lead)}
-                <a class="feedtitle" href="${postUrl(lead)}">${esc(lead.title)}</a>
-                ${lead.excerpt ? `<p class="spot-excerpt">${esc(lead.excerpt)}</p>` : ""}
-                ${postMeta(lead)}
-            </article>
-            ${rest.map((p) => `<article class="spot-item">${reasonChips(p)}
-                <a class="feedtitle" href="${postUrl(p)}">${esc(p.title)}</a>
-                ${postMeta(p)}
-            </article>`).join("")}
-        </div>
-        <a class="btn sm spot-more" href="${FOR_YOU_PAGE}">Xem tất cả bài viết dành cho bạn${ic("arrow_forward")}</a>`
-        : '<p class="spot-empty">Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</p>'}
-        ${stageGuidesBlock(home)}
+        ${posts.length ? `<div class="mh-feed">${posts.map(postCard).join("")}</div>
+        <a class="mh-more" href="${FOR_YOU_PAGE}">Xem thêm bài viết dành cho bạn${ic("arrow_forward")}</a>`
+        : `<p class="mh-card mh-empty">${ic("article")}<span>Chưa có bài viết phù hợp. Hãy xem thêm ở <a class="link" href="/blog">Blog</a>.</span></p>`}
     </section>`;
 }
 
-/** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
-const chip = (icon, text, what, extra = "") =>
-    `<span class="spot-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
+/**
+ * A post of "Dành cho bạn": the Blog's card (published posts of others only) with one line saying why it was chosen
+ * above the author (`reasonLine`); its topics open the Blog filtered.
+ */
+const postCard = (p) => feedCard({ ...p, status: "PUBLISHED", pinned: false }, "POST", user,
+    { top: reasonLine(p), topicHref: (t) => `/blog?topics=${encodeURIComponent(t.id)}` });
 
 /**
- * "Cẩm nang cho giai đoạn …" in "Dành cho bạn": up to 3 guides of the user's stage not finished yet, chosen and ordered
- * by the server (checklists already started first, never the guide "Việc tiếp theo" shows). Each card opens its guide.
+ * A part of the Home drawn by `draw`, or `fallback` when drawing it fails (an answer of another shape than this page
+ * expects, e.g. a server not restarted after an update): the rest of the Home still shows.
  */
-function stageGuidesBlock(home) {
+function safely(draw, fallback) {
+    try {
+        return draw();
+    } catch (error) {
+        console.error(error);
+        return fallback();
+    }
+}
+
+/** "Dành cho bạn" when its posts cannot be drawn: the whole feed stays one click away. */
+const forYouFallback = () => `<section class="mh-foryou" id="foryou" aria-labelledby="foryou-title">
+        <div class="mh-section-head"><h2 id="foryou-title">${ic("auto_awesome")}Dành cho bạn</h2></div>
+        <p class="mh-card mh-empty">${ic("error")}<span>Chưa hiển thị được các bài gợi ý. Hãy tải lại trang hoặc
+            <a class="link" href="${FOR_YOU_PAGE}">xem tất cả bài viết dành cho bạn</a>.</span></p>
+    </section>`;
+
+/** A "Dựa trên" chip; `what` names it for screen readers ("Khu vực: Arakawa-ku"). */
+const chip = (icon, text, what, extra = "") =>
+    `<span class="mh-chip ${extra}">${ic(icon)}${what ? `<span class="sr-only">${what}: </span>` : ""}${esc(text)}</span>`;
+
+/** A card of the side column: icon and title, what goes on the right of the title (a link), then `body`. */
+const widget = (icon, title, body, aside = "") => `<section class="mh-card mh-widget">
+        <div class="mh-widget-head"><h2>${ic(icon)}<span>${title}</span></h2>${aside}</div>
+        ${body}
+    </section>`;
+
+/** "Tất cả" and the like on the right of a side card's title; `label` names it for screen readers. */
+const headLink = (href, text, label) => `<a class="mh-link" href="${href}" aria-label="${esc(label)}">${text}</a>`;
+
+/**
+ * "Cẩm nang của bạn": how many guides of the user's stage (ARR until one is chosen) are done (the count opens "Cẩm nang
+ * của tôi" on Tôi); "Việc tiếp theo" = the guide to open next, chosen by the server (a checklist already started, else
+ * the first guide not done) with what is left of it; then up to 3 other guides of the user's own stage not done yet
+ * (`stageGuides`: started checklists first, never the one "Việc tiếp theo" shows).
+ */
+function guideWidget(home) {
+    const g = home.guide;
+    const n = g.next;
+    // no progress bar while the stage has no guide yet ("0/0")
+    const progress = g.total ? `<div class="mh-progress">
+        <div class="mh-progress-row"><span title="${esc(g.stageTitle)}">Giai đoạn ${esc(STAGES[g.stageCode] || g.stageTitle)}</span>
+            <a href="/profile#guides" title="Xem tiến độ cẩm nang của bạn">${g.done}/${g.total} đã xong</a></div>
+        <div class="bar2" role="progressbar" aria-label="Cẩm nang đã xong" aria-valuemin="0" aria-valuemax="${g.total}"
+             aria-valuenow="${g.done}"><span style="width:${Math.round((g.done / g.total) * 100)}%"></span></div>
+    </div>` : "";
+    let next;
+    if (n) {
+        const href = guideUrl(n.guideId, n.checklist);
+        next = `<div class="mh-next">
+            <span class="mh-eyebrow">Việc tiếp theo</span>
+            <a class="mh-next-title" href="${href}">${esc(n.title)}</a>
+            <span class="mh-meta">${n.checklist
+                ? `${n.tasksDone}/${n.tasksTotal} việc${n.nextTask ? ` · Tiếp theo: ${esc(n.nextTask)}` : ""}`
+                : "Đọc xong thì bấm “Đánh dấu đã xong” trong cẩm nang."}</span>
+            ${n.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(n.dueNote)}</span></span>` : ""}
+            <div class="mh-actions"><a class="btn sm pri" href="${href}">${ic("menu_book")}Mở cẩm nang này</a>
+                ${n.placeName ? `<a class="btn sm" href="${placeUrl(n.placeId)}">${ic("location_on")}${esc(n.placeName)}</a>` : ""}</div>
+        </div>`;
+    } else {
+        next = g.total
+            ? `<p class="mh-done">${ic("task_alt")}Bạn đã xong giai đoạn này.</p>`
+            : '<p class="mh-meta">Cẩm nang cho giai đoạn này đang được biên soạn.</p>';
+    }
+    return widget("menu_book", "Cẩm nang của bạn", progress + next + stageGuideList(home),
+        headLink(stageGuidesUrl(g.stageCode), "Tất cả", `Xem tất cả cẩm nang giai đoạn ${g.stageTitle}`));
+}
+
+/** The other guides of the user's stage in "Cẩm nang của bạn": title, then started / tasks done / not read yet. */
+function stageGuideList(home) {
     const guides = home.stageGuides || [];
     if (!guides.length || !home.stage) {
         return "";
     }
-    const stage = STAGES[home.stage] || "";
-    return `<div class="spot-guides">
-        <div class="spot-guides-head">
-            <h3>${ic("menu_book")}Cẩm nang cho giai đoạn ${esc(stage)}</h3>
-            <a class="link" href="${stageGuidesUrl(home.stage)}" aria-label="Xem tất cả cẩm nang cho giai đoạn ${esc(stage)}">Xem tất cả</a>
-        </div>
-        <div class="spot-guide-list">${guides.map(guideCard).join("")}</div>
-    </div>`;
-}
-
-/** One guide of "Dành cho bạn": why it is there, title, start of the summary, topic and progress. */
-const guideCard = (c) => `<article class="spot-guide">
-        <div class="whys">${c.inProgress
-            ? `<span class="why stage">${ic("pending_actions")}<span>Đang làm dở</span></span>`
-            : `<span class="why stage">${ic("flag")}<span>Hợp giai đoạn của bạn</span></span>`}</div>
-        <a class="feedtitle" href="${guideUrl(c.id, c.checklist)}">${esc(c.title)}</a>
-        ${c.excerpt ? `<p class="spot-excerpt">${esc(c.excerpt)}</p>` : ""}
-        <div class="spot-guide-foot">
-            ${c.topicName ? `<span class="badge">${esc(c.topicName)}</span>` : ""}
-            ${c.checklist
-                ? `<span class="spot-guide-progress"><span class="bar2" aria-hidden="true"><span style="width:${Number(c.percent) || 0}%"></span></span>
-                    <span class="note">${c.tasksDone}/${c.tasksTotal} việc</span></span>`
-                : '<span class="note">Chưa đọc</span>'}
-        </div>
-    </article>`;
-
-/**
- * "Việc tiếp theo": how many guides of the user's stage (ARR until one is chosen) are done, then the guide to open next,
- * chosen by the server (a checklist already started, else the first guide not done) with what is left of it. The count
- * opens "Cẩm nang của tôi" on Tôi.
- */
-function nextCard(g) {
-    const n = g.next;
-    const href = n ? guideUrl(n.guideId, n.checklist) : "";
-    const percent = g.total ? Math.round((g.done / g.total) * 100) : 0;
-    const whole = `<a class="btn sm" href="${stageGuidesUrl(g.stageCode)}">Cả giai đoạn</a>`;
-    return `<div class="card">
-        <div class="row"><span class="badge br">${ic("menu_book")}Việc tiếp theo</span><span class="grow"></span>
-            <span class="note"><a class="link" href="/profile#guides" title="Xem tiến độ cẩm nang của bạn">${g.done}/${g.total} · ${esc(g.stageTitle)}</a></span></div>
-        <div class="bar2" ${g.total ? `role="progressbar" aria-label="Cẩm nang đã xong" aria-valuemin="0" aria-valuemax="${g.total}"
-             aria-valuenow="${g.done}"` : 'aria-hidden="true"'}><span style="width:${percent}%"></span></div>
-        ${n ? `<a class="feedtitle" href="${href}">${esc(n.title)}</a>
-            <span class="note">${n.checklist
-                ? `${n.tasksDone}/${n.tasksTotal} việc${n.nextTask ? ` · Tiếp theo: ${esc(n.nextTask)}` : ""}`
-                : "Đọc xong thì bấm “Đánh dấu đã xong” trong cẩm nang."}</span>
-            ${n.dueNote ? `<span><span class="badge warn">${ic("schedule")}${esc(n.dueNote)}</span></span>` : ""}
-            <div class="row">${n.placeName ? `<a class="btn sm" href="${placeUrl(n.placeId)}">${ic("location_on")}${esc(n.placeName)}</a>` : ""}
-                <a class="btn sm pri" href="${href}">${ic("menu_book")}Mở cẩm nang này</a>${whole}</div>`
-            : g.total ? `<p>Bạn đã xong giai đoạn này.</p><div class="row">${whole}</div>`
-                : "<p>Cẩm nang cho giai đoạn này đang được biên soạn.</p>"}
+    return `<div class="mh-sub">
+        <span class="mh-eyebrow">Cẩm nang cho giai đoạn ${esc(STAGES[home.stage] || "")}</span>
+        <ul class="mh-list">${guides.map((c) => `<li><a class="mh-row" href="${guideUrl(c.id, c.checklist)}">
+            <span class="mh-ico">${ic(c.inProgress ? "pending_actions" : "menu_book")}</span>
+            <span class="mh-row-body"><b>${esc(c.title)}</b>
+                <span class="mh-meta">${c.inProgress ? "Đang làm dở · " : ""}${c.checklist ? `${c.tasksDone}/${c.tasksTotal} việc` : "Chưa đọc"}${c.topicName ? ` · ${esc(c.topicName)}` : ""}</span></span>
+        </a></li>`).join("")}</ul>
     </div>`;
 }
 
@@ -234,25 +271,72 @@ const placeUrl = (placeId) => `/map?place=${encodeURIComponent(placeId)}`;
  * title says "quanh" only when one of them really is in the area; each review says where its place is and opens it on
  * the Map; "Tất cả" opens the page with every review.
  */
-function reviewCard(home) {
+function reviewWidget(home) {
     const reviews = home.reviews;
     const inArea = reviews.some((r) => r.near === "AREA");
     const inPrefecture = reviews.some((r) => r.near === "PREFECTURE");
     const title = !home.areaName ? "Review mới"
         : inArea ? `Review mới quanh ${areaShort(home.areaName)}`
             : inPrefecture ? `Review mới ở ${prefectureShort(home.areaName)}` : "Review mới";
-    return `<div class="card">
-        <div class="row"><span class="badge br">${ic("rate_review")}${esc(title)}</span><span class="grow"></span>
-            <a class="link" href="/reviews">Tất cả</a></div>
-        ${home.areaName && reviews.length && !inArea
-            ? `<p class="note">Chưa có review nào ở ${esc(areaShort(home.areaName))}, đây là review mới ${inPrefecture ? "trong tỉnh" : "ở nơi khác"}.</p>` : ""}
-        ${reviews.map((r) => `<a class="mini" href="${placeUrl(r.placeId)}">${ic(r.categoryIcon)}
-            <span><b>${esc(r.placeName)}</b> <span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span><br>
-            <span class="note">${esc(r.authorName)}: ${esc(r.excerpt)}</span><br>
-            <span class="note mini-where">${r.placeArea ? `${ic("location_on")}${esc(areaRoman(r.placeArea))} · ` : ""}${esc(timeAgo(r.createdAt))}</span></span></a>`).join("")
-            || '<p class="note">Chưa có review mới.</p>'}
-    </div>`;
+    const note = home.areaName && reviews.length && !inArea
+        ? `<p class="mh-meta">Chưa có review nào ở ${esc(areaShort(home.areaName))}, đây là review mới ${inPrefecture ? "trong tỉnh" : "ở nơi khác"}.</p>` : "";
+    const list = reviews.length ? `<ul class="mh-list">${reviews.map((r) => `<li><a class="mh-row" href="${placeUrl(r.placeId)}">
+            <span class="mh-ico">${ic(r.categoryIcon)}</span>
+            <span class="mh-row-body">
+                <span class="mh-row-top"><b>${esc(r.placeName)}</b><span class="stars" aria-label="${r.rating} sao">${stars(r.rating)}</span></span>
+                <span class="mh-clamp">${esc(r.authorName)}: ${esc(r.excerpt)}</span>
+                <span class="mh-meta">${r.placeArea ? `${esc(areaRoman(r.placeArea))} · ` : ""}${esc(timeAgo(r.createdAt))}</span>
+            </span></a></li>`).join("")}</ul>`
+        : '<p class="mh-meta">Chưa có review mới.</p>';
+    return widget("rate_review", esc(title), note + list, headLink("/reviews", "Tất cả", "Xem tất cả review mới"));
 }
+
+/** "Sự kiện 2 tuần tới": date, title, when and where; when there is none, one line and a link to every event. */
+function eventWidget(events) {
+    const list = events.length ? `<ul class="mh-list">${events.map((e) => {
+        const d = formatDay(e.startDate);
+        return `<li><a class="mh-row" href="/events/${encodeURIComponent(e.id)}"><span class="mh-date"><b>${d.day}</b>${d.month}</span>
+            <span class="mh-row-body"><b>${esc(e.title)}</b><span class="mh-meta">${eventWhen(e)} · ${esc(e.locationName)}</span></span></a></li>`;
+    }).join("")}</ul>` : '<p class="mh-meta">Chưa có sự kiện nào trong 2 tuần tới.</p>';
+    return widget("celebration", "Sự kiện 2 tuần tới", list,
+        headLink("/events", events.length ? "Tất cả" : "Lịch sự kiện", "Xem tất cả sự kiện"));
+}
+
+/** "Bài nổi bật tuần này / tháng này" (FeaturedSnapshotService), when there is one. */
+function featuredWidget(f) {
+    if (!f) {
+        return "";
+    }
+    return widget("star", `Bài nổi bật ${f.period === "WEEK" ? "tuần này" : "tháng này"}`, `<a class="mh-feat" href="/blog/${encodeURIComponent(f.id)}">
+            <b>${esc(f.title)}</b>
+            ${f.excerpt ? `<span class="mh-clamp">${esc(f.excerpt)}</span>` : ""}
+            <span class="mh-feat-by">${esc(f.authorName)} ${tagChips(f.authorTags)}<span class="mh-meta">· ${f.readMinutes} phút đọc</span></span>
+        </a>`);
+}
+
+/** "Câu tiếng Nhật hôm nay"; "Nghe" also counts for the day's quest (listenQuest). */
+function phraseWidget(phrase) {
+    if (!phrase) {
+        return "";
+    }
+    return widget("translate", "Câu tiếng Nhật hôm nay", `<div class="mh-phrase">
+            <span class="mh-cat">${ic(phrase.categoryIcon)}${esc(phrase.categoryName)}</span>
+            <p class="mh-ja ja" lang="ja">${esc(phrase.japanese)}</p>
+            ${phrase.romaji ? `<p class="mh-meta">${esc(phrase.romaji)}</p>` : ""}
+            <p>${esc(phrase.meaningVi)}</p>
+        </div>
+        <div class="mh-actions">
+            <button class="btn sm" type="button" data-speak="${esc(phrase.japanese)}">${ic("volume_up")}Nghe</button>
+            <a class="btn sm" href="${phraseLink(phrase)}">${ic("school")}Học thêm chủ đề này</a>
+        </div>`);
+}
+
+/** The links every page of the site keeps somewhere, at the end of the side column. */
+const sideFooter = () => `<footer class="mh-foot">
+        <a href="/terms?doc=tos">Điều khoản sử dụng</a> · <a href="/terms?doc=privacy">Chính sách bảo mật</a> ·
+        <a href="/terms?doc=community">Quy tắc cộng đồng</a>
+        <span>Senpai ơi © ${new Date().getFullYear()}</span>
+    </footer>`;
 
 function promptHidden() {
     try {
@@ -265,7 +349,8 @@ function promptHidden() {
 /** Same wording as the prototype; a generic greeting until area and stage are set. */
 function greeting(home) {
     const name = esc(home.displayName.trim().split(/\s+/).pop());
-    const area = esc(areaShort(home.areaName));
+    // the area's name ("Arakawa-ku") is never broken at its hyphen
+    const area = `<span class="mh-nowrap">${esc(areaShort(home.areaName))}</span>`;
     if (!home.areaName || !home.stage) {
         return `Chào ${name}!`;
     }
@@ -284,8 +369,8 @@ function greeting(home) {
 function profileForm(home, open) {
     const complete = home.areaName && home.stage;
     const where = home.stage === "PRE" ? "bạn sắp đến" : home.stage === "HOME" ? "bạn từng sống" : "bạn đang sinh sống";
-    return `<div class="card promptcard" id="prompt" ${open ? "" : "hidden"}>
-        <b>${ic("location_on")} ${complete ? "Đổi khu vực, giai đoạn hoặc chủ đề quan tâm" : `Mong bạn cho Senpai ơi biết khu vực ${where}`}</b>
+    return `<div class="mh-card mh-prompt" id="prompt" ${open ? "" : "hidden"}>
+        <b class="mh-prompt-title">${ic("tune")}${complete ? "Đổi khu vực, giai đoạn hoặc chủ đề quan tâm" : `Mong bạn cho Senpai ơi biết khu vực ${where}`}</b>
         <p class="note">${complete ? "Gợi ý bên dưới đổi theo ngay khi bạn lưu." : "Để website gợi ý đúng những gì gần bạn nhất: việc cần làm, review và sự kiện quanh đó."}
             Chỉ lưu khu vực (quận, thành phố), không lưu địa chỉ hay vị trí; chỉ mình bạn thấy.</p>
         <div class="field"><label for="hp-stage">Giai đoạn</label>
@@ -293,6 +378,7 @@ function profileForm(home, open) {
             ${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === home.stage ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         <div id="hp-area-box"><p class="note">Đang tải danh sách khu vực…</p></div>
         <div class="field"><span class="field-title">Chủ đề quan tâm</span>
+            <p class="note">${interestNote(home)}</p>
             <div id="hp-interests-box"><p class="note">Đang tải danh sách chủ đề…</p></div></div>
         <p class="alert error" data-error role="alert" hidden></p>
         <div class="row"><button class="btn pri sm" type="button" data-save disabled>Lưu</button>
@@ -303,6 +389,7 @@ function profileForm(home, open) {
 function bindForYou(home) {
     const prompt = document.querySelector("#prompt");
     const tune = document.querySelector("[data-tune]");
+    if (!prompt || !tune) return;               // "Dành cho bạn" could not be drawn (forYouFallback)
     const save = prompt.querySelector("[data-save]");
     const error = prompt.querySelector("[data-error]");
     let picker = null;
@@ -513,10 +600,15 @@ const HERO_MAP = `<svg viewBox="0 0 560 300" role="img">
 const user = await mountSiteHeader("home");
 try {
     if (user) {
+        // once: main keeps its listeners while "Điều chỉnh" redraws what is inside
+        bindFeedCards(main, { kind: "POST", find: (id) => forYouPosts.get(id), notify: showSiteNotice });
         await renderMember();
     } else {
         renderGuest(await apiClient.guestHome());
     }
 } catch (error) {
-    main.innerHTML = `<div class="page"><div class="alert error">${esc(error.message)}</div></div>`;
+    // A message of the server is shown as it is; a fault of this page itself (in English) is not shown to members
+    if (!(error instanceof ApiError)) console.error(error);
+    const message = error instanceof ApiError ? error.message : "Không tải được trang chủ. Vui lòng tải lại trang.";
+    main.innerHTML = `<div class="page"><div class="alert error">${esc(message)}</div></div>`;
 }

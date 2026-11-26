@@ -1,5 +1,6 @@
 package com.sep490.vsa.feature.blog;
 
+import com.sep490.vsa.feature.blog.BlogDetailDtos.Media;
 import com.sep490.vsa.feature.blog.BlogDtos.Author;
 import com.sep490.vsa.feature.blog.BlogDtos.BlogCard;
 import com.sep490.vsa.feature.blog.BlogDtos.BlogPage;
@@ -10,6 +11,7 @@ import com.sep490.vsa.feature.blog.BlogDtos.Tag;
 import com.sep490.vsa.feature.blog.BlogDtos.TopicRef;
 import com.sep490.vsa.feature.blog.BlogDtos.Writer;
 import com.sep490.vsa.feature.blog.BlogFeedRepository.Row;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,11 +36,14 @@ public class BlogFeedService {
     private final BlogFeedRepository repository;
     private final FeaturedSnapshotService featuredPosts;
     private final Clock clock;
+    private final String mediaBaseUrl;
 
-    public BlogFeedService(BlogFeedRepository repository, FeaturedSnapshotService featuredPosts, Clock clock) {
+    public BlogFeedService(BlogFeedRepository repository, FeaturedSnapshotService featuredPosts, Clock clock,
+                           @Value("${app.media.public-base-url:/media/}") String mediaBaseUrl) {
         this.repository = repository;
         this.featuredPosts = featuredPosts;
         this.clock = clock;
+        this.mediaBaseUrl = mediaBaseUrl;
     }
 
     public BlogPage list(BlogFeedQuery query) {
@@ -49,7 +54,8 @@ public class BlogFeedService {
         if (query.page() >= totalPages) {
             query = query.withPage(totalPages - 1);
         }
-        List<BlogCard> items = total == 0 ? List.of() : cards(repository.find(query), EXCERPT_LENGTH);
+        List<BlogCard> items = total == 0 ? List.of()
+                : cards(repository.find(query), EXCERPT_LENGTH, query.viewerId());
         return new BlogPage(items, query.page(), query.size(), total, totalPages, query.filtered());
     }
 
@@ -76,7 +82,7 @@ public class BlogFeedService {
             List<Row> onePerAuthor = rows.stream().filter(r -> authors.add(r.authorId()))
                     .limit(topN).toList();
             if (!onePerAuthor.isEmpty()) {
-                return new Featured(period, cards(onePerAuthor, FEATURED_EXCERPT_LENGTH));
+                return new Featured(period, cards(onePerAuthor, FEATURED_EXCERPT_LENGTH, null));
             }
         }
         return new Featured(null, List.of());
@@ -91,17 +97,21 @@ public class BlogFeedService {
         return query.withTopicIds(query.topicIds().stream().filter(active::contains).toList());
     }
 
-    private List<BlogCard> cards(List<Row> rows, int excerptLength) {
+    /** @param viewerId signed-in viewer (their likes, the files of their own post being scanned); null for none */
+    private List<BlogCard> cards(List<Row> rows, int excerptLength, Long viewerId) {
         List<Long> ids = rows.stream().map(Row::id).toList();
         Set<Long> authorIds = new LinkedHashSet<>(rows.stream().map(Row::authorId).toList());
         Map<Long, List<TopicRef>> topics = repository.topicsOf(ids);
         Map<Long, List<PlaceRef>> places = repository.placesOf(ids);
+        Map<Long, List<Media>> media = repository.mediaOf(ids, viewerId, mediaBaseUrl);
+        Set<Long> liked = repository.likedBy(viewerId, ids);
         Map<Long, List<Tag>> tags = repository.tagsOf(authorIds);
         return rows.stream().map(r -> new BlogCard(r.id(), r.type(), r.status(), r.pinned(), r.answered(), r.title(),
                 excerpt(r.contentStart(), excerptLength),
                 new Author(r.authorId(), r.authorName(), r.avatarUrl(), tags.getOrDefault(r.authorId(), List.of())),
                 topics.getOrDefault(r.id(), List.of()), places.getOrDefault(r.id(), List.of()),
-                r.likeCount(), r.commentCount(), r.createdAt())).toList();
+                r.likeCount(), r.commentCount(), r.createdAt(), media.getOrDefault(r.id(), List.of()),
+                liked.contains(r.id()))).toList();
     }
 
     private static Author withTags(Author a, Map<Long, List<Tag>> tags) {

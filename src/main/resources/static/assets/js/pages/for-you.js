@@ -4,9 +4,10 @@
 // commented on last), 10 at a time. A scope keeps only the posts that matched one reason; "Tìm trong bài dành cho bạn" only the posts holding a text (title, content or linked
 // place, as the Blog's search), in the same order. Both are kept in the address (?scope=&q=); /for-you#search (the
 // magnifier of the Home's "Dành cho bạn") opens with the focus in the search box.
-import { apiClient } from "../api/client.js";
-import { mountSiteHeader } from "../components/site-header.js";
-import { interestChips, interestNote, postMeta, postUrl, reasonChips } from "../lib/feed-posts.js";
+import { apiClient, ApiError } from "../api/client.js";
+import { mountSiteHeader, showSiteNotice } from "../components/site-header.js";
+import { bindFeedCards } from "../lib/feed-card.js";
+import { forYouCard, interestChips, interestNote } from "../lib/feed-posts.js";
 import { markHits } from "../lib/search-text.js";
 import { areaShort, esc, ic, loginUrl, STAGES } from "../lib/ui.js";
 
@@ -29,7 +30,9 @@ const asked = new URLSearchParams(location.search);
 let feed = null;            // the last page received
 let query = "";             // the search text asked for (spaces stripped), "" for none
 let ticket = 0;             // the request in flight; an answer to an older one is dropped
-let shown = new Set();      // ids on screen: if the ranking moved between two pages, a post is never drawn twice
+let shown = new Map();      // posts on screen by id: never drawn twice if the ranking moved between two pages; the
+                            // photo viewer and "Thích" of their cards read and update them
+let user = null;            // the signed-in member (the page is for Members only)
 let engagedHeading = false; // drawn once, above the first post the user already liked, saved or commented on
 let focusNewPosts = false;  // "Xem thêm" pressed while it had the focus
 
@@ -55,7 +58,9 @@ async function load(scope, page) {
             return;
         }
         // The list on screen stays; "Xem thêm" or a scope can be pressed again
-        failure.textContent = error.message;
+        // A message of the server as it is; a fault of this page itself (in English) is not shown to members
+        if (!(error instanceof ApiError)) console.error(error);
+        failure.textContent = error instanceof ApiError ? error.message : "Không tải được bài viết. Vui lòng tải lại trang.";
         failure.hidden = false;
         if (!feed) {
             summary.textContent = "";
@@ -88,7 +93,7 @@ function render(append) {
     }
 
     if (!append) {
-        shown = new Set();
+        shown = new Map();
         engagedHeading = false;
     }
     const fresh = feed.items.filter((p) => !shown.has(p.id));
@@ -98,7 +103,7 @@ function render(append) {
         // Keyboard users go on reading where the new posts start (the button lost the focus while it was disabled,
         // and it disappears after the last page)
         if (focusNewPosts && fresh.length) {
-            list.querySelector(`[data-post="${fresh[0].id}"] .feedtitle`)?.focus({ preventScroll: true });
+            list.querySelector(`[data-post="${fresh[0].id}"] .fbp-title a`)?.focus({ preventScroll: true });
         }
         focusNewPosts = false;
     } else {
@@ -168,18 +173,16 @@ function emptyText() {
     }[feed.scope] || `Chưa có bài viết phù hợp. ${blog}`;
 }
 
+/** A post as the Blog's Facebook-like card (lib/feed-posts.js forYouCard), the searched text marked. */
 function postCard(p) {
-    shown.add(p.id);
+    shown.set(p.id, p);
     let heading = "";
     if (p.engaged && !engagedHeading) {
         engagedHeading = true;
         heading = `<h3 class="fy-divider">${ic("history")}Bài bạn đã thích, lưu hoặc bình luận</h3>`;
     }
-    return `${heading}<article class="fy-item" data-post="${esc(String(p.id))}">${reasonChips(p)}
-        <a class="feedtitle" href="${postUrl(p)}">${markHits(p.title, feed.q)}</a>
-        ${p.excerpt ? `<p class="spot-excerpt">${markHits(p.excerpt, feed.q)}</p>` : ""}
-        ${postMeta(p)}
-    </article>`;
+    const q = feed.q;
+    return heading + forYouCard(p, user, { mark: (text) => markHits(text, q) });
 }
 
 /**
@@ -227,7 +230,8 @@ more.addEventListener("click", () => {
     load(feed.scope, feed.page + 1);
 });
 
-await mountSiteHeader("home");
+user = await mountSiteHeader("home");
+bindFeedCards(list, { kind: "POST", find: (id) => shown.get(id), notify: showSiteNotice });
 query = (asked.get("q") || "").trim().slice(0, 100);
 input.value = query;
 if (location.hash === "#search") {

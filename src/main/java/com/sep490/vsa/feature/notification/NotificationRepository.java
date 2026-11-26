@@ -47,10 +47,10 @@ public class NotificationRepository {
         this.jdbc = jdbc;
     }
 
-    /** {@code limit} notifications from {@code offset}, newest first. */
-    public List<NotificationItem> page(long userId, int offset, int limit) {
-        return jdbc.query(SELECT_ITEMS + " ORDER BY n.created_at DESC, n.id DESC LIMIT ? OFFSET ?",
-                ITEM, userId, limit, offset);
+    /** {@code limit} notifications from {@code offset}, newest first; only the unread ones when {@code unreadOnly}. */
+    public List<NotificationItem> page(long userId, boolean unreadOnly, int offset, int limit) {
+        return jdbc.query(SELECT_ITEMS + (unreadOnly ? " AND n.is_read = FALSE" : "")
+                + " ORDER BY n.created_at DESC, n.id DESC LIMIT ? OFFSET ?", ITEM, userId, limit, offset);
     }
 
     /** Notifications newer than {@code afterId}, newest first, at most {@code limit}. */
@@ -62,6 +62,26 @@ public class NotificationRepository {
         Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = FALSE",
                 Integer.class, userId);
         return n == null ? 0 : n;
+    }
+
+    /** Unread notifications newer than {@code seenId}: the ones the bell has not shown yet. */
+    public int unreadAfter(long userId, long seenId) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = FALSE AND id > ?""",
+                Integer.class, userId, seenId);
+        return n == null ? 0 : n;
+    }
+
+    public boolean exists(long userId, long id) {
+        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE id = ? AND user_id = ?",
+                Integer.class, id, userId);
+        return n != null && n > 0;
+    }
+
+    /** Marks this one notification of the user as read; 0 when it is not theirs or was read already. */
+    public int markOneRead(long userId, long id) {
+        return jdbc.update("UPDATE notifications SET is_read = TRUE WHERE id = ? AND user_id = ? AND is_read = FALSE",
+                id, userId);
     }
 
     public long latestId(long userId) {

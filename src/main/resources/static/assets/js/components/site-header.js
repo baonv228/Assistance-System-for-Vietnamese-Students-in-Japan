@@ -5,6 +5,7 @@
 import { apiClient, currentUser } from "../api/client.js";
 import { liveOpen, onLive, startLive } from "../lib/live.js";
 import { esc, ic, LOGO_SVG, loginUrl } from "../lib/ui.js";
+import { mountNotifPopover } from "./notif-panel.js";
 
 /**
  * [key, label, icon, href, on the phone tab bar, desktop priority: the lowest moves into "Thêm" first].
@@ -48,7 +49,8 @@ export async function mountSiteHeader(active) {
     addSkipLink();
     fitNav(header);
 
-    const inSheet = (key) => key === "me" || key === "messages" || TABS.some((t) => t[0] === key && !t[4]);
+    const inSheet = (key) => key === "me" || key === "messages" || key === "notifications"
+        || TABS.some((t) => t[0] === key && !t[4]);
     const tabbar = document.createElement("nav");
     tabbar.className = "tabbar";
     tabbar.setAttribute("aria-label", "Điều hướng");
@@ -66,7 +68,7 @@ export async function mountSiteHeader(active) {
     login?.addEventListener("pointerdown", refresh);
     login?.addEventListener("click", refresh);
     if (user) {
-        watchNotifications(header, user);
+        watchNotifications(header, user, active === "notifications");
         // The "Tin nhắn" page asks for its own counts more often and updates the button itself
         if (user.role === "USER") {
             watchChats(header, user, active === "messages");
@@ -88,8 +90,9 @@ function accountHtml(user, active) {
     const chat = user.role === "USER"
         ? `<a class="btn sm bell ${active === "messages" ? "on" : ""}" href="/messages" data-chat title="Tin nhắn">${ic("chat")}<span class="bell-count" data-chat-count hidden></span><span class="sr-only" data-chat-label>Tin nhắn</span></a>`
         : "";
+    // the bell opens its panel on this page (components/notif-panel.js); the page /notifications is "Xem tất cả" there
     return `${staff}${chat}
-        <a class="btn sm bell" href="/notifications" data-bell title="Thông báo">${ic("notifications")}<span class="bell-count" data-bell-count hidden></span><span class="sr-only" data-bell-label>Thông báo</span></a>
+        <button class="btn sm bell ${active === "notifications" ? "on" : ""}" type="button" data-bell title="Thông báo" aria-haspopup="dialog" aria-expanded="false" aria-controls="notif-pop">${ic("notifications")}<span class="bell-count" data-bell-count hidden></span><span class="sr-only" data-bell-label>Thông báo</span></button>
         <a class="btn sm me-link ${active === "me" ? "on" : ""}" href="/profile">${ic("account_circle")}<span class="who">${esc(user.displayName)}</span></a>
         <button class="btn sm" type="button" data-logout title="Đăng xuất">${ic("logout")}<span class="sr-only">Đăng xuất</span></button>`;
 }
@@ -257,12 +260,15 @@ async function forgetThisBrowser() {
 }
 
 // ---------------------------------------------------------------- notifications
-// The bell shows the unread count. While one of the user's own posts, questions or reviews waits for its photo/video
+// The bell opens the notification panel on the page itself (components/notif-panel.js, like Facebook's). Its number
+// counts the unread notifications that came after the newest one this browser has shown in the panel or on the page
+// /notifications (localStorage, shared by the tabs): opening the list clears it, while each notification stays unread
+// (its dot) until it is clicked. While one of the user's own posts, questions or reviews waits for its photo/video
 // scan, the count is asked again every few seconds; the result (CONTENT_PUBLISHED: published, CONTENT_REJECTED: refused
 // with the reason) then pops up on whatever page the user is on, and the page hears of every new notification through
-// an "asvsj:notification" event (the post, event or place it is about reloads what it shows). A new notification is
-// asked for at once when the live stream announces it (lib/live.js); otherwise the bell asks once a minute, and at once
-// when the tab comes back to the front; never while the tab is hidden.
+// an "asvsj:notification" event (the post, event or place it is about reloads what it shows; the open list adds it). A
+// new notification is asked for at once when the live stream announces it (lib/live.js); otherwise the bell asks once
+// a minute, and at once when the tab comes back to the front; never while the tab is hidden.
 
 const FAST_MS = 5000;
 const SLOW_MS = 60000;
@@ -280,6 +286,14 @@ const NOTICE_TYPES = {
 
 let bell = null;
 let checkNow = null;
+let popover = null;
+/** localStorage key of the newest notification id shown in the list (panel or page) in this browser. */
+let shownStore = null;
+let shownId = null;
+/** The newest notification id the last summary gave. */
+let latestKnown = 0;
+/** The page /notifications is open: what arrives is shown there at once, so the bell stays at 0. */
+let onNotificationsPage = false;
 
 /**
  * Asks the bell at once: the page just sent content whose photos/video are being scanned without leaving the page
@@ -289,21 +303,40 @@ export function checkNotificationsSoon() {
     checkNow?.();
 }
 
-/**
- * Shows this unread count on the bell (e.g. after the "Thông báo" page marked them read).
- */
-export function setNotificationCount(unread) {
+/** Shows this number on the bell: the unread notifications not shown in the list yet. */
+export function setNotificationCount(count) {
     if (!bell) return;
-    const count = bell.querySelector("[data-bell-count]");
+    const badge = bell.querySelector("[data-bell-count]");
     const label = bell.querySelector("[data-bell-label]");
-    count.textContent = unread > 99 ? "99+" : String(unread);
-    count.hidden = !unread;
-    label.textContent = unread ? `Thông báo (${unread} chưa đọc)` : "Thông báo";
+    badge.textContent = count > 99 ? "99+" : String(count);
+    badge.hidden = !count;
+    label.textContent = count ? `Thông báo (${count} mới)` : "Thông báo";
     bell.title = label.textContent;
 }
 
-function watchNotifications(header, user) {
+/**
+ * The list (the bell's panel or the page) shows the notifications up to this id: the bell's number goes, in every
+ * tab of this browser (localStorage). Each one stays unread until it is clicked.
+ */
+export function markNotificationsSeen(id) {
+    const newest = Number(id);
+    if (!shownStore || !(newest > 0)) return;
+    if (shownId === null || newest > shownId) {
+        shownId = newest;
+        writeLocal(shownStore, newest);
+    }
+    if (shownId >= latestKnown) setNotificationCount(0);
+    else checkNow?.();
+}
+
+const listOnScreen = () => popover?.isOpen() || (onNotificationsPage && !document.hidden);
+
+function watchNotifications(header, user, notificationsPage) {
     bell = header.querySelector("[data-bell]");
+    onNotificationsPage = notificationsPage;
+    shownStore = `asvsj.notifications.shown.${user.id}`;
+    shownId = readLocal(shownStore);
+    popover = mountNotifPopover(bell, { onSeen: markNotificationsSeen });
     // The newest notification this tab has dealt with, kept across pages: a scan result that arrives while the user
     // moves to another page still pops up there. Without it (a new tab) older notifications are only counted.
     const store = `asvsj.notifications.seen.${user.id}`;
@@ -323,8 +356,18 @@ function watchNotifications(header, user) {
         running = true;
         let next = SLOW_MS;
         try {
-            const summary = await apiClient.notificationSummary(seen ?? undefined);
-            setNotificationCount(summary.unread);
+            const summary = await apiClient.notificationSummary(seen ?? undefined, shownId ?? undefined);
+            latestKnown = Number(summary.latestId) || 0;
+            if (listOnScreen()) {
+                // the open list adds what came (asvsj:notification below): already in sight
+                if (latestKnown > (shownId ?? 0)) {
+                    shownId = latestKnown;
+                    writeLocal(shownStore, shownId);
+                }
+                setNotificationCount(0);
+            } else {
+                setNotificationCount(summary.unseen ?? summary.unread);
+            }
             if (seen !== null) {
                 // oldest first, so the newest notice ends up on top
                 summary.fresh.slice().reverse().forEach(announce);
@@ -350,6 +393,16 @@ function watchNotifications(header, user) {
     document.addEventListener("visibilitychange", () => {
         if (!document.hidden && !timer) check();
     });
+    // the list was opened in another tab of this browser: the number goes here too
+    window.addEventListener("storage", (event) => {
+        if (event.key !== shownStore) return;
+        const stored = readLocal(shownStore);
+        if (stored === null || stored <= (shownId ?? 0)) return;
+        shownId = stored;
+        if (shownId >= latestKnown) setNotificationCount(0);
+        else check();
+    });
+    window.addEventListener("asvsj:notification", () => popover.refresh());
     onLive("notification", check);
     onLive("open", check);                          // (re)connected: what came while it was down
     checkNow = check;
@@ -597,6 +650,23 @@ function readSeen(store) {
 function writeSeen(store, id) {
     try {
         sessionStorage.setItem(store, String(id));
+    } catch {
+        // storage blocked
+    }
+}
+
+function readLocal(store) {
+    try {
+        const value = Number.parseInt(localStorage.getItem(store) ?? "", 10);
+        return Number.isInteger(value) && value >= 0 ? value : null;
+    } catch {
+        return null;                            // storage blocked: the bell counts every unread one
+    }
+}
+
+function writeLocal(store, id) {
+    try {
+        localStorage.setItem(store, String(id));
     } catch {
         // storage blocked
     }
