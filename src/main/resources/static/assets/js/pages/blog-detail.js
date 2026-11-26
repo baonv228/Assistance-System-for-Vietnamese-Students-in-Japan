@@ -3,6 +3,7 @@
 import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { loadLeaflet, OSM_CREDIT, OSM_TILES } from "../lib/map.js";
+import { bindMediaGrids, mediaGrid } from "../lib/post-media.js";
 import { avatar, esc, fullDate, googleDirectionsUrl, ic, loginUrl, osmUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
@@ -181,8 +182,8 @@ function render(data) {
                 ${data.topics.map((t) => `<a class="badge topic" href="${ROUTES.topic(t.id)}">${esc(t.name)}</a>`).join("")}
                 ${data.places.map(placeChip).join("")}
             </div>` : ""}
-            ${mediaHtml(data.media)}
             <div class="post-body">${richText(data.content)}</div>
+            ${mediaGrid(data.media)}
             ${placeMapHtml(data.places)}
             <div class="row actions-bar">${postActions(data)}</div>
         </article>
@@ -211,14 +212,6 @@ function messageButton(author, forGuests = false) {
     if (user ? user.role !== "USER" || user.id === author.id : !forGuests) return "";
     const href = user ? ROUTES.message(author.id) : ROUTES.login(ROUTES.message(author.id));
     return `<a class="btn sm ghost" href="${esc(href)}" title="Nhắn tin riêng cho ${esc(author.displayName)}">${ic("chat")}Nhắn tin</a>`;
-}
-
-function mediaHtml(media) {
-    if (!media.length) return "";
-    return `<div class="media-grid count-${Math.min(media.length, 4)}">${media.map((m) => m.type === "VIDEO"
-        ? `<video controls preload="metadata" src="${esc(m.url)}"></video>`
-        : `<a href="${esc(m.url)}" target="_blank" rel="noopener"><img src="${esc(m.url)}" alt="Ảnh trong bài" loading="lazy"
-             ${m.width ? `width="${m.width}" height="${m.height}"` : ""}></a>`).join("")}</div>`;
 }
 
 // ---------------------------------------------------------------- places map
@@ -524,6 +517,9 @@ async function guarded(action, { onNotFound = true } = {}) {
         return undefined;
     }
 }
+
+// A photo or video of the post opens full screen (lib/post-media.js)
+bindMediaGrids(content, () => post && { media: post.media, title: post.title });
 
 content.addEventListener("click", async (event) => {
     if (event.target.closest("[data-retry]")) {

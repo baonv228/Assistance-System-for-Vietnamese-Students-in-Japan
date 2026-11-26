@@ -155,6 +155,154 @@
 .stat { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .stat .ic { font-size: 18px; }
 
+/* ---------------- photo grid of a post and the full-screen viewer (lib/post-media.js) ---------------- */
+/* The height comes from the aspect ratio only: min-height 0 and overflow hidden stop a tall photo from stretching the
+   grid, and the rows never grow past their share. width 100%: with an automatic width the browser would turn the
+   max-height of a lone photo into a max-width and the grid would no longer span the card */
+.pm-grid {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 3px;
+    width: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--surface);
+}
+.pm-n1 { aspect-ratio: var(--pm-ar, 4 / 3); max-height: min(640px, 80vh); }
+.pm-n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); aspect-ratio: 8 / 5; }
+.pm-n3 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); aspect-ratio: 5 / 4; }
+.pm-n3 > :first-child { grid-column: 1 / -1; }
+.pm-n4 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); aspect-ratio: 5 / 4; }
+.pm-n4 > :first-child { grid-column: 1 / -1; }
+/* five or more: two above, three below (the last one says "+N") */
+.pm-n5 { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); aspect-ratio: 6 / 5; }
+.pm-n5 > * { grid-column: span 2; }
+.pm-n5 > :nth-child(-n + 2) { grid-column: span 3; }
+.pm-tile {
+    position: relative;
+    display: block;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    background: var(--surface-2);
+    cursor: zoom-in;
+}
+.pm-tile img, .pm-tile video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.pm-tile:hover img, .pm-tile:hover video { filter: brightness(.93); }
+.pm-tile:focus-visible { outline: 3px solid var(--brand); outline-offset: -3px; }
+.pm-video { cursor: pointer; }
+.pm-play {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+}
+.pm-play .ic { font-size: 36px; vertical-align: 0; }
+.pm-more {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(20, 24, 40, .5);
+    color: #fff;
+    font: 700 32px/1 var(--font-display);
+}
+.pm-solo-video { grid-template-rows: auto; aspect-ratio: auto; max-height: none; background: #000; }
+.pm-solo-video video { display: block; width: 100%; max-height: 70vh; background: #000; }
+
+html.pm-lock { overflow: hidden; }
+.pm-viewer {
+    /* fixed in the top layer: 100% is the window without its scroll bar */
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #10131d;
+    color: #fff;
+    overflow: hidden;
+}
+/* minmax(0, 1fr): the post title of the top bar (one line) must not widen the viewer past the screen */
+.pm-viewer[open] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+.pm-viewer::backdrop { background: rgba(0, 0, 0, .85); }
+.pm-v-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: max(10px, env(safe-area-inset-top)) 12px 10px 16px;
+}
+.pm-v-count { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pm-v-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255, 255, 255, .78); }
+.pm-v-open {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+}
+.pm-v-open:hover { background: rgba(255, 255, 255, .12); }
+.pm-v-open[hidden] { display: none; }
+.pm-v-btn {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+    cursor: pointer;
+}
+.pm-v-btn .ic { font-size: 28px; vertical-align: 0; }
+.pm-v-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .24); }
+.pm-v-btn:disabled { opacity: .25; cursor: default; }
+.pm-v-btn[hidden] { display: none; }
+.pm-v-btn:focus-visible, .pm-v-open:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.pm-v-stage {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-height: 0;
+    padding: 0 16px max(16px, env(safe-area-inset-bottom));
+    touch-action: pan-y pinch-zoom;
+}
+.pm-v-item { position: relative; height: 100%; min-width: 0; }
+.pm-v-item img, .pm-v-item video {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+@media (max-width: 600px) {
+    .pm-v-bar { gap: 8px; padding-left: 14px; }
+    .pm-v-open span { display: none; }
+    .pm-v-stage { grid-template-columns: minmax(0, 1fr); padding: 0 0 max(12px, env(safe-area-inset-bottom)); }
+    .pm-v-prev, .pm-v-next { position: absolute; top: 50%; z-index: 1; transform: translateY(-50%); background: rgba(0, 0, 0, .45); }
+    .pm-v-prev { left: 8px; }
+    .pm-v-next { right: 8px; }
+}
+
 /* loading placeholder */
 .skel span { display: block; height: 12px; border-radius: 6px; background: var(--surface-2); animation: pulse 1.2s ease-in-out infinite; }
 .skel span:nth-child(1) { width: 30%; }
