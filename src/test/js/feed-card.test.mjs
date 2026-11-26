@@ -89,7 +89,8 @@ test("a card shows author, time, title, excerpt with “Xem thêm”, topics and
     assert.match(html, /data-post="7"/);
     assert.match(html, /<a href="\/users\/3">Lan<\/a>/);
     assert.match(html, /Mở tài khoản &lt;ngân hàng&gt;/);
-    assert.match(html, /<a class="fbp-more" href="\/blog\/7">Xem thêm<\/a>/);
+    assert.match(html, /<button class="fbp-more" type="button" data-fbp="more" aria-expanded="false" aria-controls="fbp-b-7">Xem thêm<\/button>/);
+    assert.match(html, /<div class="fbp-body" id="fbp-b-7"><p class="fbp-excerpt">Mình đi Yucho ở Arakawa… <button/);
     assert.match(html, /data-topic="2"/);
     assert.match(html, /class="pm-grid pm-n2"/);
     assert.match(html, /Công khai/);
@@ -100,6 +101,55 @@ test("an excerpt that is not cut has no “Xem thêm”; no topics and no media:
     assert.doesNotMatch(html, /Xem thêm/);
     assert.doesNotMatch(html, /fbp-tags/);
     assert.doesNotMatch(html, /pm-grid/);
+});
+
+// ---------------------------------------------------------------- "Xem thêm": the whole text in the card
+
+const LONG = "Mình đi Yucho ở Arakawa để mở tài khoản.\n\nCần mang:\n- Thẻ cư trú <zairyu>\n- Con dấu & số điện thoại\n\n"
+    + "Đặt lịch ở https://www.jp-bank.japanpost.jp/ trước nhé.";
+
+test("“Xem thêm” is a button of the card itself, never a link to another page", () => {
+    for (const kind of ["POST", "QA"]) {
+        const html = feedCard(post({ type: kind }), kind, null);
+        assert.doesNotMatch(html, /<a [^>]*class="fbp-more"/, kind);
+        assert.match(html, /data-fbp="more" aria-expanded="false"/, kind);
+        assert.equal(count(html, /Xem thêm/g), 1, kind);
+    }
+});
+
+test("expanded: the whole text as on the post page (paragraphs, line breaks, links), escaped, with “Ẩn bớt”", () => {
+    const html = feedCard(post({ content: LONG, expanded: true }), "POST", member);
+    assert.match(html, /<div class="fbp-body expanded" id="fbp-b-7">/);
+    assert.match(html, /<div class="fbp-full" tabindex="-1"><p>Mình đi Yucho ở Arakawa để mở tài khoản\.<\/p><p>Cần mang:<br>- Thẻ cư trú &lt;zairyu&gt;<br>- Con dấu &amp; số điện thoại<\/p>/);
+    assert.match(html, /<a href="https:\/\/www\.jp-bank\.japanpost\.jp\/" target="_blank" rel="nofollow noopener ugc">https:\/\/www\.jp-bank\.japanpost\.jp\/<\/a> trước nhé\./);
+    assert.match(html, /<button class="fbp-more" type="button" data-fbp="less" aria-expanded="true" aria-controls="fbp-b-7">Ẩn bớt<\/button>/);
+    assert.doesNotMatch(html, /fbp-excerpt|Xem thêm|<zairyu>/);
+    // the rest of the card is unchanged
+    assert.match(html, /data-fbp="like"/);
+    assert.match(html, /href="\/blog\/7#reply"/);
+});
+
+test("collapsed again, or the text not read yet: the excerpt with “Xem thêm”", () => {
+    for (const extra of [{ content: LONG, expanded: false }, { expanded: true }, { content: null, expanded: true }]) {
+        const html = feedCard(post(extra), "POST", member);
+        assert.match(html, /<p class="fbp-excerpt">/);
+        assert.match(html, /data-fbp="more"/);
+        assert.doesNotMatch(html, /fbp-full|Ẩn bớt/);
+    }
+});
+
+test("no excerpt (a question without a description): no text block and no button", () => {
+    for (const extra of [{ excerpt: "" }, { excerpt: null }, { excerpt: "", content: "x", expanded: true }]) {
+        const html = feedCard(post({ type: "QA", ...extra }), "QA", member);
+        assert.doesNotMatch(html, /fbp-body|fbp-more/);
+    }
+});
+
+test("/for-you search: the searched text is marked in the whole text too, links kept", () => {
+    const mark = (text) => markHits(text, "the cu tru");
+    const html = forYouCard(forYou({ content: LONG, expanded: true }), member, { mark });
+    assert.match(html, /- <mark>Thẻ cư trú<\/mark> &lt;zairyu&gt;/);
+    assert.match(html, /<a href="https:\/\/www\.jp-bank\.japanpost\.jp\/"/);
 });
 
 test("counts: hidden at 0 and 0, else likes and comments (answers for a question)", () => {

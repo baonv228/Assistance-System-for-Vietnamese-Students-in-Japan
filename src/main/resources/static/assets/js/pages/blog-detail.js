@@ -4,6 +4,7 @@ import { apiClient } from "../api/client.js";
 import { mountSiteHeader } from "../components/site-header.js";
 import { loadLeaflet, OSM_CREDIT, OSM_TILES } from "../lib/map.js";
 import { bindMediaGrids, mediaGrid } from "../lib/post-media.js";
+import { richText } from "../lib/rich-text.js";
 import { avatar, esc, fullDate, googleDirectionsUrl, ic, loginUrl, osmUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Shared by two pages, which set <body data-kind="…">: pages/blog-detail.html (POST, Blog) and
@@ -296,13 +297,6 @@ async function mountPlaceMap(places) {
     }
     placeMap.map = map;
     placeMap.key = key;
-}
-
-/** Escaped text with line breaks kept and web addresses turned into links. */
-function richText(text) {
-    const linked = esc(text).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g,
-        (url) => `<a href="${url}" target="_blank" rel="nofollow noopener ugc">${url}</a>`);
-    return linked.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
 }
 
 function postActions(data) {

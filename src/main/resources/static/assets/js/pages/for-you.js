@@ -231,7 +231,8 @@ more.addEventListener("click", () => {
 });
 
 user = await mountSiteHeader("home");
-bindFeedCards(list, { kind: "POST", find: (id) => shown.get(id), notify: showSiteNotice });
+bindFeedCards(list, { kind: "POST", find: (id) => shown.get(id), notify: showSiteNotice,
+    mark: (text) => markHits(text, feed?.q) });       // the text the cards on screen were found with
 query = (asked.get("q") || "").trim().slice(0, 100);
 input.value = query;
 if (location.hash === "#search") {
