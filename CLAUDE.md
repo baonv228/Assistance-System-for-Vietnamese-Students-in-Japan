@@ -554,7 +554,11 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   `blog.html?type=QA` links redirect to `qa.html`.
 - List cards look like Facebook posts (user decision 25/11/2026; Blog and Hỏi-Đáp, `lib/feed-card.js`, styles `.fbp-*`
   in blog.css): avatar, name, tags, time · globe on top (flags "Đã ghim", "Đang quét ảnh/video", for questions "Đã giải
-  quyết" / "Chưa ai trả lời" on the right), title, excerpt with "Xem thêm" when the server cut it (ends with "…"), topic
+  quyết" / "Chưa ai trả lời" on the right), title, excerpt with "Xem thêm" when the server cut it (ends with "…"; user
+  decision 26/11/2026: it never leaves the page, the whole text opens in the card as on the post page, read once from
+  `GET /api/blogs/{id}` / `/api/questions/{id}` and kept in the post's data, with "Ẩn bớt"; text drawn by
+  `lib/rich-text.js`, shared with `blog-detail.js`; /for-you marks the searched text in it too; the title still opens
+  the post page), topic
   and place chips, the photo grid, "♥ n" and "n bình luận" / "n câu trả lời" (`#comments`), then "Thích" (in place:
   Members only, not on their own post, so own cards have two buttons; guests → sign in with `next` = the list; staff
   disabled), "Bình luận" / "Trả lời" (`#reply`: the post page scrolls to the box and focuses it) and "Chia sẻ" (share
@@ -569,7 +573,7 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Home went blank with "Cannot read properties of undefined (reading 'map')" on 25/11) still draws, name and topic
   without links and no photos; the Home draws "Dành cho bạn" through `safely` (a drawing fault shows a short notice
   there, the rest of the Home stays) and shows only server messages, never a script error in English.
-  Tests: `FeedCardsFlowTest`, `src/test/js/feed-card.test.mjs`.
+  Tests: `FeedCardsFlowTest`, `src/test/js/feed-card.test.mjs`, `src/test/js/rich-text.test.mjs`.
 - Post Detail (UC-10): `GET /api/blogs/{id}` (public) returns the post, media, comment tree and `viewer` flags.
   Actions (signed-in role USER only, never on one's own content for like/report): `POST|DELETE
   /api/blogs/{id}/like|save`, `POST /api/blogs/{id}/comments` (`parentId` for replies), `POST /api/blogs/{id}/report`,
