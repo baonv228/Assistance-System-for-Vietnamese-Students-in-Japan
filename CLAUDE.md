@@ -528,6 +528,24 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   and after an account is locked, unlocked or deleted. Page: `pages/blog.html` + `assets/js/pages/blog.js`; links to Write Post, Map and Public Profile
   go through `ROUTES` at the top of blog.js. Old
   `blog.html?type=QA` links redirect to `qa.html`.
+- List cards look like Facebook posts (user decision 25/11/2026; Blog and Hỏi-Đáp, `lib/feed-card.js`, styles `.fbp-*`
+  in blog.css): avatar, name, tags, time · globe on top (flags "Đã ghim", "Đang quét ảnh/video", for questions "Đã giải
+  quyết" / "Chưa ai trả lời" on the right), title, excerpt with "Xem thêm" when the server cut it (ends with "…"), topic
+  and place chips, the photo grid, "♥ n" and "n bình luận" / "n câu trả lời" (`#comments`), then "Thích" (in place:
+  Members only, not on their own post, so own cards have two buttons; guests → sign in with `next` = the list; staff
+  disabled), "Bình luận" / "Trả lời" (`#reply`: the post page scrolls to the box and focuses it) and "Chia sẻ" (share
+  sheet on touch screens, else the link is copied; notices through `showSiteNotice`). A card still being scanned has no
+  action bar. On phones (≤ 560 px) cards run edge to edge. Each card of `GET /api/blogs` and `GET /api/questions` has
+  `media` (the post page's rule: scan PASSED and not deleted, files still scanned only on the viewer's own post, in
+  `blog_media.sort_order`; `BlogFeedRepository.mediaOf`) and `liked` (`likedBy`; false for guests and in "Bài nổi bật",
+  whose cards stay small). Photo grid `lib/post-media.js` (also on the post page, under the text): 1 photo across the
+  width at its own shape between 4:5 and 1.91:1, 2 side by side, 3–4 one big + the rest below, 5+ two above and three
+  below with "+N"; a lone video plays in place; a tile opens a full-screen `<dialog>` viewer (arrows, ← →, swipe, Esc,
+  "Xem bài viết" from a list). A post without these parts (the new page against a server not restarted since: the
+  Home went blank with "Cannot read properties of undefined (reading 'map')" on 25/11) still draws, name and topic
+  without links and no photos; the Home draws "Dành cho bạn" through `safely` (a drawing fault shows a short notice
+  there, the rest of the Home stays) and shows only server messages, never a script error in English.
+  Tests: `FeedCardsFlowTest`, `src/test/js/feed-card.test.mjs`.
 - Post Detail (UC-10): `GET /api/blogs/{id}` (public) returns the post, media, comment tree and `viewer` flags.
   Actions (signed-in role USER only, never on one's own content for like/report): `POST|DELETE
   /api/blogs/{id}/like|save`, `POST /api/blogs/{id}/comments` (`parentId` for replies), `POST /api/blogs/{id}/report`,
@@ -679,7 +697,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   by "Đã lưu"), so a best answer hidden by reports, removed or written by a locked/deleted account stops counting, as on
   the question page. Unanswered = no published answer by an active account and not solved; the list card's
   "Chưa ai trả lời" badge reads the same rule (`unanswered`), not `answerCount` (which counts replies too).
-- Pages: `pages/qa.html` + `assets/js/pages/qa.js` + `assets/css/qa.css` (list, filters in the URL), `qa-ask.html`
+- Pages: `pages/qa.html` + `assets/js/pages/qa.js` + `assets/css/qa.css` (list, filters in the URL; the question cards
+  are the Facebook-like cards of the Blog, see "List cards" under Blog feed), `qa-ask.html`
   and `qa-detail.html`. Ask and detail share `blog-write.js` / `blog-detail.js` with the Blog pages: the page sets
   `<body data-kind="POST|QA">` and the script picks its API, links and labels from it. Old links
   (`blog-write.html?type=QA`, a question id on `blog-detail.html`) redirect to the Hỏi-Đáp pages.

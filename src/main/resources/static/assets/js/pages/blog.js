@@ -2,7 +2,8 @@
 // community statistics. Posts only: questions have their own section, Hỏi-Đáp (pages/qa.html).
 // Filters live in the URL so refresh and the Back button keep them.
 import { apiClient } from "../api/client.js";
-import { mountSiteHeader } from "../components/site-header.js";
+import { mountSiteHeader, showSiteNotice } from "../components/site-header.js";
+import { bindFeedCards, feedCard, feedSkeleton as skeleton } from "../lib/feed-card.js";
 import { avatar, esc, fullDate, ic, loginUrl, placeChip, tagChips, timeAgo } from "../lib/ui.js";
 
 // Where links go. Public Profile is still a placeholder; change it when it exists. Places open on openstreetmap.org.
@@ -36,6 +37,7 @@ const els = {
 
 let topics = [];            // active topics from the overview, for the filter and the chips
 let lastRequest = 0;        // ignores answers to requests that were overtaken by a newer one
+const shown = new Map();    // posts of the list on screen by id: photo viewer and "Thích" read and update them
 let state = readUrl();
 
 // ---------------------------------------------------------------- URL state
@@ -175,7 +177,7 @@ function bindControls(user) {
 async function loadList() {
     const id = ++lastRequest;
     els.list.setAttribute("aria-busy", "true");
-    if (!els.list.querySelector(".post")) {
+    if (!els.list.querySelector(".fbp")) {
         els.list.innerHTML = skeleton(3);
     } else {
         els.list.classList.add("dim");
@@ -208,6 +210,7 @@ function renderList(page) {
         state.page = page.page + 1;
         writeUrl(false);
     }
+    shown.clear();
     if (!page.items.length) {
         els.summary.textContent = "";
         els.pager.hidden = true;
@@ -217,23 +220,23 @@ function renderList(page) {
         return;
     }
     els.summary.textContent = `${page.totalItems.toLocaleString("vi-VN")} bài${page.filtered ? " phù hợp" : ""}`;
-    els.list.innerHTML = page.items.map((post) => postCard(post)).join("");
+    page.items.forEach((post) => shown.set(post.id, post));
+    els.list.innerHTML = page.items.map((post) => feedCard(post, "POST", user)).join("");
     renderPager(page);
 }
 
-function postCard(post, { featured = false, rank = 0 } = {}) {
-    const badges = [
-        rank ? `<span class="badge lan">${ic("star")}#${rank}</span>` : "",
-        post.pinned && !featured ? `<span class="badge">${ic("keep")}Đã ghim</span>` : "",
-        post.status === "PROCESSING" ? `<span class="badge warn" title="Chỉ bạn thấy bài này cho đến khi quét xong">${ic("hourglass_top")}Đang quét ảnh/video</span>` : ""
-    ].join("");
+/**
+ * A small card of "Bài nổi bật" (published posts only). The list itself uses the Facebook-like cards of
+ * lib/feed-card.js.
+ */
+function featuredCard(post, rank) {
     const topicsHtml = post.topics.map((t) =>
         `<button class="badge topic" type="button" data-topic="${t.id}" title="Lọc theo chủ đề này">${esc(t.name)}</button>`).join("");
     const placesHtml = post.places.map((p) =>
         placeChip(p)).join("");
     return `
-        <article class="card post${featured ? " featured-post" : ""}${post.status === "PROCESSING" ? " processing" : ""}">
-            <div class="row meta">${badges}<span class="grow"></span>
+        <article class="card post featured-post">
+            <div class="row meta"><span class="badge lan">${ic("star")}#${rank}</span><span class="grow"></span>
                 <time class="note" datetime="${esc(post.createdAt)}" title="${esc(fullDate(post.createdAt))}">${timeAgo(post.createdAt)}</time></div>
             <h3><a class="stretch" href="${ROUTES.detail(post.id)}">${esc(post.title)}</a></h3>
             ${post.excerpt ? `<p class="excerpt">${esc(post.excerpt)}</p>` : ""}
@@ -294,7 +297,7 @@ function renderOverview(overview) {
     els.featured.innerHTML = f.posts.length ? `
         <div class="row"><h3 id="featured-title">${ic("local_florist")} Bài nổi bật ${f.period === "WEEK" ? "tuần này" : "tháng này"}</h3>
             <span class="note">Tự động chọn theo lượt thích và bình luận</span></div>
-        <div class="featured-grid">${f.posts.map((p, i) => postCard(p, { featured: true, rank: i + 1 })).join("")}</div>` : "";
+        <div class="featured-grid">${f.posts.map((p, i) => featuredCard(p, i + 1)).join("")}</div>` : "";
 
     els.side.innerHTML = `
         <div class="card">
@@ -325,10 +328,6 @@ const stateBox = (kind, message, action = "") =>
     `<div class="state ${kind}" role="${kind === "error" ? "alert" : "status"}">
         ${ic(kind === "error" ? "cloud_off" : "forum", "big")}<p>${esc(message)}</p>${action}</div>`;
 
-const skeleton = (n) => Array.from({ length: n }, () =>
-    `<div class="card post skel" aria-hidden="true"><span></span><span></span><span></span></div>`).join("")
-    + `<span class="sr-only">Đang tải…</span>`;
-
 // ---------------------------------------------------------------- start
 
 async function start() {
@@ -349,5 +348,6 @@ async function start() {
 
 const user = await mountSiteHeader("blog");
 bindControls(user);
+bindFeedCards(els.list, { kind: "POST", find: (id) => shown.get(id), notify: showSiteNotice });
 syncControls();
 await start();

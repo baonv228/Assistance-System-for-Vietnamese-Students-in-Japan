@@ -187,7 +187,7 @@ function render(data) {
             ${placeMapHtml(data.places)}
             <div class="row actions-bar">${postActions(data)}</div>
         </article>
-        <section class="card comments" aria-labelledby="comments-title">
+        <section class="card comments" id="comments" aria-labelledby="comments-title">
             <h2 id="comments-title">${question ? "Câu trả lời" : "Bình luận"} <span class="note">(${data.commentCount})</span></h2>
             ${commentForm(null)}
             ${data.comments.length
@@ -518,6 +518,14 @@ async function guarded(action, { onNotFound = true } = {}) {
     }
 }
 
+/** Scrolls to the comments (answers); `focus` also puts the cursor in the box (or on "Đăng nhập" for a guest). */
+function showComments(focus) {
+    const section = content.querySelector(".comments");
+    if (!section) return;
+    if (focus) content.querySelector("#comment-new, .login-box a")?.focus({ preventScroll: true });
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 // A photo or video of the post opens full screen (lib/post-media.js)
 bindMediaGrids(content, () => post && { media: post.media, title: post.title });
 
@@ -568,8 +576,7 @@ content.addEventListener("click", async (event) => {
             break;
         }
         case "focus-comment":
-            content.querySelector("#comment-new, .login-box a")?.focus();
-            content.querySelector(".comments").scrollIntoView({ behavior: "smooth", block: "start" });
+            showComments(true);
             break;
         case "delete-post":
             if (await confirmDialog(MSG.MSG16_POST)) {
@@ -832,6 +839,9 @@ window.addEventListener("asvsj:notification", async ({ detail }) => {
 firstLoad = load();
 await firstLoad;
 announceCreated();
+// From the cards of the Blog and Hỏi-Đáp lists: "N bình luận" (#comments) shows them, "Bình luận" / "Trả lời"
+// (#reply) also opens the box. The browser looked for #comments before the post was drawn.
+if (location.hash === "#comments" || location.hash === "#reply") showComments(location.hash === "#reply");
 
 /**
  * Arriving from Write Post (?created=1): say whether the post is public or still being scanned (MSG34).
