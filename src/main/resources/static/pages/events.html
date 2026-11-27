@@ -18,16 +18,16 @@
 </head>
 <body class="app">
 <main class="page events-page" id="events">
+    <header>
+        <h1>Lễ hội và sự kiện</h1>
+        <p class="note">Lễ hội và sự kiện đang hoặc sắp diễn ra cũng hiện trên bản đồ. Ai đã đi có thể viết review và đăng ảnh.</p>
+    </header>
     <form class="blog-search" id="search" role="search">
         <span class="ic" aria-hidden="true">search</span>
         <label class="sr-only" for="q">Tìm sự kiện</label>
         <input id="q" name="q" type="search" maxlength="100" autocomplete="off"
                placeholder="Tìm sự kiện hoặc nơi tổ chức">
     </form>
-    <header>
-        <h1>Lễ hội và sự kiện</h1>
-        <p class="note">Do Moderator đăng. Sự kiện đang hoặc sắp diễn ra cũng hiện trên bản đồ. Ai đã đi có thể viết review và đăng ảnh cho năm đó.</p>
-    </header>
     <div id="list" aria-live="polite"><p class="note">Đang tải…</p></div>
 </main>
 <script type="module" src="/assets/js/pages/events.js"></script>

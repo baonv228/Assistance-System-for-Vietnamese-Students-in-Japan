@@ -46,7 +46,7 @@ function render(events) {
         + section("Trong 30 ngày tới", upcoming.filter((e) => e.daysUntil <= 30))
         + section("Sau này", upcoming.filter((e) => e.daysUntil > 30))
         // newest first: the event that just ended is the one people want to review
-        + section("Đã diễn ra (vẫn viết review được)", events.filter((e) => e.state === "PAST").reverse());
+        + section("Đã diễn ra", events.filter((e) => e.state === "PAST").reverse());
     list.innerHTML = html || `<p class="note">${input.value.trim() ? "Không có sự kiện nào khớp." : "Chưa có sự kiện nào."}</p>`;
 }
 

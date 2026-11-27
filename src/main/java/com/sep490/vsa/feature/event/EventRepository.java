@@ -164,6 +164,11 @@ public class EventRepository {
                 Timestamp.from(now), id) == 1;
     }
 
+    /** Every review of the event, of every year and state (their report cases close with the event). */
+    public List<Long> reviewIds(long eventId) {
+        return jdbc.query("SELECT id FROM reviews WHERE event_id = ?", (rs, i) -> rs.getLong(1), eventId);
+    }
+
     /**
      * A cover photo is uploaded by a Moderator (staff, trusted), so it is not sent to the image scanner: it is marked
      * PASSED as soon as it is saved, and shows at once.

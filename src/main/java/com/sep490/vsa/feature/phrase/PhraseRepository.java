@@ -25,8 +25,11 @@ import java.util.Optional;
 @Repository
 public class PhraseRepository {
 
-    /** At most this many phrases in one answer (a search over everything); the library holds a few hundred at most. */
-    private static final int LIST_MAX = 200;
+    /**
+     * At most this many phrases in one answer (a search, "Luyện tập" over the whole library). The library holds a few
+     * hundred entries; the page is told the limit ({@code Overview.listMax}) and says so when an answer reaches it.
+     */
+    static final int LIST_MAX = 1000;
 
     /** The Member's own lists: "Chưa thuộc", "Đã thuộc", "Đã lưu" (alias sv = the viewer's saved_phrases row). */
     static final Map<String, String> MINE = Map.of(
