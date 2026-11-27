@@ -188,8 +188,8 @@ public class AcademicRepository {
 
     private static final String LIBRARY_SELECT = """
             SELECT ph.id, ph.kind, ph.japanese, ph.romaji, ph.meaning_vi, c.id AS cid, c.name_vi, c.icon,
-                   (SELECT COUNT(*) FROM report_cases rc WHERE rc.target_type = 'PHRASE' AND rc.target_id = ph.id
-                       AND rc.status = 'OPEN') AS open_reports
+                   (SELECT COALESCE(SUM(rc.report_count), 0) FROM report_cases rc
+                       WHERE rc.target_type = 'PHRASE' AND rc.target_id = ph.id AND rc.status = 'OPEN') AS open_reports
             FROM phrases ph JOIN place_categories c ON c.id = ph.category_id""";
 
     private static String libraryWhere(String category, String topic, String kind, String keyword,

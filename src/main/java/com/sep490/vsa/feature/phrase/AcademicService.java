@@ -105,19 +105,25 @@ public class AcademicService {
                 Map.of("id", id, "name", name, "icon", icon), "Thêm chủ đề học \"" + name + "\"");
     }
 
-    /** "Sửa chủ đề học"; nothing is written or logged when nothing differs (UC 10 AF2). */
-    public void updateTopic(long managerId, String id, TopicRequest request) {
+    /**
+     * "Sửa chủ đề học"; nothing is written or logged when nothing differs (UC 10 AF2). The name is compared after the
+     * same clean-up as it is saved with (spaces trimmed and runs of spaces made one), so the answer says whether it
+     * changed.
+     */
+    public boolean updateTopic(long managerId, String id, TopicRequest request) {
         String name = topicName(request);
         String icon = icon(request);
         Map<String, String> names = repository.lockTopicNames();
         TopicRow old = repository.lockTopic(id).orElseThrow(AcademicService::topicNotFound);
-        if (!old.name().equals(name) || !old.icon().equals(icon)) {
-            checkTopicName(name, names, id);
-            repository.updateTopic(id, name, icon);
-            activityLog.recordLog(managerId, "LEARNING_TOPIC_UPDATED", "LEARNING_TOPIC", null,
-                    Map.of("id", id, "name", old.name(), "icon", old.icon()), Map.of("id", id, "name", name, "icon", icon),
-                    "Sửa chủ đề học \"" + old.name() + "\"" + (old.name().equals(name) ? "" : " thành \"" + name + "\""));
+        if (old.name().equals(name) && old.icon().equals(icon)) {
+            return false;
         }
+        checkTopicName(name, names, id);
+        repository.updateTopic(id, name, icon);
+        activityLog.recordLog(managerId, "LEARNING_TOPIC_UPDATED", "LEARNING_TOPIC", null,
+                Map.of("id", id, "name", old.name(), "icon", old.icon()), Map.of("id", id, "name", name, "icon", icon),
+                "Sửa chủ đề học \"" + old.name() + "\"" + (old.name().equals(name) ? "" : " thành \"" + name + "\""));
+        return true;
     }
 
     /** Only the labels go: the phrases and their "Chưa thuộc" / "Đã thuộc" marks stay (UC 11). */
@@ -202,7 +208,7 @@ public class AcademicService {
         if (!request.confirmDuplicate()) {
             var duplicate = repository.duplicate(f.categoryId(), f.japanese(), null);
             if (duplicate.isPresent()) {
-                return new SaveResult(false, repository.libraryRow(duplicate.get()),
+                return SaveResult.askDuplicate(repository.libraryRow(duplicate.get()),
                         "Danh mục này đã có mục \"" + f.japanese() + "\". Bạn vẫn muốn lưu?");
             }
         }
@@ -212,7 +218,7 @@ public class AcademicService {
         activityLog.recordLog(managerId, "PHRASE_CREATED", "PHRASE", id, null, values(f), "Thêm mẫu câu: " + f.japanese());
         LibraryRow row = repository.libraryRow(id);
         String where = "\"" + row.category().name() + "\"";
-        return new SaveResult(true, null, f.topicIds().isEmpty()
+        return SaveResult.done(f.topicIds().isEmpty()
                 ? "Đã thêm. " + word(f.kind()) + " hiện ở mọi địa điểm " + where + "."
                 : "Đã thêm. " + word(f.kind()) + " hiện ở mọi địa điểm " + where + " và trong tab Nhật ngữ.");
     }
@@ -236,12 +242,15 @@ public class AcademicService {
                 || !old.meaningVi().equals(f.meaningVi())
                 || !new LinkedHashSet<>(oldTopics).equals(new LinkedHashSet<>(f.topicIds()));
         if (!changed) {
-            return new SaveResult(true, null, "Không có thay đổi nào.");
+            // From a report nothing is closed: an entry that is right is answered with "Không sai, bỏ qua" (UC 13 AF2)
+            return new SaveResult(true, null, fromReport != null
+                    ? "Bạn chưa sửa gì nên báo cáo vẫn mở. Nếu mục này không sai, hãy bấm \"Không sai, bỏ qua\" ở trang Báo cáo mẫu câu."
+                    : "Không có thay đổi nào.", false);
         }
         if (!request.confirmDuplicate()) {
             var duplicate = repository.duplicate(f.categoryId(), f.japanese(), id);
             if (duplicate.isPresent()) {
-                return new SaveResult(false, repository.libraryRow(duplicate.get()),
+                return SaveResult.askDuplicate(repository.libraryRow(duplicate.get()),
                         "Danh mục này đã có mục \"" + f.japanese() + "\". Bạn vẫn muốn lưu?");
             }
         }
@@ -256,7 +265,7 @@ public class AcademicService {
         }
         activityLog.recordLog(managerId, "PHRASE_UPDATED", "PHRASE", id, before, values(f),
                 (fromReport != null ? "Sửa mẫu câu theo báo cáo: " : "Sửa mẫu câu: ") + f.japanese());
-        return new SaveResult(true, null, fromReport != null ? "Đã lưu thay đổi và đóng báo cáo." : "Đã lưu thay đổi.");
+        return SaveResult.done(fromReport != null ? "Đã lưu thay đổi và đóng báo cáo." : "Đã lưu thay đổi.");
     }
 
     /** Soft delete: hidden everywhere (Map, page, the Members' lists, search); its open reports close. */

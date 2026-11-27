@@ -235,7 +235,7 @@ async function loadLibrary() {
             <td>${esc(r.meaningVi)}</td>
             <td>${ic(r.category.icon)} ${esc(r.category.name)}</td>
             <td>${r.topics.map((t) => `<span class="badge br">${esc(t.name)}</span>`).join(" ") || `<span class="note">Chưa gắn</span>`}</td>
-            <td>${r.openReports ? `<span class="badge warn" title="Báo cáo đang mở">${ic("flag")}${r.openReports}</span>` : `<span class="note">0</span>`}</td>
+            <td>${r.openReports ? `<span class="badge warn" title="Số lượt báo cáo đang chờ xử lý">${ic("flag")}${r.openReports}</span>` : `<span class="note">0</span>`}</td>
             <td><div class="row acad-actions"><button class="btn sm" type="button" data-act="edit">Sửa</button>
                 <button class="btn sm dan" type="button" data-act="delete">Xóa</button></div></td>
         </tr>`).join("")
@@ -386,6 +386,11 @@ async function savePhrase(confirmDuplicate) {
             renderForm();
             return;
         }
+        if (lib.edit && !result.changed && lib.caseId) {
+            // From a report with nothing changed: the report stays open and the form stays (UC 13 AF1/AF2)
+            toast(result.message, "error");
+            return;
+        }
         toast(result.message);
         if (lib.edit) {
             const wasCase = lib.caseId;
@@ -496,8 +501,9 @@ async function saveTopic() {
     try {
         const t = topicsState.edit;
         if (t) {
-            await apiClient.acadUpdateTopic(t.id, body);
-            toast(t.name === body.name.trim() && t.icon === body.icon ? "Không có thay đổi nào." : "Đã lưu thay đổi.");
+            // The server compares the cleaned-up name (spaces trimmed and merged) and says whether anything changed
+            const result = await apiClient.acadUpdateTopic(t.id, body);
+            toast(result?.changed === false ? "Không có thay đổi nào." : "Đã lưu thay đổi.");
         } else {
             await apiClient.acadCreateTopic(body);
             toast("Đã thêm chủ đề học.");

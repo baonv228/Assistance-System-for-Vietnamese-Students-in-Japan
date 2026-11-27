@@ -43,7 +43,7 @@ public final class AcademicDtos {
     public record Options(List<CategoryRef> categories, List<TopicRef> topics, List<String> icons) {
     }
 
-    /** A library row with its open reports. */
+    /** A library row with {@code openReports} = how many reports its open case holds (0 when none is open). */
     public record LibraryRow(long id, String kind, String japanese, String romaji, String meaningVi,
                              CategoryRef category, List<TopicRef> topics, int openReports) {
     }
@@ -60,8 +60,23 @@ public final class AcademicDtos {
                                 List<String> topicIds, boolean confirmDuplicate, Long reportCaseId) {
     }
 
-    /** {@code saved} false with {@code duplicate}: the category has this Japanese already; ask before saving. */
-    public record SaveResult(boolean saved, LibraryRow duplicate, String message) {
+    /**
+     * {@code saved} false with {@code duplicate}: the category has this Japanese already; ask before saving.
+     * {@code changed} false: an edit that differs in nothing, so nothing was written (and no report closed).
+     */
+    public record SaveResult(boolean saved, LibraryRow duplicate, String message, boolean changed) {
+
+        static SaveResult done(String message) {
+            return new SaveResult(true, null, message, true);
+        }
+
+        static SaveResult askDuplicate(LibraryRow duplicate, String message) {
+            return new SaveResult(false, duplicate, message, false);
+        }
+    }
+
+    /** "Sửa chủ đề học": {@code changed} false when the name and icon were already so (nothing saved, no log). */
+    public record TopicSaved(boolean changed) {
     }
 
     // ---------------------------------------------------------------- reports

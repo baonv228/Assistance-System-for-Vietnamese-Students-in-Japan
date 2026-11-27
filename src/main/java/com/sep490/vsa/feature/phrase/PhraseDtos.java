@@ -29,9 +29,11 @@ public final class PhraseDtos {
 
     /**
      * The start page: the two parts (Mẫu câu, Từ vựng), whether the viewer may mark and report (signed-in Members),
-     * the report reasons and how many entries the Member saved ("Đã lưu", 0 for others).
+     * the report reasons, how many entries the Member saved ("Đã lưu", 0 for others) and the most entries one list
+     * answer holds ({@code listMax}: a search or the library for "Luyện tập" that reaches it was cut).
      */
-    public record Overview(List<Part> parts, boolean member, List<Reason> reportReasons, int savedCount) {
+    public record Overview(List<Part> parts, boolean member, List<Reason> reportReasons, int savedCount,
+                           int listMax) {
     }
 
     public record CategoryRef(String id, String name, String icon) {

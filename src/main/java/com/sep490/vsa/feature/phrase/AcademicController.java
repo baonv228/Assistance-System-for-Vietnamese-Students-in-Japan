@@ -11,6 +11,7 @@ import com.sep490.vsa.feature.phrase.AcademicDtos.ReportCase;
 import com.sep490.vsa.feature.phrase.AcademicDtos.SaveResult;
 import com.sep490.vsa.feature.phrase.AcademicDtos.TopicRequest;
 import com.sep490.vsa.feature.phrase.AcademicDtos.TopicRow;
+import com.sep490.vsa.feature.phrase.AcademicDtos.TopicSaved;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,10 +55,10 @@ public class AcademicController {
     }
 
     @PutMapping("/topics/{id:[A-Za-z0-9_-]{1,20}}")
-    public ApiResponse<Void> updateTopic(@PathVariable String id, @RequestBody TopicRequest request,
-                                             @AuthenticationPrincipal AppUserPrincipal me) {
-        service.updateTopic(me.id(), id, request);
-        return ApiResponse.ok("Đã lưu thay đổi.", null);
+    public ApiResponse<TopicSaved> updateTopic(@PathVariable String id, @RequestBody TopicRequest request,
+                                               @AuthenticationPrincipal AppUserPrincipal me) {
+        boolean changed = service.updateTopic(me.id(), id, request);
+        return ApiResponse.ok(changed ? "Đã lưu thay đổi." : "Không có thay đổi nào.", new TopicSaved(changed));
     }
 
     @DeleteMapping("/topics/{id:[A-Za-z0-9_-]{1,20}}")

@@ -773,9 +773,10 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   behind "Đã lưu (n)" next to "Luyện tập" (Members), and the "Nhật ngữ" section of `/saved` (counted in `savedCount`).
 - API (`PhraseController`, `PhraseService`, `PhraseRepository`, `PhraseDtos`; GETs public): `GET /api/phrases/overview`
   (`parts`: Mẫu câu and Từ vựng, each with its topics, most entries first, and categories, each with `count` and the
-  Member's `learned`; `member`; ACADEMIC_REPORT reasons; `savedCount`), `GET
+  Member's `learned`; `member`; ACADEMIC_REPORT reasons; `savedCount`; `listMax`), `GET
   /api/phrases?topic=&category=&mine=learning|learned|saved&q=` (cards by category then id, `saved` newest saved
-  first, at most 200: category, topics, `learning`, `learned`, `saved`; `q` matches Japanese, romaji, meaning, category
+  first, at most `PhraseRepository.LIST_MAX` 1000, sent as `listMax`; a search reaching it says "Hiện N kết quả đầu
+  tiên. Hãy gõ thêm để thu hẹp."): category, topics, `learning`, `learned`, `saved`; `q` matches Japanese, romaji, meaning, category
   and topic names, accents and case ignored; an unknown `mine` → 400). Members only (role USER, ACTIVE; staff MSG18,
   guests 401): POST|DELETE `/api/phrases/{id}/save` (`{saved}`; saving twice keeps one row; a deleted phrase → 404), POST
   `/api/phrases/{id}/flash` `{learned}` (the flash card answer, the last one counts), DELETE `/api/phrases/{id}/flash`
@@ -786,7 +787,8 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   Nhật, Sai nghĩa, Xúc phạm, Spam) and opens their case for handler ACADEMIC_MANAGER. A phrase is never hidden by
   reports.
 - Page: "Đưa cho nhân viên xem" (full-screen dialog; phrases only, not on "Từ vựng" cards: user decision), "Nghe" (browser
-  `speechSynthesis`, ja-JP, rate 0.85) and "Bỏ đánh dấu" on each card with a "Chưa thuộc" / "Đã
+  `speechSynthesis`, ja-JP voice when the browser has one, rate 0.85; "Thiết bị này không hỗ trợ đọc tiếng Nhật." without
+  speech, when the loaded voice list has no Japanese voice or the reading fails, UC 8 AF11) and "Bỏ đánh dấu" on each card with a "Chưa thuộc" / "Đã
   thuộc" badge, progress bars per topic/category (Members, by "Đã thuộc"). "Luyện thẻ ghi nhớ" = flash cards over the
   list on screen (everyone may flip; only a Member's answers are kept): flip, then "Chưa thuộc" / "Đã thuộc"; at the
   end "Luyện lại N thẻ chưa thuộc". No automated tests for "Nhật ngữ" (removed, user decision).
@@ -795,10 +797,12 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
   {kind, name, icon, count, learned, topics, categories}, each counted over that kind only; a topic or category without
   an entry of that kind is not under it). No "Tất cả từ vựng / mẫu câu" card. A topic or category set
   (`?topic=pay&kind=VOCAB`) shows one kind at a time, with "Từ vựng (n) / Mẫu câu (m)" when it holds both; without
-  `kind` (links from Home, notifications) it opens the kind it has entries in, Mẫu câu first. Search covers both,
+  `kind` (links from Home, notifications) it opens the kind it has entries in, Mẫu câu first; the topic and category
+  badges of a card carry the card's kind (UC 8 AF4). Search covers both,
   results under "Từ vựng" and "Mẫu câu".
 - "Luyện tập": a dialog over the library (`GET /api/phrases` without filters, read again each time, so at most
-  `LIST_MAX` 200 entries): "Luyện theo" "Tất cả / Chủ đề / Địa điểm" with a list of the topics or places that hold
+  `LIST_MAX` 1000 entries; reaching it, the dialog says only that many can be practised there and points to each topic's
+  or place's "Luyện thẻ ghi nhớ"): "Luyện theo" "Tất cả / Chủ đề / Địa điểm" with a list of the topics or places that hold
   entries (count in brackets; the first one picked by default), kind "Cả hai / Từ vựng / Mẫu câu", for Members the mark
   "Tất cả / Chưa thuộc / Đã thuộc / Chưa luyện" (every count follows the choices above it), "Xáo trộn thứ tự thẻ" (on),
   then the flash cards. The choices stay while the page is open. Closing it redraws the start page's numbers.
@@ -818,13 +822,16 @@ Expected scale 100–200 users; the team has no budget, so prefer free services 
     entries, the manager's last 5 actions.
   - Chủ đề học (UC 9–11): name ≤ 60, not empty, unique by `VietnameseText.squash` ("Chủ đề học này đã có."), icon from
     `AcademicService.ICONS` (default `label`), id "t" + base-36 time; names checked with every topic row locked. Delete
-    removes the links only (phrases and marks stay). Unchanged save = no log.
+    removes the links only (phrases and marks stay). Unchanged save (name compared after trimming and merging spaces) =
+    no write, no log; the PUT answers `{changed}` and the page says "Không có thay đổi nào." from it.
   - Thư viện mẫu câu (UC 12–14): filters category, topic, kind, search (Japanese/romaji/meaning), 20 a page newest first,
-    with their open reports (column "Báo cáo"). Fields (all errors at once in `fields`): category, kind
+    with their open reports (column "Báo cáo" = reports in the open case, `report_count`). Fields (all errors at once in `fields`): category, kind
     PHRASE/VOCAB, Japanese with kana/kanji ≤ 200, romaji optional ≤ 200 (stored "" when empty, "cần chốt"), meaning ≤ 300,
     topics that exist. Same Japanese in the same category (byte for byte) answers `saved:false` + `duplicate` until
     `confirmDuplicate` (UC 12 AF5). After adding, the category stays for the next entry. Edit replaces the topics; with
-    `reportCaseId` ("Sửa mẫu câu này") the phrase's open reports close as CORRECTED. Delete is soft (`deleted_at`;
+    `reportCaseId` ("Sửa mẫu câu này") the phrase's open reports close as CORRECTED. An edit that changes nothing answers
+    `changed:false` and writes nothing; from a report the report stays open, the form stays and the message points to
+    "Không sai, bỏ qua". Delete is soft (`deleted_at`;
     restore "cần chốt") and closes the open reports of the phrase (REMOVE).
   - Báo cáo mẫu câu (UC 13 AF1/AF2): open PHRASE cases, urgent first, reasons counted, reporters with notes; "Sửa mẫu câu
     này" → `/academic/phrases?edit=&case=`, "Không sai, bỏ qua" → KEEP. False reports are not counted yet (the
