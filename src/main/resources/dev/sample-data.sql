@@ -159,37 +159,37 @@ INSERT INTO phrases (category_id, kind, japanese, romaji, meaning_vi, created_by
  ('konbini', 'PHRASE', '袋はいりません。', 'Fukuro wa irimasen.', 'Tôi không cần túi.', @acad),
  ('konbini', 'PHRASE', '温めてください。', 'Atatamete kudasai.', 'Làm ơn hâm nóng giúp tôi.', @acad),
  ('konbini', 'PHRASE', 'カードで払えますか。', 'Kādo de haraemasu ka.', 'Tôi trả bằng thẻ được không?', @acad),
- ('konbini', 'PHRASE', 'レシートはいりません。', 'Reshīto wa irimasen.', 'Tôi không cần hóa đơn.', @acad),
- ('konbini', 'VOCAB', '〜てください', '~te kudasai', 'Nhờ ai làm gì một cách lịch sự.', @acad),
+ ('konbini', 'PHRASE', 'レシートはいりません。', 'Reshīto wa irimasen.', 'Tôi không cần biên lai.', @acad),
+ ('konbini', 'VOCAB', '袋', 'fukuro', 'Túi.', @acad),
  ('konbini', 'VOCAB', 'レジ', 'reji', 'Quầy thu ngân.', @acad),
  ('food', 'PHRASE', '注文お願いします。', 'Chūmon onegai shimasu.', 'Cho tôi gọi món.', @acad),
  ('food', 'PHRASE', 'おすすめは何ですか。', 'Osusume wa nan desu ka.', 'Quán có món gì nên thử?', @acad),
  ('food', 'PHRASE', 'お会計お願いします。', 'Okaikei onegai shimasu.', 'Cho tôi thanh toán.', @acad),
  ('food', 'PHRASE', '辛くしないでください。', 'Karaku shinaide kudasai.', 'Xin đừng làm cay.', @acad),
- ('food', 'VOCAB', '〜にします', '~ni shimasu', 'Chọn một món hoặc một phương án.', @acad),
- ('food', 'VOCAB', '食べ放題', 'tabehōdai', 'Ăn thoải mái (buffet).', @acad),
+ ('food', 'VOCAB', '注文', 'chūmon', 'Gọi món.', @acad),
+ ('food', 'VOCAB', '食べ放題', 'tabehōdai', 'Ăn không giới hạn.', @acad),
  ('station', 'PHRASE', 'この電車は上野に止まりますか。', 'Kono densha wa Ueno ni tomarimasu ka.', 'Tàu này có dừng ở Ueno không?', @acad),
  ('station', 'PHRASE', 'チャージしたいです。', 'Chāji shitai desu.', 'Tôi muốn nạp tiền vào thẻ IC.', @acad),
- ('station', 'PHRASE', '定期券はどこで買えますか。', 'Teikiken wa doko de kaemasu ka.', 'Vé tháng mua ở đâu?', @acad),
+ ('station', 'PHRASE', '定期券はどこで買えますか。', 'Teikiken wa doko de kaemasu ka.', 'Vé định kỳ mua ở đâu?', @acad),
  ('station', 'VOCAB', '乗り換え', 'norikae', 'Đổi tàu.', @acad),
  ('station', 'VOCAB', '終電', 'shūden', 'Tàu cuối trong ngày.', @acad),
  ('super', 'PHRASE', 'これはどこにありますか。', 'Kore wa doko ni arimasu ka.', 'Món này ở đâu?', @acad),
- ('super', 'PHRASE', '賞味期限はいつですか。', 'Shōmi kigen wa itsu desu ka.', 'Hạn sử dụng tốt nhất là khi nào?', @acad),
+ ('super', 'PHRASE', '賞味期限はいつですか。', 'Shōmi kigen wa itsu desu ka.', 'Hạn dùng tốt nhất là ngày nào?', @acad),
  ('super', 'VOCAB', '割引', 'waribiki', 'Giảm giá.', @acad),
- ('super', 'VOCAB', 'マイバッグ', 'mai baggu', 'Túi mang theo sẵn (không mua túi nylon).', @acad),
+ ('super', 'VOCAB', 'マイバッグ', 'mai baggu', 'Túi mua sắm mang theo.', @acad),
  ('ward', 'PHRASE', '転入届を出したいです。', 'Tennyū-todoke o dashitai desu.', 'Tôi muốn nộp giấy đăng ký chuyển đến.', @acad),
  ('ward', 'PHRASE', '窓口はどこですか。', 'Madoguchi wa doko desu ka.', 'Quầy thủ tục ở đâu?', @acad),
  ('ward', 'VOCAB', '在留カード', 'zairyū kādo', 'Thẻ cư trú.', @acad),
- ('ward', 'VOCAB', '〜たいです', '~tai desu', 'Diễn đạt điều mình muốn làm.', @acad),
+ ('ward', 'VOCAB', '用紙', 'yōshi', 'Mẫu giấy.', @acad),
  ('hospital', 'PHRASE', '熱があります。', 'Netsu ga arimasu.', 'Tôi bị sốt.', @acad),
  ('hospital', 'PHRASE', 'ここが痛いです。', 'Koko ga itai desu.', 'Tôi đau ở đây.', @acad),
- ('hospital', 'PHRASE', '保険証を持っています。', 'Hokenshō o motte imasu.', 'Tôi có mang theo thẻ bảo hiểm.', @acad),
- ('hospital', 'VOCAB', '予約', 'yoyaku', 'Đặt hẹn trước.', @acad),
+ ('hospital', 'PHRASE', '健康保険は使えますか。', 'Kenkō hoken wa tsukaemasu ka.', 'Tôi dùng bảo hiểm y tế ở đây được không?', @acad),
+ ('hospital', 'VOCAB', '予約', 'yoyaku', 'Lịch hẹn.', @acad),
  ('bank', 'PHRASE', '口座を開きたいです。', 'Kōza o hirakitai desu.', 'Tôi muốn mở tài khoản.', @acad),
  ('bank', 'PHRASE', '荷物を送りたいです。', 'Nimotsu o okuritai desu.', 'Tôi muốn gửi bưu kiện.', @acad),
  ('bank', 'VOCAB', '暗証番号', 'anshō bangō', 'Mã PIN.', @acad),
  ('pharmacy', 'PHRASE', '風邪薬はありますか。', 'Kazegusuri wa arimasu ka.', 'Có thuốc cảm không?', @acad),
- ('pharmacy', 'PHRASE', '一日何回飲みますか。', 'Ichinichi nankai nomimasu ka.', 'Một ngày uống mấy lần?', @acad),
+ ('pharmacy', 'PHRASE', '食後に飲みますか。', 'Shokugo ni nomimasu ka.', 'Tôi uống sau bữa ăn phải không?', @acad),
  ('pharmacy', 'VOCAB', '処方箋', 'shohōsen', 'Đơn thuốc.', @acad),
  ('school', 'PHRASE', 'もう一度お願いします。', 'Mō ichido onegai shimasu.', 'Xin nhắc lại một lần nữa.', @acad),
  ('school', 'PHRASE', '遅れてすみません。', 'Okurete sumimasen.', 'Xin lỗi vì tôi đến muộn.', @acad),
@@ -199,21 +199,21 @@ INSERT INTO phrases (category_id, kind, japanese, romaji, meaning_vi, created_by
  ('park', 'PHRASE', 'ここで花見ができますか。', 'Koko de hanami ga dekimasu ka.', 'Ở đây có ngắm hoa được không?', @acad),
  ('park', 'VOCAB', '花見', 'hanami', 'Ngắm hoa (anh đào).', @acad),
  ('temple', 'PHRASE', 'お守りを買いたいです。', 'Omamori o kaitai desu.', 'Tôi muốn mua bùa may mắn.', @acad),
- ('temple', 'VOCAB', '参拝', 'sanpai', 'Lễ bái ở đền, chùa.', @acad),
+ ('temple', 'VOCAB', 'お寺', 'otera', 'Chùa.', @acad),
  ('phone', 'PHRASE', 'SIMカードを買いたいです。', 'SIM kādo o kaitai desu.', 'Tôi muốn mua SIM.', @acad),
  ('phone', 'VOCAB', '契約', 'keiyaku', 'Hợp đồng (thuê bao).', @acad),
  ('housing', 'PHRASE', '部屋を見たいです。', 'Heya o mitai desu.', 'Tôi muốn xem phòng.', @acad),
- ('housing', 'VOCAB', '敷金礼金', 'shikikin reikin', 'Tiền đặt cọc và tiền lễ khi thuê nhà.', @acad);
+ ('housing', 'VOCAB', '家賃', 'yachin', 'Tiền thuê nhà.', @acad);
 
 -- Topic links: a phrase may belong to more than one topic (e.g. asking about price is both "pay" and "ask").
 INSERT INTO phrase_topic_links (phrase_id, topic_id)
 SELECT ph.id, t.topic FROM phrases ph JOIN (
            SELECT '袋はいりません。' AS ja, 'pay' AS topic UNION ALL SELECT 'カードで払えますか。', 'pay'
- UNION ALL SELECT 'レシートはいりません。', 'pay'     UNION ALL SELECT '〜てください', 'ask'
+ UNION ALL SELECT 'レシートはいりません。', 'pay'     UNION ALL SELECT '袋', 'pay'
  UNION ALL SELECT 'レジ', 'pay'
  UNION ALL SELECT '注文お願いします。', 'order'     UNION ALL SELECT 'おすすめは何ですか。', 'order'
  UNION ALL SELECT 'おすすめは何ですか。', 'ask'     UNION ALL SELECT 'お会計お願いします。', 'pay'
- UNION ALL SELECT 'お会計お願いします。', 'order'   UNION ALL SELECT '〜にします', 'order'
+ UNION ALL SELECT 'お会計お願いします。', 'order'   UNION ALL SELECT '注文', 'order'
  UNION ALL SELECT '辛くしないでください。', 'order' UNION ALL SELECT '食べ放題', 'order'
  UNION ALL SELECT 'この電車は上野に止まりますか。', 'train' UNION ALL SELECT 'この電車は上野に止まりますか。', 'ask'
  UNION ALL SELECT 'チャージしたいです。', 'train'   UNION ALL SELECT 'チャージしたいです。', 'pay'
@@ -224,24 +224,24 @@ SELECT ph.id, t.topic FROM phrases ph JOIN (
  UNION ALL SELECT '割引', 'shop'                     UNION ALL SELECT 'マイバッグ', 'shop'
  UNION ALL SELECT '転入届を出したいです。', 'paper' UNION ALL SELECT '窓口はどこですか。', 'paper'
  UNION ALL SELECT '窓口はどこですか。', 'ask'       UNION ALL SELECT '在留カード', 'paper'
- UNION ALL SELECT '〜たいです', 'paper'
+ UNION ALL SELECT '用紙', 'paper'
  UNION ALL SELECT '熱があります。', 'health'
- UNION ALL SELECT 'ここが痛いです。', 'health'      UNION ALL SELECT '保険証を持っています。', 'health'
- UNION ALL SELECT '保険証を持っています。', 'paper' UNION ALL SELECT '予約', 'health'
+ UNION ALL SELECT 'ここが痛いです。', 'health'      UNION ALL SELECT '健康保険は使えますか。', 'health'
+ UNION ALL SELECT '予約', 'health'
  UNION ALL SELECT '口座を開きたいです。', 'paper'   UNION ALL SELECT '口座を開きたいです。', 'pay'
  UNION ALL SELECT '荷物を送りたいです。', 'paper'   UNION ALL SELECT '暗証番号', 'pay'
  UNION ALL SELECT '風邪薬はありますか。', 'health'  UNION ALL SELECT '風邪薬はありますか。', 'ask'
- UNION ALL SELECT '一日何回飲みますか。', 'health'  UNION ALL SELECT '処方箋', 'health'
+ UNION ALL SELECT '食後に飲みますか。', 'health'  UNION ALL SELECT '処方箋', 'health'
  UNION ALL SELECT 'もう一度お願いします。', 'ask'   UNION ALL SELECT '遅れてすみません。', 'paper'
  UNION ALL SELECT '出席', 'paper'
  UNION ALL SELECT 'この機械は故障していますか。', 'ask' UNION ALL SELECT '両替機', 'pay'
  UNION ALL SELECT 'ここで花見ができますか。', 'leisure' UNION ALL SELECT 'ここで花見ができますか。', 'ask'
  UNION ALL SELECT '花見', 'leisure'
  UNION ALL SELECT 'お守りを買いたいです。', 'leisure' UNION ALL SELECT 'お守りを買いたいです。', 'pay'
- UNION ALL SELECT '参拝', 'leisure'
+ UNION ALL SELECT 'お寺', 'leisure'
  UNION ALL SELECT 'SIMカードを買いたいです。', 'shop' UNION ALL SELECT 'SIMカードを買いたいです。', 'paper'
  UNION ALL SELECT '契約', 'paper'
- UNION ALL SELECT '部屋を見たいです。', 'paper'      UNION ALL SELECT '敷金礼金', 'paper'
+ UNION ALL SELECT '部屋を見たいです。', 'paper'      UNION ALL SELECT '家賃', 'pay'
 ) t ON t.ja = ph.japanese;
 
 -- ---------------------------------------------------------------- Admin: audit trail sample
