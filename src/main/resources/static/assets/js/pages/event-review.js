@@ -114,7 +114,7 @@ els.stars.addEventListener("change", (event) => {
 });
 
 function updateCount() {
-    els.contentCount.textContent = `${els.content.value.length}/${form.limits.contentMax}`;
+    els.contentCount.textContent = `${els.content.value.length}/${form.limits.contentMax} · ít nhất ${form.limits.contentMin} ký tự`;
 }
 els.content.addEventListener("input", () => {
     updateCount();
@@ -265,6 +265,9 @@ els.form.addEventListener("submit", async (event) => {
     }
     if (!text) {
         showError("content", "Hãy viết vài dòng về sự kiện.");
+        ok = false;
+    } else if (text.length < form.limits.contentMin) {
+        showError("content", `Nội dung cần ít nhất ${form.limits.contentMin} ký tự.`);
         ok = false;
     }
     if (processingImages) {

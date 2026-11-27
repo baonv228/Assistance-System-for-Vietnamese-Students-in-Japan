@@ -59,10 +59,12 @@ public final class EventDtos {
     /**
      * What the viewer may do on the detail page.
      *
-     * @param member       signed in as a User (Member): may write, like and report reviews
-     * @param myReviewId   the viewer's review of this year's occurrence, if any ("Sửa review" instead of "Viết review")
+     * @param member        signed in as a User (Member): may write, like and report reviews
+     * @param myReviewId    the viewer's review of this year's occurrence, if any ("Sửa review" instead of "Viết
+     *                      review"); null when it was removed by a Moderator
+     * @param reviewRemoved the viewer's review of this year was removed by a Moderator: no write or edit button
      */
-    public record Viewer(boolean signedIn, boolean member, Long myReviewId) {
+    public record Viewer(boolean signedIn, boolean member, Long myReviewId, boolean reviewRemoved) {
     }
 
     public record Reason(long id, String label) {
@@ -83,8 +85,8 @@ public final class EventDtos {
     public record ReviewUpdateRequest(Integer rating, String content, List<Long> keepMediaIds) {
     }
 
-    public record Limits(int contentMax, int imagesMax, int imageMaxMb, int videosMax, int videoMaxSeconds,
-                         int videoMaxMb) {
+    public record Limits(int contentMin, int contentMax, int imagesMax, int imageMaxMb, int videosMax,
+                         int videoMaxSeconds, int videoMaxMb) {
     }
 
     /** Today's new-account usage ("Tài khoản mới, hôm nay: 1/3 bài viết và review · 0/2 ghim · 0/1 video"). */

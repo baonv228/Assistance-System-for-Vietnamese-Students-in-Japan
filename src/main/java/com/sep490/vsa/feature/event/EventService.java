@@ -17,6 +17,7 @@ import com.sep490.vsa.feature.event.EventDtos.ReviewItem;
 import com.sep490.vsa.feature.event.EventDtos.Tag;
 import com.sep490.vsa.feature.event.EventDtos.Viewer;
 import com.sep490.vsa.feature.event.EventRepository.EventRow;
+import com.sep490.vsa.feature.event.EventRepository.OwnRow;
 import com.sep490.vsa.feature.event.EventRepository.RankRow;
 import com.sep490.vsa.feature.event.EventRepository.ReviewRow;
 import com.sep490.vsa.feature.event.EventRules.CleanEvent;
@@ -131,12 +132,14 @@ public class EventService {
                 mediaByReview.getOrDefault(r.id(), List.of()), viewerId != null && viewerId.equals(r.authorId()),
                 liked.contains(r.id()))).toList();
 
-        Long myReviewId = viewerId == null ? null
-                : repository.ownReviewId(eventId, card.reviewYear(), viewerId).orElse(null);
+        OwnRow own = viewerId == null ? null : repository.ownReviewId(eventId, card.reviewYear(), viewerId)
+                .flatMap(repository::ownReview).orElse(null);
+        boolean removed = own != null && "REMOVED".equals(own.status());
+        Long myReviewId = own == null || removed ? null : own.id();
         List<AlbumPhoto> album = repository.album(eventId);
         List<Reason> reasons = reports.reasons().stream().map(r -> new Reason(r.id(), r.label())).toList();
         return new EventDetail(card, event.tip(), album.subList(0, Math.min(album.size(), ALBUM_MAX)), album.size(),
-                reviews, new Viewer(me != null, member, myReviewId), reasons);
+                reviews, new Viewer(me != null, member, myReviewId, removed), reasons);
     }
 
     // ---------------------------------------------------------------- Moderator (UC-M07)
@@ -189,12 +192,14 @@ public class EventService {
 
     /**
      * "Xóa sự kiện". Soft delete: the event and its reviews are shown nowhere any more (detail answers 404, review
-     * photos are no longer served), but no row is removed.
+     * photos are no longer served), but no row is removed. Open report cases about its reviews are closed: no points
+     * taken, no false report counted, nobody notified.
      */
     @Transactional
     public void delete(long moderatorId, long eventId) {
         EventRow event = repository.lockEvent(eventId).orElseThrow(EventService::notFound);
         repository.softDelete(eventId, clock.instant());
+        reports.closeCasesOf("REVIEW", repository.reviewIds(eventId), "Sự kiện đã bị xóa.");
         activityLog.recordLog(moderatorId, "EVENT_DELETED", "EVENT", eventId, values(event), null,
                 "Xóa sự kiện \"" + event.title() + "\"");
     }

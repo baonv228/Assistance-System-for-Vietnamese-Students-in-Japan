@@ -107,6 +107,7 @@ function writeButton() {
         return `<span class="note">${ic("schedule")} Viết review được khi sự kiện bắt đầu.</span>`;
     }
     if (data.viewer.signedIn && !data.viewer.member) return "";      // staff accounts do not review
+    if (data.viewer.reviewRemoved) return "";                         // this year's review was removed by a Moderator
     const href = data.viewer.signedIn ? reviewPath : loginUrl(reviewPath);
     const label = data.viewer.myReviewId ? `Sửa review năm ${e.reviewYear}` : `Viết review năm ${e.reviewYear}`;
     return `<a class="btn pri sm" href="${esc(href)}">${ic(data.viewer.myReviewId ? "edit" : "rate_review")}${esc(label)}</a>`;

@@ -131,17 +131,26 @@ public class ContentReportService {
 
     /** Closes open cases of content that no longer exists (the author deleted it). */
     public void closeCasesOf(String targetType, List<Long> targetIds) {
+        closeCasesOf(targetType, targetIds, "Tác giả đã tự xóa nội dung.");
+    }
+
+    /**
+     * Closes open cases of content that is no longer shown, with the given note (e.g. its event was deleted). Nobody
+     * loses points, no report counts as false and nobody is notified.
+     */
+    public void closeCasesOf(String targetType, List<Long> targetIds, String note) {
         if (targetIds.isEmpty()) {
             return;
         }
         String marks = String.join(",", targetIds.stream().map(id -> "?").toList());
-        Object[] args = new Object[targetIds.size() + 2];
-        args[0] = Timestamp.from(clock.instant());
-        args[1] = targetType;
+        Object[] args = new Object[targetIds.size() + 3];
+        args[0] = note;
+        args[1] = Timestamp.from(clock.instant());
+        args[2] = targetType;
         for (int i = 0; i < targetIds.size(); i++) {
-            args[i + 2] = targetIds.get(i);
+            args[i + 3] = targetIds.get(i);
         }
-        jdbc.update("UPDATE report_cases SET status = 'RESOLVED', decision_note = 'Tác giả đã tự xóa nội dung.', "
+        jdbc.update("UPDATE report_cases SET status = 'RESOLVED', decision_note = ?, "
                 + "handled_at = ? WHERE status = 'OPEN' AND target_type = ? AND target_id IN (" + marks + ")", args);
     }
 
